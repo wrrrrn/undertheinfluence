@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags %}
+
+{% block content %}
+    <div class="col-md-1"></div>
+    <div class="col-md-10">
+        <div id="government-container">
+
+
+                <h3><b>{{ self.title }}</b></h3>
+
+
+            <div class="row">
+                <div class="col-md-7">
+                    {{ self.body|richtext }}
+
+                    <p><b>Explore the data</b></p>
+                    <p>You can browse the politicians on the right; use the search above; or take a look at some of our analysis below.</p>
+
+                    <p class="text-muted">As always, if you find glitches or inaccuracies in the data, please let us know, and always check information at the source before citing.</p>
+
+                    {% if self.analysis %}
+                        <hr>
+                        <div class="row">
+                        {% if self.analysis %}
+                            {% include 'cms/snippets/analysis.html' %}
+                        {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-5">
+                    <div class="row">
+                        <span class="label label-danger"><b>FILTERING FOR: </b></span>
+                    </div>
+                    <hr>
+
+
+                </div>
+
+                <ul class="pager">
+
+                        <li class="previous disabled"><a href="javascript:void(0)">Previous page</a></li>
+
+
+                        <li class="next"><a href="http://www.undertheinfluence.org.uk/politicians/detail?labels=Outside+Interests&amp;page=2">Next page</a></li>
+
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="col-md-1"></div>
+{% endblock %}

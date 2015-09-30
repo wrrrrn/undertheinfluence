@@ -1,0 +1,93 @@
+{% load static wagtailuserbar cms_tags %}
+
+<!doctype html>
+<head xmlns="http://www.w3.org/1999/html">
+    <meta charset="utf-8">
+    <title>Under The Influence</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <link rel="stylesheet" type="text/css" href="{% static 'bootstrap/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'material/css/ripples.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'material/css/material.min.css' %}">
+    {% block extra_css %}{% endblock %}
+
+    <style type="text/css">
+        body {
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        hr {
+            display: block;
+            position: relative;
+            padding: 0;
+            margin: 8px auto;
+            height: 0;
+            width: 100%;
+            max-height: 0;
+            font-size: 1px;
+            line-height: 0;
+            clear: both;
+            border: none;
+            border-top: 1px solid #aaaaaa;
+            border-bottom: 1px solid #ffffff;
+        }
+    </style>
+</head>
+
+<body class="container">
+{% wagtailuserbar %}
+
+<div class="row">
+    <div class="col-md-1"></div>
+    <div class="col-md-10">
+        <h1><a href="/" style="color: #000000"><em>underthe</em><b>Influence</b></a></h1>
+        <p>Exposing Money and influence in British politics</p>
+
+        {% block menu %}
+            {% get_site_root as site_root %}
+            {% top_menu parent=site_root calling_page=self %}
+        {% endblock %}
+    </div>
+    <div class="col-md-1"></div>
+</div>
+
+{% block content %}{% endblock %}
+
+<div class="row">
+    <div class="col-md-12">
+        <hr>
+    </div>
+</div>
+
+<footer>
+</footer>
+
+</div> <!-- /container -->
+
+<script type="text/javascript" src="{% static 'jquery/js/jquery-1.11.3.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'bootstrap/js/bootstrap.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'd3/d3.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'material/js/ripples.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'material/js/material.min.js' %}"></script>
+
+
+<!-- <script src="{% static 'uti/js/app/main.js' %}"></script> -->
+<script type="text/javascript">
+    // Popup window code
+    function newPopup(url) {
+        popupWindow = window.open(
+                url,'popUpWindow','height=700,width=800,left=10,top=10,resizable=yes,scrollbars=yes,toolbar=yes,menubar=no,location=no,directories=no,status=yes')
+    }
+
+    $(document).ready(function() {
+        $.material.init();
+        $("[data-toggle=tooltip]").tooltip();
+    });
+</script>
+
+{% block js_extras %}{% endblock %}
+
+</body>
+</html>

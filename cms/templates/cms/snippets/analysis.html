@@ -1,0 +1,21 @@
+{% load wagtailcore_tags wagtailimages_tags %}
+
+<div class="col-md-7">
+    <div class="row">
+        <span class="label label-danger">ANALYSIS: WHAT THE DATA SHOWS</span>
+    </div>
+
+    <h2>{{ self.analysis.title }}</h2>
+
+    <p><em>{{ self.analysis.date }}, by {{ self.owner }}</em></p>
+
+    {% for block in self.analysis.body %}
+        {% if block.block_type == 'image' %}
+            {% image block.value width-200 as tmp_photo %}
+            <img src="{{ tmp_photo.url }}" width="{{ tmp_photo.width }}" height="{{ tmp_photo.height }}" alt="{{ block.title }}" class="pull-right" style="margin: 0 0 10px 10px" />
+        {% else %}
+            {{ block }}
+        {% endif %}
+    {% endfor %}
+
+</div>

@@ -1,0 +1,17 @@
+{% load wagtailcore_tags wagtailimages_tags %}
+
+<div class="col-md-5">
+    <div class="row">
+        <span class="label label-danger">PROFILE</span>
+    </div>
+
+    <h2>{{ self.profile.name }}</h2>
+
+    {% if self.profile.image %}
+        {% image self.profile.image width-100 as tmp_photo %}
+        <img src="{{ tmp_photo.url }}" width="{{ tmp_photo.width }}" height="{{ tmp_photo.height }}" alt="{{ self.profile.image.title }}" class="pull-left" style="margin: 0 10px 10px 0" />
+    {% endif %}
+
+    {{ self.profile.body|richtext }}
+
+</div>

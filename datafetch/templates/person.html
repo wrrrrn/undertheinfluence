@@ -1,0 +1,26 @@
+{% extends "single.html" %}
+
+{% block content %}
+<div class="col-md-1"></div>
+<div class="col-md-10">
+    <div id="government-container">
+        <h3><b>{{ person.name }}</b></h3>
+        <div class="row">
+            <ul>
+                {% for membership in memberships %}
+                    <li>
+                        <strong>
+                        {% if membership.role %}
+                            {{ membership.role }}
+                        {% else %}
+                            {{ membership.post }}
+                        {% endif %}
+                        </strong>
+
+                    {{ membership.organization }} ({{ membership.start_datetime|date:"F Y" }}–{{ membership.end_datetime|date:"F Y" }})</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
