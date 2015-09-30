@@ -2,4 +2,5 @@ __pycache__/
 *.py[cod]
 /db.sqlite3*
 /static
+/undertheinfluence/settings/__init__.py
 /undertheinfluence/settings/local.py
