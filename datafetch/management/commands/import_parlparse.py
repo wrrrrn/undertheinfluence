@@ -17,33 +17,57 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--since', nargs='?', type=int)
 
+    def _create_name_dict(self, n, name):
+        name_dict = dict(n)
+        name_dict['name'] = name
+        return name_dict
+
     def _convert_other_name(self, name_dict):
-        if name_dict.get('name'):
-            name = name_dict.get('name')
-        else:
-            if name_dict.get('given_name') and name_dict.get('family_name'):
-                name = "{} {}".format(name_dict.get('given_name'), name_dict.get('family_name'))
-            elif name_dict.get('honorific_prefix'):
-                if name_dict.get('lordname'):
-                    name = "{} {}".format(name_dict['honorific_prefix'], name_dict['lordname'])
-                    if name_dict.get('lordofname'):
-                        name += " of {}".format(name_dict['lordofname'])
-                elif name_dict.get('lordofname'):
-                    name = "{} {}".format(name_dict['honorific_prefix'], name_dict['lordofname'])
-                elif name_dict.get('family_name'):
-                    name = "{} {}".format(name_dict['honorific_prefix'], name_dict['family_name'])
+        primary_name = None
+        other_names = {}
+        other_name_dict = {x: name_dict.get(x) for x in ['note', 'start_date', 'end_date']}
+
+        if name_dict.get('surname'):
+            # fix the mixed usage of these
+            name_dict['family_name'] = name_dict['surname']
+        if name_dict.get('lordname') and not name_dict.get('family_name'):
+            # if a person has a lordname but no family_name,
+            # it’s their family_name
+            name_dict['family_name'] = name_dict['lordname']
+
+        if name_dict.get('additional_name') and name_dict.get('family_name'):
+            name = "{} {}".format(name_dict.get('additional_name'), name_dict.get('family_name'))
+            other_names[name] = self._create_name_dict(other_name_dict, name)
+
+        if name_dict.get('honorific_prefix'):
+            # I think lordofname_full is the title they've been given
+            # but haven't taken so we can ignore it.
+            if name_dict.get('lordname'):
+                name = "{} {}".format(name_dict['honorific_prefix'], name_dict['lordname'])
+                if name_dict.get('lordofname'):
+                    name += " of {}".format(name_dict['lordofname'])
+            elif name_dict.get('lordofname'):
+                name = "{} of {}".format(name_dict['honorific_prefix'], name_dict['lordofname'])
+            elif name_dict.get('family_name'):
+                name = "{} {}".format(name_dict['honorific_prefix'], name_dict['family_name'])
             else:
                 # this happens when we just have a family_name.
                 # TODO, though for now I _think_ we can ignore these.
-                name = None
-        if not name:
-            return None
-        return {
-            'name': name,
-            'note': name_dict.get('note'),
-            'end_date': name_dict.get('end_date'),
-            'start_date': name_dict.get('start_date'),
-        }
+                pass
+            other_names[name] = self._create_name_dict(other_name_dict, name)
+
+        if name_dict.get('given_name') and name_dict.get('family_name'):
+            name = "{} {}".format(name_dict.get('given_name'), name_dict.get('family_name'))
+            other_names[name] = self._create_name_dict(other_name_dict, name)
+
+        if name_dict.get('name'):
+            name = name_dict.get('name')
+            other_names[name] = self._create_name_dict(other_name_dict, name)
+
+        if name_dict.get("note") == "Main" and name_dict.get('end_date', '9999-12-31'):
+            name_dict['name'] = name
+            primary_name = name_dict
+        return other_names.values(), primary_name
 
     def _process_people(self, people):
         person_rels = {
@@ -69,24 +93,23 @@ class Command(BaseCommand):
 
             other_names = []
             for n in person.get('other_names', []):
-                other_name = self._convert_other_name(n)
-                if not other_name:
-                    continue
-                other_names.append(other_name)
-                if n.get("note") == "Main" and n.get('end_date', '9999-12-31'):
-                    name_dict = n
-                    name = other_names[-1]['name']
+                o, primary_name = self._convert_other_name(n)
+                other_names += o
+                if primary_name:
+                    name_dict = primary_name
             person['other_names'] = other_names
 
             if name_dict.get('given_name'):
                 person['given_name'] = name_dict.get('given_name')
+            if name_dict.get('additional_name'):
+                person['additional_name'] = name_dict.get('additional_name')
             if name_dict.get('family_name'):
                 person['family_name'] = name_dict.get('family_name')
             if name_dict.get('honorific_prefix'):
                 person['honorific_prefix'] = name_dict.get('honorific_prefix')
             if name_dict.get('honorific_suffix'):
                 person['honorific_suffix'] = name_dict.get('honorific_suffix')
-            person['name'] = name
+            person['name'] = name_dict.get('name')
             # TODO: sort_name
 
             if not created:
