@@ -26,7 +26,7 @@ BASE_DIR = os.path.dirname(PROJECT_DIR)
 INSTALLED_APPS = [
     'cms',
     'search',
-    # 'datafetch',
+    'datafetch',
     'bootstrap_admin',
 
     'wagtail.wagtailforms',
