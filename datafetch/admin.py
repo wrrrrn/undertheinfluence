@@ -27,7 +27,7 @@ class OtherNameInline(generic.GenericTabularInline):
 
 
 class PersonAdmin(admin.ModelAdmin):
-    search_fields = ('name',)
+    search_fields = ('other_names__name',)
     fields = (
         'name', 'given_name', 'family_name', 'honorific_prefix', 'honorific_suffix',
         'image', 'email', 'gender', 'birth_date', 'death_date')
