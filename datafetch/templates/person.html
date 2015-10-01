@@ -16,11 +16,16 @@
                         {% if membership.role %}
                             {{ membership.role }}
                         {% else %}
-                            {{ membership.post }}
+                            Member
                         {% endif %}
                         </strong>
 
-                    {{ membership.organization }} ({{ membership.start_datetime|date:"F Y" }}–{{ membership.end_datetime|date:"F Y" }})</li>
+                    {% if membership.on_behalf_of %}
+                        {{ membership.on_behalf_of }}
+                    {% else %}
+                        {{ membership.organization }}
+                    {% endif %}
+                    ({{ membership.start_datetime|date:"F Y" }}–{{ membership.end_datetime|date:"F Y" }})</li>
                 {% endfor %}
             </ul>
         </div>
