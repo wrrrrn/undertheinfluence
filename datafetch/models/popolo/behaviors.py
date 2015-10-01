@@ -60,11 +60,15 @@ class Dateframeable(models.Model):
 
     @property
     def start_datetime(self):
-        return datetime.strptime(self.start_date, '%Y-%m-%d').date()
+        if len(self.start_date) < 7:
+            return self.start_date
+        return datetime.strptime(self.start_date[:7], '%Y-%m').strftime("%b %Y")
 
     @property
     def end_datetime(self):
-        return datetime.strptime(self.end_date, '%Y-%m-%d').date()
+        if len(self.end_date) < 7:
+            return end_date
+        return datetime.strptime(self.end_date[:7], '%Y-%m').strftime("%b %Y")
 
     class Meta:
         abstract = True

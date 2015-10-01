@@ -25,7 +25,7 @@
                     {% else %}
                         {{ membership.organization }}
                     {% endif %}
-                    ({{ membership.start_datetime|date:"F Y" }}–{{ membership.end_datetime|date:"F Y" }})</li>
+                    ({{ membership.start_datetime }}–{{ membership.end_datetime }})</li>
                 {% endfor %}
             </ul>
         </div>
