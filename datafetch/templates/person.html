@@ -4,6 +4,9 @@
 <div class="col-md-1"></div>
 <div class="col-md-10">
     <div id="government-container">
+        {% if person.image %}
+            <img class="pull-right" src="/media/persons/{{ person.id }}.png" alt="{{ person.name }}" width="150" />
+        {% endif %}
         <h3><b>{{ person.name }}</b></h3>
         <div class="row">
             <ul>
