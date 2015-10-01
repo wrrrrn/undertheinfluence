@@ -1,17 +1,11 @@
-import json
-from os.path import join, exists
-
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-import requests
 from datafetch import models
+from datafetch.helpers import fetch_json
 
 
 class Command(BaseCommand):
     help = 'Import ParlParse minister data'
-    data_directory = join(settings.BASE_DIR, 'datafetch', 'data')
-    refresh = False
 
     def add_arguments(self, parser):
         parser.add_argument('--since', nargs='?', type=int)
@@ -40,18 +34,9 @@ class Command(BaseCommand):
         models.Membership.objects.get_or_create(defaults=defaults, **unique)
 
     def handle(self, *args, **options):
-        for filename in ["ministers", "ministers-2010"]:
-            url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/{}.json".format(filename)
-            filepath = join(self.data_directory, '{}.json'.format(filename))
-            if exists(filepath) and not self.refresh:
-                with open(filepath) as f:
-                    j = json.load(f)
-            else:
-                r = requests.get(url)
-                time.sleep(0.5)
-                with open(filepath, "w") as f:
-                    f.write(r.text)
-                j = r.json()
+        for filename in ["ministers.json", "ministers-2010.json"]:
+            url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/{}".format(filename)
+            j = fetch_json(url, filename)
 
             since = options.get('since')
             if since:

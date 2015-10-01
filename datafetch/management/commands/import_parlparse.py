@@ -1,18 +1,11 @@
-import json
-from os.path import join, exists
-import time
-
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-import requests
 from datafetch import models
+from datafetch.helpers import fetch_json
 
 
 class Command(BaseCommand):
     help = 'Import ParlParse data'
-    data_directory = join(settings.BASE_DIR, 'datafetch', 'data')
-    refresh = False
 
     def add_arguments(self, parser):
         parser.add_argument('--since', nargs='?', type=int)
@@ -184,6 +177,7 @@ class Command(BaseCommand):
             if membership.get('post_id'):
                 post = j['posts'][membership['post_id']]
                 membership['post_id'] = post.id
+                membership['role'] = post.label
                 membership['organization_id'] = post.organization_id
             else:
                 membership['organization_id'] = j['organizations'][membership['organization_id']]
@@ -200,17 +194,9 @@ class Command(BaseCommand):
             m, created = models.Membership.objects.get_or_create(defaults=defaults, **unique)
 
     def handle(self, *args, **options):
-        filepath = join(self.data_directory, 'people.json')
-        if exists(filepath) and not self.refresh:
-            with open(filepath) as f:
-                j = json.load(f)
-        else:
-            url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json"
-            r = requests.get(url)
-            time.sleep(0.5)
-            with open(filepath, "w") as f:
-                f.write(r.text)
-            j = r.json()
+        url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json"
+        filename = "people.json"
+        j = fetch_json(url, filename)
 
         since = options.get('since')
         if since:

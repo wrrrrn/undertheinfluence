@@ -1,13 +1,10 @@
 import datetime
-import json
-from os.path import join, exists
-import time
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-import requests
 from datafetch import models
+from datafetch.helpers import fetch_json, create_folder
 
 
 class Command(BaseCommand):
@@ -15,26 +12,16 @@ class Command(BaseCommand):
 
     base_url = "http://www.theyworkforyou.com"
     # local directory to save fetched files to
-    data_directory = join(settings.BASE_DIR, 'datafetch', 'data')
-    refresh = False
     api_key = settings.TWFY_API_KEY
+    create_folder('twfy')
 
     def _get_overview_data(self, date):
         date_str = date.strftime("%d/%m/%Y")
         # print("  Fetching MP overview data from TheyWorkForYou (%s) ..." % date_str)
 
-        filepath = join(self.data_directory, "mps_overview_{}.json".format(str(date)))
-        if exists(filepath) and not self.refresh:
-            with open(filepath) as f:
-                mps = json.load(f)
-        else:
-            url = "{}/api/getMPs?key={}&date={}".format(self.base_url, self.api_key, date_str)
-            r = requests.get(url)
-            time.sleep(0.5)
-            with open(filepath, "w") as f:
-                f.write(r.text)
-            mps = r.json()
-
+        filename = "mps_overview_{}.json".format(str(date))
+        url = "{}/api/getMPs?key={}&date={}".format(self.base_url, self.api_key, date_str)
+        mps = fetch_json(url, filename, path='twfy')
         return [mp["person_id"] for mp in mps]
 
     def _get_mps_since(self, since, increment):
@@ -49,32 +36,21 @@ class Command(BaseCommand):
         return list(all_mps)
 
     def _get_mp_info(self, mp_id):
-        filepath = join(self.data_directory, "twfy_{}.json".format(mp_id))
-        # print("... {}".format(filepath))
-        if exists(filepath) and not self.refresh:
-            # if the MP file exists, we bail out
-            with open(filepath) as f:
-                info = json.load(f)
-            return info
-
+        filename = "twfy_{}_info.json".format(mp_id)
         extra_fields = ", ".join(["wikipedia_url", "bbc_profile_url", "date_of_birth", "mp_website", "guardian_mp_summary", "journa_list_link"])
         url = "{}/api/getMPInfo?key={}&id={}&fields={}".format(
             self.base_url,
             self.api_key,
             mp_id,
             extra_fields)
-        info = requests.get(url).json()
-        time.sleep(0.5)
+        info = fetch_json(url, filename, path='twfy')
 
+        filename = "twfy_{}.json".format(mp_id)
         url = "{}/api/getMP?key={}&id={}".format(
             self.base_url,
             self.api_key,
             mp_id)
-        info["details"] = requests.get(url).json()
-        time.sleep(0.5)
-
-        with open(filepath, "w") as f:
-            json.dump(info, f)
+        info['details'] = fetch_json(url, filename, path='twfy')
 
         return info
 
@@ -82,7 +58,7 @@ class Command(BaseCommand):
         # print("Fetching MPs ...")
         mp_ids = self._get_mps_since("2000-01-01", 180)
         # print("Fetching individual MP data ...")
-        for idx, mp_id in enumerate(mp_ids):
+        for mp_id in mp_ids:
             # print("  Fetching MP details for person ID {} ... ({} / {})".format(mp_id, idx+1, len(mp_ids)))
             mp_info = self._get_mp_info(mp_id)
 
