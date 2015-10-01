@@ -10,10 +10,10 @@ import requests
 
 # very basic caching sort of thing
 def fetch_json(url, filename, path=None, refresh=False):
-    fullpath = join(settings.BASE_DIR, 'datafetch', 'data')
+    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
     if path:
-        fullpath = join(fullpath, path)
-    filepath = join(fullpath, filename)
+        datadir = join(datadir, path)
+    filepath = join(datadir, filename)
     if not exists(filepath) or refresh:
         r = requests.get(url)
         time.sleep(0.5)
@@ -26,10 +26,10 @@ def fetch_json(url, filename, path=None, refresh=False):
     return j
 
 def fetch_file(url, filename, path=None, refresh=False):
-    fullpath = join(settings.BASE_DIR, 'datafetch', 'data')
+    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
     if path:
-        fullpath = join(fullpath, path)
-    filepath = join(fullpath, filename)
+        datadir = join(datadir, path)
+    filepath = join(datadir, filename)
     if not exists(filepath) or refresh:
         r = requests.get(url)
         time.sleep(0.5)
@@ -37,6 +37,8 @@ def fetch_file(url, filename, path=None, refresh=False):
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
-def create_folder(path):
+def create_data_folder(path):
+    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
+    path = join(datadir, path)
     if not exists(path):
         makedirs(path)

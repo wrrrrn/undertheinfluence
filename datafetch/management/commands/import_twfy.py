@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models
-from datafetch.helpers import fetch_json, create_folder
+from datafetch.helpers import fetch_json, create_data_folder
 
 
 class Command(BaseCommand):
@@ -13,7 +13,7 @@ class Command(BaseCommand):
     base_url = "http://www.theyworkforyou.com"
     # local directory to save fetched files to
     api_key = settings.TWFY_API_KEY
-    create_folder('twfy')
+    create_data_folder('twfy')
 
     def _get_overview_data(self, date):
         date_str = date.strftime("%d/%m/%Y")

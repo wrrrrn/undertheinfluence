@@ -29,6 +29,11 @@
                 {% endfor %}
             </ul>
         </div>
+        <div class="row">
+            {% for link in person.links.all %}
+                <a target="_blank" href="{{ link.url }}">{{ link.note }}</a>
+            {% endfor %}
+        </div>
     </div>
 </div>
 {% endblock %}

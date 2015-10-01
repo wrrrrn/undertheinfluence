@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models
-from datafetch.helpers import fetch_json, create_folder
+from datafetch.helpers import fetch_json, create_data_folder
 
 class Command(BaseCommand):
     help = 'Import Companies House data'
@@ -9,7 +9,7 @@ class Command(BaseCommand):
 
     def _fetch_companies_house(self, identifiers):
         address_parts = ('CareofName', 'PoBox', 'AddressLine1', 'AddressLine2', 'PostTown', 'Postcode', 'County', 'Country',)
-        create_folder('companieshouse')
+        create_data_folder('companieshouse')
 
         for identifier in identifiers:
             url = "http://data.companieshouse.gov.uk/doc/company/{}.json".format(identifier.identifier)

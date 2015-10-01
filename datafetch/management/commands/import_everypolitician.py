@@ -3,7 +3,7 @@ from os.path import join
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models
-from datafetch.helpers import fetch_file, fetch_json, create_folder
+from datafetch.helpers import fetch_file, fetch_json, create_data_folder
 
 
 class Command(BaseCommand):
@@ -21,7 +21,7 @@ class Command(BaseCommand):
         )
 
         path_to_images = join('..', '..', 'media', 'persons')
-        create_folder(path_to_images)
+        create_data_folder(path_to_images)
 
         for person in people:
             try:
