@@ -8,12 +8,50 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from polymorphic import PolymorphicModel
 
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 from .popolo.querysets import PostQuerySet, OtherNameQuerySet, ContactDetailQuerySet, MembershipQuerySet, SubclassingQuerySet
 
 
-class Person(Dateframeable, Timestampable, GenericRelatable, models.Model):
+class Actor(Dateframeable, Timestampable, GenericRelatable, PolymorphicModel):
+    name = models.CharField(_("name"), max_length=512, help_text=_("A person or organization's preferred full name"))
+    image = models.URLField(_("image"), blank=True, null=True, help_text=_("An image representing the person or organization"))
+
+    # array of items referencing "http://popoloproject.com/schemas/other_name.json#"
+    other_names = GenericRelation('OtherName', help_text="Alternate or former names")
+
+    # array of items referencing "http://popoloproject.com/schemas/identifier.json#"
+    identifiers = GenericRelation('Identifier', help_text="Issued identifiers")
+
+    # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
+    contact_details = GenericRelation('ContactDetail', help_text="Means of contacting the person or organization")
+
+    # array of items referencing "http://popoloproject.com/schemas/link.json#"
+    links = GenericRelation('Link', help_text="URLs to documents related to the person or organization")
+
+    # array of items referencing "http://popoloproject.com/schemas/link.json#"
+    sources = GenericRelation('Source', help_text="URLs to source documents about the person or organization")
+
+    notes = GenericRelation('Note', help_text="A note about the person or organization")
+
+    relationships = models.ManyToManyField('self', through='Relationship', symmetrical=False, help_text="Relationships involving the person or organization")
+
+    # objects = PassThroughManager.for_queryset_class(ActorQuerySet)()
+
+    def __str__(self):
+        return self.name
+
+    def add_contact_detail(self, **kwargs):
+        c = ContactDetail(content_object=self, **kwargs)
+        c.save()
+
+    def add_contact_details(self, contacts):
+        for c in contacts:
+            self.add_contact_detail(**c)
+
+
+class Person(Actor):
     """
     A real person, alive or dead
     see schema at http://popoloproject.com/schemas/person.json#
@@ -21,14 +59,6 @@ class Person(Dateframeable, Timestampable, GenericRelatable, models.Model):
 
     json_ld_context = "http://popoloproject.com/contexts/person.jsonld"
     json_ld_type = "http://www.w3.org/ns/person#Person"
-
-    name = models.CharField(_("name"), max_length=512, help_text=_("A person's preferred full name"))
-
-    # array of items referencing "http://popoloproject.com/schemas/other_name.json#"
-    other_names = GenericRelation('OtherName', help_text="Alternate or former names")
-
-    # array of items referencing "http://popoloproject.com/schemas/identifier.json#"
-    identifiers = GenericRelation('Identifier', help_text="Issued identifiers")
 
     family_name = models.CharField(_("family name"), max_length=128, blank=True, help_text=_("One or more family names"))
     given_name = models.CharField(_("given name"), max_length=128, blank=True, help_text=_("One or more primary given names"))
@@ -41,19 +71,9 @@ class Person(Dateframeable, Timestampable, GenericRelatable, models.Model):
     gender = models.CharField(_('gender'), max_length=128, blank=True, help_text=_("A gender"))
     birth_date = models.CharField(_("birth date"), max_length=10, blank=True, help_text=_("A date of birth"))
     death_date = models.CharField(_("death date"), max_length=10, blank=True, help_text=_("A date of death"))
-    image = models.URLField(_("image"), blank=True, null=True, help_text=_("A URL of a head shot"))
     summary = models.CharField(_("summary"), max_length=1024, blank=True, help_text=_("A one-line account of a person's life"))
     biography = models.TextField(_("biography"), blank=True, help_text=_("An extended account of a person's life"))
     national_identity = models.CharField(_("national identity"), max_length=128, blank=True, null=True, help_text=_("A national identity"))
-
-    # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
-    contact_details = GenericRelation('ContactDetail', help_text="Means of contacting the person")
-
-    # array of items referencing "http://popoloproject.com/schemas/link.json#"
-    links = GenericRelation('Link', help_text="URLs to documents related to the person")
-
-    # array of items referencing "http://popoloproject.com/schemas/link.json#"
-    sources = GenericRelation('Source', help_text="URLs to source documents about the person")
 
     class Meta:
         verbose_name_plural="People"
@@ -72,32 +92,16 @@ class Person(Dateframeable, Timestampable, GenericRelatable, models.Model):
         m = Membership(person=self, post=post, organization=post.organization)
         m.save()
 
-    def add_contact_detail(self, **kwargs):
-        c = ContactDetail(content_object=self, **kwargs)
-        c.save()
 
-    def add_contact_details(self, contacts):
-        for c in contacts:
-            self.add_contact_detail(**c)
-
-    def __str__(self):
-        return self.name
-
-class Organization(Dateframeable, Timestampable, GenericRelatable, models.Model):
+class Organization(Actor):
     """
     A group with a common purpose or reason for existence that goes beyond the set of people belonging to it
     see schema at http://popoloproject.com/schemas/organization.json#
     """
 
-    name = models.CharField(_("name"), max_length=512, help_text=_("A primary name, e.g. a legally recognized name"))
     summary = models.CharField(_("summary"), max_length=1024, blank=True, help_text=_("A one-line description of an organization"))
     description = models.TextField(_("biography"), blank=True, help_text=_("An extended description of an organization"))
 
-    # array of items referencing "http://popoloproject.com/schemas/other_name.json#"
-    other_names = GenericRelation('OtherName', help_text="Alternate or former names")
-
-    # array of items referencing "http://popoloproject.com/schemas/identifier.json#"
-    identifiers = GenericRelation('Identifier', help_text="Issued identifiers")
     classification = models.CharField(_("classification"), max_length=512, blank=True, help_text=_("An organization category, e.g. committee"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
@@ -123,16 +127,6 @@ class Organization(Dateframeable, Timestampable, GenericRelatable, models.Model)
                     )
                 ], help_text=_("A date of dissolution"))
 
-    image = models.URLField(_("image"), blank=True, null=True, help_text=_("A URL of an image, to identify the organization visually"))
-
-    # array of items referencing "http://popoloproject.com/schemas/link.json#"
-    links = GenericRelation('Link', help_text="URLs to documents about the organization")
-
-    # array of items referencing "http://popoloproject.com/schemas/link.json#"
-    sources = GenericRelation('Source', help_text="URLs to source documents about the organization")
-
-    # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
-    contact_details = GenericRelation('ContactDetail', help_text="Means of contacting the organization")
 
     url_name = 'organization-detail'
 
@@ -152,8 +146,6 @@ class Organization(Dateframeable, Timestampable, GenericRelatable, models.Model)
         for p in posts:
             self.add_post(**p)
 
-    def __str__(self):
-        return self.name
 
 class Post(Dateframeable, Timestampable, models.Model):
     """

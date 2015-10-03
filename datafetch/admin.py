@@ -21,8 +21,7 @@ class IdentifierInline(generic.GenericTabularInline):
 
 class OtherNameInline(generic.GenericTabularInline):
     model = models.OtherName
-    fields = (
-        'name',)
+    fields = ('name',)
     extra = 0
 
 

@@ -67,13 +67,13 @@ class SubclassingQuerySet(QuerySet):
         for item in super(SubclassingQuerySet, self).__iter__():
             yield item.as_leaf_class()
 
+class ActorQuerySet(DateframeableQuerySet):
+    pass
+
 class PostQuerySet(DateframeableQuerySet):
     pass
 
 class MembershipQuerySet(DateframeableQuerySet):
-    pass
-
-class RelationshipQuerySet(DateframeableQuerySet):
     pass
 
 class ContactDetailQuerySet(DateframeableQuerySet):

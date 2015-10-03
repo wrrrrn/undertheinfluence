@@ -1,2 +1,2 @@
-from .models import Post, Identifier, OtherName, ContactDetail, Link, Source, Membership, Organization, Person
-from .influence_mapping import Relationship
+from .models import Actor, Post, Identifier, OtherName, ContactDetail, Link, Source, Membership, Person, Organization
+from .influence_mapping import Relationship, Note
