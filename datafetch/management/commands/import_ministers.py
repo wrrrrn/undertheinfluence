@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from datafetch import models
-from datafetch.helpers import fetch_json
+from datafetch import models, helpers
 
 
 class Command(BaseCommand):
@@ -36,7 +35,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         for filename in ["ministers.json", "ministers-2010.json"]:
             url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/{}".format(filename)
-            j = fetch_json(url, filename)
+            j = helpers.fetch_json(url, filename)
 
             since = options.get('since')
             if since:

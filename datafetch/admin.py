@@ -10,6 +10,27 @@ class MembershipInline(admin.StackedInline):
     fields = (
         'label', 'organization', 'role', 'on_behalf_of', 'start_date',
         'end_date')
+    readonly_fields = ('organization', 'on_behalf_of',)
+    extra = 0
+
+
+class InfluencedByInline(admin.StackedInline):
+    model = models.Relationship
+    verbose_name_plural = "Seeks to influence"
+    fk_name = 'influenced_by'
+    fields = ('influences', 'start_date',)
+    readonly_fields = ('influences', 'start_date',)
+    ordering = ('start_date',)
+    extra = 0
+
+
+class InfluencingInline(admin.StackedInline):
+    model = models.Relationship
+    verbose_name_plural = "Is influenced by"
+    fk_name = 'influences'
+    fields = ('influenced_by', 'start_date',)
+    readonly_fields = ('influenced_by', 'start_date',)
+    ordering = ('start_date',)
     extra = 0
 
 
@@ -26,14 +47,16 @@ class OtherNameInline(generic.GenericTabularInline):
 
 
 class PersonAdmin(admin.ModelAdmin):
-    search_fields = ('other_names__name',)
+    search_fields = ('name', 'other_names__name',)
     fields = (
         'name', 'given_name', 'family_name', 'honorific_prefix', 'honorific_suffix',
         'image', 'email', 'gender', 'birth_date', 'death_date')
     inlines = [
+        InfluencedByInline,
+        InfluencingInline,
+        MembershipInline,
         OtherNameInline,
         IdentifierInline,
-        MembershipInline,
     ]
 
 
@@ -41,6 +64,8 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     fields = ('name', 'classification', 'founding_date', 'dissolution_date')
     inlines = [
+        InfluencingInline,
+        InfluencedByInline,
         OtherNameInline,
         IdentifierInline,
     ]

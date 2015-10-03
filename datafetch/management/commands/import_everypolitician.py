@@ -13,7 +13,6 @@ class Command(BaseCommand):
         person_rels = {
             'links': models.Link,
             'identifiers': models.Identifier,
-            # 'other_names': models.OtherName,
         }
 
         ignore_fields = (
@@ -26,9 +25,10 @@ class Command(BaseCommand):
 
         for person in people:
             try:
-                p = models.Person.objects.get(identifiers__identifier=person['id'], identifiers__scheme="uk.org.publicwhip")
-            except models.Person.DoesNotExist:
+                i = models.Identifier.objects.get(identifier=person['id'], scheme="uk.org.publicwhip")
+            except models.Identifier.DoesNotExist:
                 continue
+            p = models.Person.objects.get(identifiers=i)
             for k, v in person.items():
                 if k not in ignore_fields:
                     setattr(p, k, v)
@@ -42,15 +42,10 @@ class Command(BaseCommand):
                 fetch_file(p.image, filename, path=path_to_images)
             for rel_id, rel_model in person_rels.items():
                 for rel_dict in person.get(rel_id, []):
-                    getattr(p, rel_id).add(rel_model.objects.get_or_create(defaults=rel_dict, **rel_dict)[0])
+                    getattr(p, rel_id).add(rel_model.objects.get_or_create(**rel_dict)[0])
                 for contact_dict in person.get('contact_details', []):
                     contact_dict = {'contact_type': contact_dict['type'], 'value': contact_dict['value']}
-                    p.contact_details.add(models.ContactDetail.objects.get_or_create(defaults=contact_dict, **contact_dict)[0])
-                for other_name_dict in person.get('other_names', []):
-                    if other_name_dict['lang'] != 'en':
-                        continue
-                    other_name_dict = {k: v for k, v in other_name_dict.items() if k != 'lang'}
-                    p.other_names.add(models.OtherName.objects.get_or_create(defaults=other_name_dict, **other_name_dict)[0])
+                    p.contact_details.add(models.ContactDetail.objects.get_or_create(**contact_dict)[0])
 
     def handle(self, *args, **options):
         filename = "ep-popolo-v1.0.json"

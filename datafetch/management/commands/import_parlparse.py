@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from datafetch import models
-from datafetch.helpers import fetch_json
+from datafetch import models, helpers
 
 
 class Command(BaseCommand):
@@ -82,7 +81,7 @@ class Command(BaseCommand):
                 continue
 
             identifier = dict(zip(('scheme', 'identifier'), id_.split('/', 1)))
-            identifier, created = models.Identifier.objects.get_or_create(identifier=identifier['identifier'], defaults=identifier)
+            identifier, created = models.Identifier.objects.get_or_create(**identifier)
 
             other_names = []
             for n in person.get('other_names', []):
@@ -92,16 +91,9 @@ class Command(BaseCommand):
                     name_dict = primary_name
             person['other_names'] = other_names
 
-            if name_dict.get('given_name'):
-                person['given_name'] = name_dict.get('given_name')
-            if name_dict.get('additional_name'):
-                person['additional_name'] = name_dict.get('additional_name')
-            if name_dict.get('family_name'):
-                person['family_name'] = name_dict.get('family_name')
-            if name_dict.get('honorific_prefix'):
-                person['honorific_prefix'] = name_dict.get('honorific_prefix')
-            if name_dict.get('honorific_suffix'):
-                person['honorific_suffix'] = name_dict.get('honorific_suffix')
+            for x in ['given_name', 'additional_name', 'family_name', 'honorific_prefix', 'honorific_suffix']:
+                if name_dict.get(x):
+                    person[x] = name_dict[x]
             person['name'] = name_dict.get('name')
             # TODO: sort_name
 
@@ -114,13 +106,39 @@ class Command(BaseCommand):
                 if not rel_model:
                     continue
                 for rel_dict in person.get(rel_id, []):
-                    if rel_id == 'Identifier' and rel_dict.get('scheme').endswith('_id'):
+                    if rel_id == 'identifiers' and rel_dict.get('scheme').endswith('_id'):
+                        # strip _id off the end of historichansard and datadotparl
                         rel_dict['scheme'] = rel_dict['scheme'][:-3]
-                    getattr(p, rel_id).add(rel_model.objects.get_or_create(defaults=rel_dict, **rel_dict)[0])
+                    if not getattr(p, rel_id).filter(**rel_dict):
+                        getattr(p, rel_id).add(rel_model.objects.create(**rel_dict))
             people_dict[id_] = p.id
         return people_dict
 
     def _process_organizations(self, organizations):
+        # parlparse doesn't have nice party IDs, so we hardcode
+        # a lookup to Electoral Commission IDs here.
+        party_lookup = {
+          "alliance": ("PP103", "Alliance - Alliance Party of Northern Ireland",),
+          "conservative": ("PP52", "Conservative Party",),
+          "dup": ("PP70", "Democratic Unionist Party - D.U.P.",),
+          "green": ("PP63", "Green Party",),
+          "labour": ("PP53", "Labour Party",),
+          "liberal-democrat": ("PP90", "Liberal Democrats",),
+          "niup": ("PP3", "Northern Ireland Unionist Party",),
+          "niwc": ("PP91", "Northern Ireland Women's Coalition",),
+          "plaid-cymru": ("PP77", "Plaid Cymru - The Party of Wales",),
+          "pup": ("PP101", "Progressive Unionist Party of Northern Ireland",),
+          "respect": ("PP362", "The Respect Party",),
+          "scottish-national-party": ("PP102", "Scottish National Party (SNP)",),
+          "sinn-fein": ("PP39", "Sinn Féin",),
+          "social-democratic-and-labour-party": ("PP55", "SDLP (Social Democratic & Labour Party)",),
+          "ssp": ("PP46", "Scottish Socialist Party",),
+          "traditional-unionist-voice": ("PP680", "Traditional Unionist Voice - TUV",),
+          "ukip": ("PP85", "UK Independence Party (UKIP)",),
+          "ukup": ("PP107", "United Kingdom Unionist Party U.K.U.P.",),
+          "uup": ("PP83", "Ulster Unionist Party",),
+        }
+
         organizations_dict = {}
         organizations += [{
             'id': 'house-of-commons',
@@ -144,7 +162,21 @@ class Command(BaseCommand):
                 organization['classification'] = 'Political Party'
             id_ = organization['id']
             del organization['id']
-            o, created = models.Organization.objects.get_or_create(**organization)
+            if id_ in party_lookup:
+                ec_identifier, organization["name"] = party_lookup[id_]
+                identifier, created = models.Identifier.objects.get_or_create(
+                    identifier=ec_identifier,
+                    scheme="electoralcommission")
+                if created:
+                    o = models.Organization.objects.create(**organization)
+                    o.identifiers.add(identifier)
+                else:
+                    o = models.Organization.objects.get(identifiers=identifier)
+            else:
+                # TODO: The default here isn't quite right. We should
+                # check a bit more thoroughly that the org doesn't already
+                # exist.
+                o, created = models.Organization.objects.get_or_create(**organization)
             organizations_dict[id_] = o.id
         return organizations_dict
 
@@ -196,7 +228,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json"
         filename = "people.json"
-        j = fetch_json(url, filename)
+        j = helpers.fetch_json(url, filename)
 
         since = options.get('since')
         if since:

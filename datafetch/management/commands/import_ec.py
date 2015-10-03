@@ -1,13 +1,10 @@
-import csv
 import re
-from io import StringIO
 from os.path import join, exists
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-import requests
-from datafetch import models
+from datafetch import models, helpers
 
 
 class Command(BaseCommand):
@@ -15,148 +12,234 @@ class Command(BaseCommand):
     data_directory = join(settings.BASE_DIR, 'datafetch', 'data')
     refresh = False
 
-    source_tmpl = "http://search.electoralcommission.org.uk/English/Donations/{}"
+    donation_source_tmpl = "http://search.electoralcommission.org.uk/English/Donations/{}"
+    reg_source_tmpl = "http://{}.electoralcommission.org.uk/English/Registrations/{}"
 
-    def _parse_name(self, name):
-        data = {}
-        honorific_prefix = []
-        name = name.strip()
-        # honorary suffixes
-        name = re.sub(r'( [A-Z]{2,})*$', '', name)
-
-        if name.startswith('The Rt Hon '):
-            name = name[len('The Rt Hon '):]
-            honorific_prefix.append('The Rt Hon')
-
-        if name.startswith('Sir '):
-            name = name[len('Sir '):]
-            honorific_prefix.append('Sir')
-            data['gender'] = "man"
-
-        m = re.match(r'(Mr|Miss|Mrs|Ms) (.*)$', name)
-        if m:
-            name = m.group(2)
-            data['gender'] = "man" if m.group(1) in ["Mr", "Sir"] else "woman"
-
-        # honorary prefixes
-        name = re.sub(r'(Cllr|Dr) ', '', name)
-
-        if honorific_prefix:
-            data['honorific_prefix'] = ' '.join(honorific_prefix)
-
-        data['name'] = name
-
-        return data
-
+    # from dd-mm-(yy)yy to yyyy-mm-dd
     def _parse_date(self, date):
-        return "{}-{}-{}".format(date[6:], date[3:5], date[:2]) if date else ""
+        if not date:
+            return ""
+        date = "{}-{}-{}".format(date[6:], date[3:5], date[:2])
+        if len(date) == 8:
+            date = "20" + date
+        return date
 
-    def _process_donor(self, donor):
-        ec_identifier, created = models.Identifier.objects.get_or_create(identifier=donor['ecref'], scheme='uk.org.electoralcommission')
-        if not created:
-            # this donor already exists
-            if donor['entity_status_name'] == 'Individual':
-                return models.Person.objects.get(identifiers=ec_identifier)
-            else:
-                return models.Organization.objects.get(identifiers=ec_identifier)
+    def _get_or_create_reg_num_id(self, reg_num):
+        while len(reg_num) < 8:
+            reg_num = '0' + reg_num
+        id_ = {'identifier': reg_num, 'scheme': "companieshouse"}
+        return models.Identifier.objects.get_or_create(**id_)
 
-        actor = {'name': donor['regulated_entity_name']}
-        if donor['entity_status_name'] == 'Individual':
-            actor = dict(zip(('name', 'honorific_prefix', 'gender',), self._parse_name(actor['name'])))
-            a, created = models.Person.objects.get_or_create(name=actor['name'], defaults=actor)
+    def _process_donor(self, donation):
+        ec_identifier = None
+        reg_ent = self.registered_entities_dict.get(donation['donor_name'])
+        if reg_ent:
+            # check if the donor is already in the database
+            ec_identifier, created = models.Identifier.objects.get_or_create(identifier=reg_ent["ecref"], scheme="electoralcommission")
+            if not created:
+                # if it is, return it
+                try:
+                    return models.Organization.objects.get(identifiers=ec_identifier)
+                except models.Organization.DoesNotExist:
+                    return models.Person.objects.get(identifiers=ec_identifier)
+
+        reg_num_identifier = None
+        if donation.get('company_registration_number'):
+            reg_num_identifier, created = self._get_or_create_reg_num_id(donation['company_registration_number'])
+            if not created:
+                org = models.Organization.objects.get(identifiers=reg_num_identifier)
+                if ec_identifier:
+                    org.identifiers.add(ec_identifier)
+                return org
+
+        if donation['donor_status'] == 'Individual':
+            donor_type = 'person'
+            donor, created = self._process_individual(donation['donor_name'])
         else:
-            if donor['regulated_entity_type_name'] == 'Third Party':
-                actor['classification'] = donor['entity_status_name']
-            else:
-                actor['classification'] = 'Political Party'
-            a, created = models.Organization.objects.get_or_create(name=actor['name'], defaults=actor)
-        a.identifiers.add(ec_identifier)
-        return a
+            donor_type = 'organization'
+            donor_dict = {
+                'name': donation['donor_name'].strip(),
+                'classification': donation['donor_status'],
+            }
+            donor, created = models.Organization.objects.get_or_create(name=donor_dict['name'], defaults=donor_dict)
+
+        if ec_identifier:
+            donor.identifiers.add(ec_identifier)
+
+        if reg_num_identifier:
+            donor.identifiers.add(reg_num_identifier)
+
+        if created:
+            if donation['postcode']:
+                contact = models.ContactDetail.objects.create(contact_type='address', value=donation['postcode'])
+                donor.contact_details.add(contact)
+
+            note_content = "This {} was auto-generated when scraping the donor register.".format(donor_type)
+            note = models.Note.objects.create(content=note_content)
+            donor.notes.add(note)
+
+        return donor
+
+    def _process_individual(self, name):
+        person_dict = helpers.parse_name(name)
+        person = models.Person.objects.filter(other_names__name=person_dict['name'])
+        if person:
+            person = person[0]
+            dirty = False
+            if person_dict.get('honorific_prefix') and not person.honorific_prefix:
+                person.honorific_prefix = person_dict['honorific_prefix']
+                dirty = True
+            if person_dict.get('gender') and not person.gender:
+                person.gender = person_dict['gender']
+                dirty = True
+            if dirty:
+                person.save()
+            created = False
+        else:
+            # create a new person
+            person = models.Person.objects.create(**person_dict)
+            other_name = models.OtherName.objects.create(name=person.name)
+            person.other_names.add(other_name)
+            created = True
+        return person, created
+
+    def _process_org_recipient(self, donation, reg_ent):
+        recipient_dict = {}
+        recipient_dict['name'], deregistered = re.match(r'^(.*?)(?: \[De-registered ([^\]]*)\])?$', donation['regulated_entity_name']).groups()
+        if deregistered:
+            recipient_dict['dissolution_date'] = self._parse_date(deregistered)
+
+        recipient_dict['classification'] = donation.get('regulated_donee_type')
+        if not recipient_dict['classification']:
+            recipient_dict['classification'] = donation.get('regulated_entity_type')
+
+        if reg_ent:
+            reg_num_identifier = None
+            if reg_ent['company_registration_number']:
+                reg_num_identifier, created = self._get_or_create_reg_num_id(reg_ent['company_registration_number'])
+                if not created:
+                    # We already have a log of this company number, but the
+                    # company may have had a different name or be from a
+                    # different source
+                    recipient = models.Organization.objects.get(identifiers=reg_num_identifier)
+                    return recipient, created
+
+            # This isn't _really_ the founding date...
+            # Might not be a good idea to set this here.
+            recipient_dict['founding_date'] = self._parse_date(reg_ent['approved_date'])
+            recipient, created = models.Organization.objects.get_or_create(name=recipient_dict['name'], defaults=recipient_dict)
+            if reg_num_identifier:
+                recipient.identifiers.add(reg_num_identifier)
+        else:
+            # Get or create an organization based on the name only
+            recipient, created = models.Organization.objects.get_or_create(name=recipient_dict['name'], defaults=recipient_dict)
+
+        return recipient, created
+
+    def _process_recipient(self, donation):
+        # look the recipient up in the registered entities dict
+        ec_identifier = None
+        reg_ent = self.registered_entities_dict.get(donation['regulated_entity_name'])
+        if reg_ent:
+            # check if the recipient is already in the database
+            ec_identifier, created = models.Identifier.objects.get_or_create(identifier=reg_ent["ecref"], scheme="electoralcommission")
+            if not created:
+                # if it is, return it
+                try:
+                    return models.Organization.objects.get(identifiers=ec_identifier)
+                except models.Organization.DoesNotExist:
+                    return models.Person.objects.get(identifiers=ec_identifier)
+
+        if donation['regulated_entity_type'] == 'Regulated Donee' and donation['regulated_donee_type'] != 'Members Association':
+            # Individual recipient e.g. MPs, MEPs
+            recipient, created = self._process_individual(donation['regulated_entity_name'])
+            note_content = "This person was auto-generated when scraping the donor register.\n\nThey had donee type: '{}'.".format(donation['regulated_donee_type'])
+        else:
+            # Organizational recipient e.g. political parties
+
+            # Known bug: There is ONE individual in this category:
+            #  - C0106416
+            # This recipient is a "Permitted Participant" rather than
+            # a "Regulated Donee".
+
+            recipient, created = self._process_org_recipient(donation, reg_ent)
+            note_content = "This organization was auto-generated when scraping the donor register."
+
+        if ec_identifier:
+            recipient.identifiers.add(ec_identifier)
+
+        if created:
+            note = models.Note.objects.create(content=note_content)
+            recipient.notes.add(note)
+
+        return recipient
+
+    def _save_donation(self, donor, recipient, donation):
+        id_ = donation["ecref"]
+        identifier = models.Identifier.objects.create(identifier=id_, scheme="electoralcommission")
+
+        donation_dict = {
+            "value": donation['value'][1:].replace(',', ''),
+            "category": donation['donation_type'],
+            "nature": donation['nature_of_donation'],
+            "accepted_date": self._parse_date(donation["accepted_date"]),
+            "influenced_by": donor,
+            "influences": recipient,
+            "source": self.donation_source_tmpl.format(id_),
+            # "is_aggregation": "True",
+            # "accounting_unit_name": "Central Party",
+            # "reporting_period_name": "Q1 2001",
+            # "purpose_of_visit": "",
+            # "is_sponsorship": "False",
+            # "is_reported_pre_poll": "False",
+            # "is_bequest": "False",
+            # "donation_action": "",
+            # "accounting_units_as_central_party": "False",
+        }
+
+        # create the donation
+        d = models.Donation.objects.create(**donation_dict)
+        # add the identifier
+        d.identifiers.add(identifier)
 
     def _process_donations(self, donations):
+        recipient_dict = {}
         # ^(?:The )?co-operati[cv]e
-        for donation in donations:
-            print(donation)
-            exit()
-            if donation.get('company_registration_number'):
-                reg_num = donation['company_registration_number']
-                while len(reg_num) < 8:
-                    reg_num = '0' + reg_num
-                id_ = {'identifier': reg_num, 'scheme': "uk.gov.companieshouse"}
-                i, created = models.Identifier.get_or_create(**id_)
+        donor_dict = {}
+        total = len(donations)
+        all_ids = [x.identifier for x in models.Identifier.objects.filter(scheme="electoralcommission")]
+        for i, donation in enumerate(donations):
+            print('{} ({} / {})'.format(donation['ecref'], i, total))
+            if donation['ecref'] in all_ids:
+                # skip this - we have it already.
+                continue
+            if not donation['donor_name']:
+                # this happens when the donation is rejected
+                # TODO: we should do something sensible with these
+                # rejected donations.
+                continue
+            donor = donor_dict.get(donation['donor_name'])
+            if not donor:
+                donor = self._process_donor(donation)
+                donor_dict[donation['donor_name']] = donor
 
-                m = models.Organization.objects.filter(identifiers__identifier=reg_num, identifiers__scheme="uk.gov.companieshouse")
-            # donation['regulated_entity_name']
-            registered_donor['id'] = self._process_donor(registered_donor).id
+            recipient = recipient_dict.get(donation['regulated_entity_name'])
+            if not recipient:
+                recipient = self._process_recipient(donation)
+                recipient_dict[donation['regulated_entity_name']] = recipient
 
-
-
-                # if not (models.Person.objects.filter(name__icontains=name) or models.OtherName.objects.filter(name__icontains=name) or models.Organization.objects.filter(name__icontains=name)):
-                #     print('{} ** {}'.format(d['regulated_entity_type'], name))
-
-        #     if d['regulated_entity_type'] not in ['Political Party']:
-        #         success = self._parse_name(d['regulated_entity_name'])
-        #         if not success:
-        #     output = {
-        #         "identifiers": [{'identifier': d["ecref"], 'scheme': 'electoralcommission'}],
-        #         "source": self.source_tmpl.format(d["ecref"]),
-        #         "value": d['value'][1:].replace(',', ''),
-        #         "accepted_date": self._parse_date(d["accepted_date"]),
-        #         "received_date": self._parse_date(d["received_date"]),
-        #         "reported_date": self._parse_date(d["reported_date"]),
-        #     }
-        # print(success_dict)
-            # {
-            #     "regulated_donee_type": ""
-            #     "donor_status": "Individual"
-            #     "is_aggregation": "True"
-            #     "accounting_unit_name": "Central Party"
-            #     "donation_type": "Non Cash"
-            #     "reporting_period_name": "Q1 2001"
-            #     "regulated_entity_name": "Conservative Party"
-            #     "purpose_of_visit": ""
-            #     "is_sponsorship": "False"
-            #     "regulated_entity_type": "Political Party"
-            #     "is_reported_pre_poll": "False"
-            #     "nature_of_donation": "Travel"
-            #     "is_bequest": "False"
-            #     "donation_action": ""
-            #     "donor_name": " Stanley Kalms"
-            #     "company_registration_number": ""
-            #     "accounting_units_as_central_party": "False"
-
-            #     "postcode": ""
-            # }
-
-    def snake_case(self, camel_case_text):
-        return re.sub(r'([a-z])([A-Z])', r'\1_\2', camel_case_text).lower()
-
-    def fetch_csv(self, url, filename):
-        filepath = join(self.data_directory, filename)
-        if exists(filepath) and not self.refresh:
-            with open(filepath) as f:
-                reader = csv.DictReader(f)
-                reader.fieldnames = [self.snake_case(fieldname) for fieldname in reader.fieldnames]
-                return list(reader)
-        else:
-            r = requests.get(url)
-            r.encoding = "utf8"
-            raw_text = r.text[1:]
-            with open(filepath, "w") as f:
-                f.write(raw_text)
-            reader = csv.DictReader(StringIO(raw_text))
-            reader.fieldnames = [self.snake_case(fieldname) for fieldname in reader.fieldnames]
-            return list(reader)
+            self._save_donation(donor, recipient, donation)
 
     def handle(self, *args, **options):
         donations_url = "http://search.electoralcommission.org.uk/api/csv/Donations"
-        donations = self.fetch_csv(donations_url, "ec.csv")
+        donations = helpers.fetch_ec_csv(donations_url, "ec.csv")
 
-        # # This turned out to be a bit of a blind alley.
-        # # There’s really not much to be gleaned from this register.
-        # registrations_url = "http://search.electoralcommission.org.uk/api/csv/Registrations"
-        # registered_entities = self.fetch_csv(registrations_url, "ec_reg.csv")
-        # registered_entities_dict = {v['regulated_entity_name']: v for v in registered_entities}
+        registrations_url = "http://search.electoralcommission.org.uk/api/csv/Registrations"
+        registered_entities = helpers.fetch_ec_csv(registrations_url, "ec_reg.csv")
+        # TODO: this is a bit too simple at the moment.
+        # If there are multiple entities with the same name
+        # listed, an arbitrary one will be used.
+        self.registered_entities_dict = {v['regulated_entity_name']: v for v in registered_entities}
 
         print("Processing donations ...")
         self._process_donations(donations)
