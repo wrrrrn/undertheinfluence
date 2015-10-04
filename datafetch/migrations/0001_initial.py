@@ -2,10 +2,10 @@
 from __future__ import unicode_literals
 
 from django.db import models, migrations
-import datafetch.models.popolo.behaviors
-import model_utils.fields
 import django.utils.timezone
 import django.core.validators
+import datafetch.models.popolo.behaviors
+import model_utils.fields
 
 
 class Migration(migrations.Migration):
@@ -18,14 +18,14 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Actor',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('name', models.CharField(verbose_name='name', max_length=512, help_text="A person or organization's preferred full name")),
-                ('image', models.URLField(verbose_name='image', blank=True, null=True, help_text='An image representing the person or organization')),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('name', models.CharField(help_text="A person or organization's preferred full name", max_length=512, verbose_name='name')),
+                ('image', models.URLField(help_text='An image representing the person or organization', blank=True, verbose_name='image', null=True)),
             ],
             options={
                 'abstract': False,
@@ -34,19 +34,19 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Area',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('name', models.CharField(verbose_name='name', blank=True, max_length=256, help_text='A primary name')),
-                ('identifier', models.CharField(verbose_name='identifier', blank=True, max_length=512, help_text='An issued identifier')),
-                ('classification', models.CharField(verbose_name='identifier', blank=True, max_length=512, help_text='An area category, e.g. city')),
-                ('geom', models.TextField(verbose_name='geom', blank=True, null=True, help_text='A geometry')),
-                ('inhabitants', models.IntegerField(verbose_name='inhabitants', blank=True, null=True, help_text='The total number of inhabitants')),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
-                ('parent', models.ForeignKey(related_name='children', to='datafetch.Area', blank=True, help_text='The area that contains this area', null=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('name', models.CharField(help_text='A primary name', blank=True, max_length=256, verbose_name='name')),
+                ('identifier', models.CharField(help_text='An issued identifier', blank=True, max_length=512, verbose_name='identifier')),
+                ('classification', models.CharField(help_text='An area category, e.g. city', blank=True, max_length=512, verbose_name='identifier')),
+                ('geom', models.TextField(help_text='A geometry', blank=True, verbose_name='geom', null=True)),
+                ('inhabitants', models.IntegerField(help_text='The total number of inhabitants', blank=True, verbose_name='inhabitants', null=True)),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
+                ('parent', models.ForeignKey(to='datafetch.Area', null=True, help_text='The area that contains this area', blank=True, related_name='children')),
             ],
             options={
                 'abstract': False,
@@ -55,9 +55,9 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='AreaI18Name',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
-                ('name', models.CharField(verbose_name='name', max_length=255)),
-                ('area', models.ForeignKey(related_name='i18n_names', to='datafetch.Area')),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
+                ('name', models.CharField(max_length=255, verbose_name='name')),
+                ('area', models.ForeignKey(to='datafetch.Area', related_name='i18n_names')),
             ],
             options={
                 'verbose_name': 'I18N Name',
@@ -67,17 +67,17 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='ContactDetail',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('label', models.CharField(verbose_name='label', blank=True, max_length=512, help_text='A human-readable label for the contact detail')),
-                ('contact_type', models.CharField(verbose_name='type', max_length=12, choices=[('ADDRESS', 'Address'), ('EMAIL', 'Email'), ('URL', 'Url'), ('MAIL', 'Snail mail'), ('TWITTER', 'Twitter'), ('FACEBOOK', 'Facebook'), ('PHONE', 'Telephone'), ('MOBILE', 'Mobile'), ('TEXT', 'Text'), ('VOICE', 'Voice'), ('FAX', 'Fax'), ('CELL', 'Cell'), ('VIDEO', 'Video'), ('PAGER', 'Pager'), ('TEXTPHONE', 'Textphone')], help_text="A type of medium, e.g. 'fax' or 'email'")),
-                ('value', models.CharField(verbose_name='value', max_length=512, help_text='A value, e.g. a phone number or email address')),
-                ('note', models.CharField(verbose_name='note', blank=True, max_length=512, help_text='A note, e.g. for grouping contact details by physical location')),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('label', models.CharField(help_text='A human-readable label for the contact detail', blank=True, max_length=512, verbose_name='label')),
+                ('contact_type', models.CharField(help_text="A type of medium, e.g. 'fax' or 'email'", choices=[('ADDRESS', 'Address'), ('EMAIL', 'Email'), ('URL', 'Url'), ('MAIL', 'Snail mail'), ('TWITTER', 'Twitter'), ('FACEBOOK', 'Facebook'), ('PHONE', 'Telephone'), ('MOBILE', 'Mobile'), ('TEXT', 'Text'), ('VOICE', 'Voice'), ('FAX', 'Fax'), ('CELL', 'Cell'), ('VIDEO', 'Video'), ('PAGER', 'Pager'), ('TEXTPHONE', 'Textphone')], max_length=12, verbose_name='type')),
+                ('value', models.CharField(help_text='A value, e.g. a phone number or email address', max_length=512, verbose_name='value')),
+                ('note', models.CharField(help_text='A note, e.g. for grouping contact details by physical location', blank=True, max_length=512, verbose_name='note')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -86,11 +86,11 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Identifier',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('identifier', models.CharField(verbose_name='identifier', max_length=512, help_text='An issued identifier, e.g. a DUNS number')),
-                ('scheme', models.CharField(verbose_name='scheme', blank=True, max_length=128, help_text='An identifier scheme, e.g. DUNS')),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('identifier', models.CharField(help_text='An issued identifier, e.g. a DUNS number', max_length=512, verbose_name='identifier')),
+                ('scheme', models.CharField(help_text='An identifier scheme, e.g. DUNS', blank=True, max_length=128, verbose_name='scheme')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -99,20 +99,20 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Language',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
-                ('dbpedia_resource', models.CharField(max_length=255, help_text='DbPedia URI of the resource', unique=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
+                ('dbpedia_resource', models.CharField(help_text='DbPedia URI of the resource', max_length=255, unique=True)),
                 ('iso639_1_code', models.CharField(max_length=2)),
-                ('name', models.CharField(max_length=128, help_text='English name of the language')),
+                ('name', models.CharField(help_text='English name of the language', max_length=128)),
             ],
         ),
         migrations.CreateModel(
             name='Link',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('url', models.URLField(verbose_name='url', max_length=350, help_text='A URL')),
-                ('note', models.CharField(verbose_name='note', blank=True, max_length=512, help_text="A note, e.g. 'Wikipedia page'")),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('url', models.URLField(help_text='A URL', max_length=350, verbose_name='url')),
+                ('note', models.CharField(help_text="A note, e.g. 'Wikipedia page'", blank=True, max_length=512, verbose_name='note')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -121,14 +121,14 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Membership',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('label', models.CharField(verbose_name='label', blank=True, max_length=512, help_text='A label describing the membership')),
-                ('role', models.CharField(verbose_name='role', blank=True, max_length=512, help_text='The role that the person fulfills in the organization')),
-                ('area', models.ForeignKey(related_name='memberships', to='datafetch.Area', blank=True, help_text='The geographic area to which the post is related', null=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('label', models.CharField(help_text='A label describing the membership', blank=True, max_length=512, verbose_name='label')),
+                ('role', models.CharField(help_text='The role that the person fulfills in the organization', blank=True, max_length=512, verbose_name='role')),
+                ('area', models.ForeignKey(to='datafetch.Area', null=True, help_text='The geographic area to which the post is related', blank=True, related_name='memberships')),
             ],
             options={
                 'abstract': False,
@@ -137,12 +137,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Note',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('content', models.TextField(verbose_name='content', blank=True, help_text='A note about this person or organization')),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('content', models.TextField(help_text='A note about this person or organization', blank=True, verbose_name='content')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -151,13 +151,13 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='OtherName',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('name', models.CharField(verbose_name='name', max_length=512, help_text='An alternate or former name')),
-                ('note', models.CharField(verbose_name='note', blank=True, max_length=1024, help_text="A note, e.g. 'Birth name'")),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('name', models.CharField(help_text='An alternate or former name', max_length=512, verbose_name='name')),
+                ('note', models.CharField(help_text="A note, e.g. 'Birth name'", blank=True, max_length=1024, verbose_name='note')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -166,15 +166,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Post',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('label', models.CharField(verbose_name='label', blank=True, max_length=512, help_text='A label describing the post')),
-                ('other_label', models.CharField(verbose_name='other label', blank=True, max_length=512, null=True, help_text='An alternate label, such as an abbreviation')),
-                ('role', models.CharField(verbose_name='role', blank=True, max_length=512, help_text='The function that the holder of the post fulfills')),
-                ('area', models.ForeignKey(related_name='posts', to='datafetch.Area', blank=True, help_text='The geographic area to which the post is related', null=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('label', models.CharField(help_text='A label describing the post', blank=True, max_length=512, verbose_name='label')),
+                ('other_label', models.CharField(help_text='An alternate label, such as an abbreviation', blank=True, verbose_name='other label', null=True, max_length=512)),
+                ('role', models.CharField(help_text='The function that the holder of the post fulfills', blank=True, max_length=512, verbose_name='role')),
+                ('area', models.ForeignKey(to='datafetch.Area', null=True, help_text='The geographic area to which the post is related', blank=True, related_name='posts')),
             ],
             options={
                 'abstract': False,
@@ -183,13 +183,13 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Relationship',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
-                ('start_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='start date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item starts')),
-                ('end_date', models.CharField(validators=[django.core.validators.RegexValidator(regex='^[0-9]{4}(-[0-9]{2}){0,2}$', message='Date has wrong format'), datafetch.models.popolo.behaviors.validate_partial_date], verbose_name='end date', blank=True, max_length=10, null=True, help_text='The date when the validity of the item ends')),
-                ('created_at', model_utils.fields.AutoCreatedField(verbose_name='creation time', editable=False, default=django.utils.timezone.now)),
-                ('updated_at', model_utils.fields.AutoLastModifiedField(verbose_name='last modification time', editable=False, default=django.utils.timezone.now)),
-                ('label', models.CharField(verbose_name='label', blank=True, max_length=512, help_text='A label describing the relationship')),
-                ('source', models.URLField(verbose_name='source', blank=True, null=True, help_text='URL to the source that documents the relationship')),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
+                ('start_date', models.CharField(help_text='The date when the validity of the item starts', null=True, verbose_name='start date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('end_date', models.CharField(help_text='The date when the validity of the item ends', null=True, verbose_name='end date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='Date has wrong format', regex='^[0-9]{4}(-[0-9]{2}){0,2}$'), datafetch.models.popolo.behaviors.validate_partial_date])),
+                ('created_at', model_utils.fields.AutoCreatedField(editable=False, verbose_name='creation time', default=django.utils.timezone.now)),
+                ('updated_at', model_utils.fields.AutoLastModifiedField(editable=False, verbose_name='last modification time', default=django.utils.timezone.now)),
+                ('label', models.CharField(help_text='A label describing the relationship', blank=True, max_length=512, verbose_name='label')),
+                ('source', models.URLField(help_text='URL to the source that documents the relationship', blank=True, verbose_name='source', null=True)),
             ],
             options={
                 'abstract': False,
@@ -198,11 +198,11 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Source',
             fields=[
-                ('id', models.AutoField(verbose_name='ID', primary_key=True, serialize=False, auto_created=True)),
+                ('id', models.AutoField(auto_created=True, serialize=False, verbose_name='ID', primary_key=True)),
                 ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('url', models.URLField(verbose_name='url', help_text='A URL')),
-                ('note', models.CharField(verbose_name='note', blank=True, max_length=512, help_text="A note, e.g. 'Parliament website'")),
-                ('content_type', models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True)),
+                ('url', models.URLField(help_text='A URL', verbose_name='url')),
+                ('note', models.CharField(help_text="A note, e.g. 'Parliament website'", blank=True, max_length=512, verbose_name='note')),
+                ('content_type', models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True)),
             ],
             options={
                 'abstract': False,
@@ -211,16 +211,16 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Donation',
             fields=[
-                ('relationship_ptr', models.OneToOneField(to='datafetch.Relationship', serialize=False, parent_link=True, auto_created=True, primary_key=True)),
-                ('value', models.DecimalField(verbose_name='value', blank=True, max_digits=12, help_text='The monetary value of the donation', decimal_places=2)),
-                ('donation_type', models.CharField(verbose_name='donation type', max_length=128, help_text='The type of donation e.g. cash')),
-                ('nature_of_donation', models.CharField(verbose_name='nature of donation', blank=True, max_length=128, help_text='The nature of the donation e.g. hospitality')),
-                ('received_date', models.DateField(verbose_name='received date', blank=True, null=True)),
-                ('accepted_date', models.DateField(verbose_name='accepted date', blank=True, null=True)),
-                ('reported_date', models.DateField(verbose_name='reported date', blank=True, null=True)),
-                ('accounting_unit_name', models.CharField(verbose_name='accounting unit name', blank=True, max_length=128)),
+                ('relationship_ptr', models.OneToOneField(parent_link=True, to='datafetch.Relationship', auto_created=True, primary_key=True, serialize=False)),
+                ('value', models.DecimalField(max_digits=12, help_text='The monetary value of the donation', decimal_places=2, blank=True, verbose_name='value')),
+                ('donation_type', models.CharField(help_text='The type of donation e.g. cash', max_length=128, verbose_name='donation type')),
+                ('nature_of_donation', models.CharField(help_text='The nature of the donation e.g. hospitality', blank=True, max_length=128, verbose_name='nature of donation')),
+                ('received_date', models.DateField(blank=True, verbose_name='received date', null=True)),
+                ('accepted_date', models.DateField(blank=True, verbose_name='accepted date', null=True)),
+                ('reported_date', models.DateField(blank=True, verbose_name='reported date', null=True)),
+                ('accounting_unit_name', models.CharField(blank=True, max_length=128, verbose_name='accounting unit name')),
                 ('accounting_units_as_central_party', models.BooleanField(verbose_name='accounting units as central party')),
-                ('purpose_of_visit', models.CharField(verbose_name='purpose of visit', blank=True, max_length=512)),
+                ('purpose_of_visit', models.CharField(blank=True, max_length=512, verbose_name='purpose of visit')),
                 ('is_bequest', models.BooleanField(verbose_name='is bequest')),
                 ('is_aggregation', models.BooleanField(verbose_name='is aggregation')),
                 ('is_sponsorship', models.BooleanField(verbose_name='is sponsorship')),
@@ -233,14 +233,14 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Organization',
             fields=[
-                ('actor_ptr', models.OneToOneField(to='datafetch.Actor', serialize=False, parent_link=True, auto_created=True, primary_key=True)),
-                ('summary', models.CharField(verbose_name='summary', blank=True, max_length=1024, help_text='A one-line description of an organization')),
-                ('description', models.TextField(verbose_name='biography', blank=True, help_text='An extended description of an organization')),
-                ('classification', models.CharField(verbose_name='classification', blank=True, max_length=512, help_text='An organization category, e.g. committee')),
-                ('founding_date', models.CharField(validators=[django.core.validators.RegexValidator(code='invalid_founding_date', message='founding date must follow the given pattern: ^[0-9]{4}(-[0-9]{2}){0,2}$', regex='^[0-9]{4}(-[0-9]{2}){0,2}$')], verbose_name='founding date', blank=True, max_length=10, null=True, help_text='A date of founding')),
-                ('dissolution_date', models.CharField(validators=[django.core.validators.RegexValidator(code='invalid_dissolution_date', message='dissolution date must follow the given pattern: ^[0-9]{4}(-[0-9]{2}){0,2}$', regex='^[0-9]{4}(-[0-9]{2}){0,2}$')], verbose_name='dissolution date', blank=True, max_length=10, null=True, help_text='A date of dissolution')),
-                ('area', models.ForeignKey(related_name='organizations', to='datafetch.Area', blank=True, help_text='The geographic area to which this organization is related', null=True)),
-                ('parent', models.ForeignKey(related_name='children', to='datafetch.Organization', blank=True, help_text='The organization that contains this organization', null=True)),
+                ('actor_ptr', models.OneToOneField(parent_link=True, to='datafetch.Actor', auto_created=True, primary_key=True, serialize=False)),
+                ('summary', models.CharField(help_text='A one-line description of an organization', blank=True, max_length=1024, verbose_name='summary')),
+                ('description', models.TextField(help_text='An extended description of an organization', blank=True, verbose_name='biography')),
+                ('classification', models.CharField(help_text='An organization category, e.g. committee', blank=True, max_length=512, verbose_name='classification')),
+                ('founding_date', models.CharField(help_text='A date of founding', null=True, verbose_name='founding date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='founding date must follow the given pattern: ^[0-9]{4}(-[0-9]{2}){0,2}$', regex='^[0-9]{4}(-[0-9]{2}){0,2}$', code='invalid_founding_date')])),
+                ('dissolution_date', models.CharField(help_text='A date of dissolution', null=True, verbose_name='dissolution date', blank=True, max_length=10, validators=[django.core.validators.RegexValidator(message='dissolution date must follow the given pattern: ^[0-9]{4}(-[0-9]{2}){0,2}$', regex='^[0-9]{4}(-[0-9]{2}){0,2}$', code='invalid_dissolution_date')])),
+                ('area', models.ForeignKey(to='datafetch.Area', null=True, help_text='The geographic area to which this organization is related', blank=True, related_name='organizations')),
+                ('parent', models.ForeignKey(to='datafetch.Organization', null=True, help_text='The organization that contains this organization', blank=True, related_name='children')),
             ],
             options={
                 'abstract': False,
@@ -250,21 +250,21 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Person',
             fields=[
-                ('actor_ptr', models.OneToOneField(to='datafetch.Actor', serialize=False, parent_link=True, auto_created=True, primary_key=True)),
-                ('family_name', models.CharField(verbose_name='family name', blank=True, max_length=128, help_text='One or more family names')),
-                ('given_name', models.CharField(verbose_name='given name', blank=True, max_length=128, help_text='One or more primary given names')),
-                ('additional_name', models.CharField(verbose_name='additional name', blank=True, max_length=128, help_text='One or more secondary given names')),
-                ('honorific_prefix', models.CharField(verbose_name='honorific prefix', blank=True, max_length=128, help_text="One or more honorifics preceding a person's name")),
-                ('honorific_suffix', models.CharField(verbose_name='honorific suffix', blank=True, max_length=128, help_text="One or more honorifics following a person's name")),
-                ('patronymic_name', models.CharField(verbose_name='patronymic name', blank=True, max_length=128, help_text='One or more patronymic names')),
-                ('sort_name', models.CharField(verbose_name='sort name', blank=True, max_length=128, help_text='A name to use in an lexicographically ordered list')),
-                ('email', models.EmailField(verbose_name='email', blank=True, max_length=254, null=True, help_text='A preferred email address')),
-                ('gender', models.CharField(verbose_name='gender', blank=True, max_length=128, help_text='A gender')),
-                ('birth_date', models.CharField(verbose_name='birth date', blank=True, max_length=10, help_text='A date of birth')),
-                ('death_date', models.CharField(verbose_name='death date', blank=True, max_length=10, help_text='A date of death')),
-                ('summary', models.CharField(verbose_name='summary', blank=True, max_length=1024, help_text="A one-line account of a person's life")),
-                ('biography', models.TextField(verbose_name='biography', blank=True, help_text="An extended account of a person's life")),
-                ('national_identity', models.CharField(verbose_name='national identity', blank=True, max_length=128, null=True, help_text='A national identity')),
+                ('actor_ptr', models.OneToOneField(parent_link=True, to='datafetch.Actor', auto_created=True, primary_key=True, serialize=False)),
+                ('family_name', models.CharField(help_text='One or more family names', blank=True, max_length=128, verbose_name='family name')),
+                ('given_name', models.CharField(help_text='One or more primary given names', blank=True, max_length=128, verbose_name='given name')),
+                ('additional_name', models.CharField(help_text='One or more secondary given names', blank=True, max_length=128, verbose_name='additional name')),
+                ('honorific_prefix', models.CharField(help_text="One or more honorifics preceding a person's name", blank=True, max_length=128, verbose_name='honorific prefix')),
+                ('honorific_suffix', models.CharField(help_text="One or more honorifics following a person's name", blank=True, max_length=128, verbose_name='honorific suffix')),
+                ('patronymic_name', models.CharField(help_text='One or more patronymic names', blank=True, max_length=128, verbose_name='patronymic name')),
+                ('sort_name', models.CharField(help_text='A name to use in an lexicographically ordered list', blank=True, max_length=128, verbose_name='sort name')),
+                ('email', models.EmailField(help_text='A preferred email address', blank=True, verbose_name='email', null=True, max_length=254)),
+                ('gender', models.CharField(help_text='A gender', blank=True, max_length=128, verbose_name='gender')),
+                ('birth_date', models.CharField(help_text='A date of birth', blank=True, max_length=10, verbose_name='birth date')),
+                ('death_date', models.CharField(help_text='A date of death', blank=True, max_length=10, verbose_name='death date')),
+                ('summary', models.CharField(help_text="A one-line account of a person's life", blank=True, max_length=1024, verbose_name='summary')),
+                ('biography', models.TextField(help_text="An extended account of a person's life", blank=True, verbose_name='biography')),
+                ('national_identity', models.CharField(help_text='A national identity', blank=True, verbose_name='national identity', null=True, max_length=128)),
             ],
             options={
                 'verbose_name_plural': 'People',
@@ -274,22 +274,22 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='relationship',
             name='influenced_by',
-            field=models.ForeignKey(to='datafetch.Actor', related_name='influenced_by', null=True),
+            field=models.ForeignKey(related_name='influences', to='datafetch.Actor', null=True),
         ),
         migrations.AddField(
             model_name='relationship',
             name='influences',
-            field=models.ForeignKey(to='datafetch.Actor', related_name='influences', null=True),
+            field=models.ForeignKey(related_name='influenced_by', to='datafetch.Actor', null=True),
         ),
         migrations.AddField(
             model_name='relationship',
             name='polymorphic_ctype',
-            field=models.ForeignKey(related_name='polymorphic_datafetch.relationship_set+', to='contenttypes.ContentType', editable=False, null=True),
+            field=models.ForeignKey(to='contenttypes.ContentType', null=True, related_name='polymorphic_datafetch.relationship_set+', editable=False),
         ),
         migrations.AddField(
             model_name='membership',
             name='post',
-            field=models.ForeignKey(related_name='memberships', to='datafetch.Post', blank=True, help_text='The post held by the person in the organization through this membership', null=True),
+            field=models.ForeignKey(to='datafetch.Post', null=True, help_text='The post held by the person in the organization through this membership', blank=True, related_name='memberships'),
         ),
         migrations.AddField(
             model_name='areai18name',
@@ -299,17 +299,17 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='actor',
             name='content_type',
-            field=models.ForeignKey(to='contenttypes.ContentType', blank=True, null=True),
+            field=models.ForeignKey(to='contenttypes.ContentType', null=True, blank=True),
         ),
         migrations.AddField(
             model_name='actor',
             name='polymorphic_ctype',
-            field=models.ForeignKey(related_name='polymorphic_datafetch.actor_set+', to='contenttypes.ContentType', editable=False, null=True),
+            field=models.ForeignKey(to='contenttypes.ContentType', null=True, related_name='polymorphic_datafetch.actor_set+', editable=False),
         ),
         migrations.AddField(
             model_name='actor',
             name='relationships',
-            field=models.ManyToManyField(to='datafetch.Actor', through='datafetch.Relationship', help_text='Relationships involving the person or organization'),
+            field=models.ManyToManyField(help_text='Relationships involving the person or organization', to='datafetch.Actor', through='datafetch.Relationship'),
         ),
         migrations.AddField(
             model_name='post',
@@ -319,17 +319,17 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='membership',
             name='on_behalf_of',
-            field=models.ForeignKey(related_name='memberships_on_behalf_of', to='datafetch.Organization', blank=True, help_text='The organization on whose behalf the person is a party to the relationship', null=True),
+            field=models.ForeignKey(to='datafetch.Organization', null=True, help_text='The organization on whose behalf the person is a party to the relationship', blank=True, related_name='memberships_on_behalf_of'),
         ),
         migrations.AddField(
             model_name='membership',
             name='organization',
-            field=models.ForeignKey(related_name='memberships', to='datafetch.Organization', blank=True, help_text='The organization that is a party to the relationship', null=True),
+            field=models.ForeignKey(to='datafetch.Organization', null=True, help_text='The organization that is a party to the relationship', blank=True, related_name='memberships'),
         ),
         migrations.AddField(
             model_name='membership',
             name='person',
-            field=models.ForeignKey(to='datafetch.Person', to_field='id', related_name='memberships', help_text='The person who is a party to the relationship'),
+            field=models.ForeignKey(to='datafetch.Person', related_name='memberships', help_text='The person who is a party to the relationship', to_field='id'),
         ),
         migrations.AlterUniqueTogether(
             name='areai18name',
