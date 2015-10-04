@@ -66,7 +66,7 @@ class Command(BaseCommand):
                 'name': donation['donor_name'].strip(),
                 'classification': donation['donor_status'],
             }
-            donor, created = models.Organization.objects.get_or_create(name=donor_dict['name'], defaults=donor_dict)
+            donor, created = models.Organization.objects.get_or_create(name__iexact=donor_dict['name'], defaults=donor_dict)
 
         if ec_identifier:
             donor.identifiers.add(ec_identifier)
@@ -87,7 +87,7 @@ class Command(BaseCommand):
 
     def _process_individual(self, name):
         stripped_name, person_dict = helpers.parse_name(name)
-        person = models.Person.objects.filter(Q(other_names__name=person_dict['name']) | Q(other_names__name=stripped_name))
+        person = models.Person.objects.filter(Q(other_names__name__iexact=person_dict['name']) | Q(other_names__name__iexact=stripped_name))
         if person:
             person = person[0]
             dirty = False
@@ -135,12 +135,12 @@ class Command(BaseCommand):
             # This isn't _really_ the founding date...
             # Might not be a good idea to set this here.
             recipient_dict['founding_date'] = self._parse_date(reg_ent['approved_date'])
-            recipient, created = models.Organization.objects.get_or_create(name=recipient_dict['name'], defaults=recipient_dict)
+            recipient, created = models.Organization.objects.get_or_create(name__iexact=recipient_dict['name'], defaults=recipient_dict)
             if reg_num_identifier:
                 recipient.identifiers.add(reg_num_identifier)
         else:
             # Get or create an organization based on the name only
-            recipient, created = models.Organization.objects.get_or_create(name=recipient_dict['name'], defaults=recipient_dict)
+            recipient, created = models.Organization.objects.get_or_create(name__iexact=recipient_dict['name'], defaults=recipient_dict)
 
         return recipient, created
 
