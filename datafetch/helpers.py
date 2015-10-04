@@ -14,21 +14,30 @@ import requests
 """
 very basic caching sort of thing
 """
-def fetch_json(url, filename, path=None, refresh=False):
+def fetch_text(url, filename, path=None, refresh=False, headers=None, encoding=None):
+    kwargs = {}
+    if headers:
+        kwargs["headers"] = headers
     datadir = join(settings.BASE_DIR, 'datafetch', 'data')
     if path:
         datadir = join(datadir, path)
     filepath = join(datadir, filename)
     if not exists(filepath) or refresh:
-        r = requests.get(url)
+        r = requests.get(url, **kwargs)
         time.sleep(0.5)
+        if encoding:
+            r.encoding = encoding
         with open(filepath, "w") as f:
             f.write(r.text)
-        j = r.json()
+        t = r.text
     else:
         with open(filepath) as f:
-            j = json.load(f)
-    return j
+            t = f.read()
+    return t
+
+def fetch_json(url, filename, path=None, refresh=False, headers=None, encoding=None):
+    text = fetch_text(url, filename, path, refresh, headers, encoding)
+    return json.loads(text)
 
 """
 similar to fetch_json, but for images
