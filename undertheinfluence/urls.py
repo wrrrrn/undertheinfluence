@@ -6,7 +6,7 @@ from wagtail.wagtailadmin import urls as wagtailadmin_urls
 from wagtail.wagtaildocs import urls as wagtaildocs_urls
 from wagtail.wagtailcore import urls as wagtail_urls
 
-from datafetch.views import PersonView
+from datafetch.views import ActorRedirectView, ActorView, SearchView
 
 urlpatterns = [
     url(r'^django-admin/', include(admin.site.urls)),
@@ -14,9 +14,11 @@ urlpatterns = [
     url(r'^admin/', include(wagtailadmin_urls)),
     url(r'^documents/', include(wagtaildocs_urls)),
 
-    url(r'^search/$', 'search.views.search', name='search'),
+    url(r'^search/$', SearchView.as_view(), name='search'),
 
-    url(r'^person/(?P<person_id>\d+)(?:/(?P<slug>.*))?$', PersonView.as_view(), name='person'),
+    url(r'^actor/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorRedirectView.as_view(), name='actor-detail'),
+    url(r'^person/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='person-detail'),
+    url(r'^organization/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='organization-detail'),
 
     url(r'', include(wagtail_urls)),
 ]

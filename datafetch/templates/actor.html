@@ -1,0 +1,78 @@
+{% extends "single.html" %}
+
+{% block content %}
+<div class="col-md-1"></div>
+<div class="col-md-10">
+    <div id="government-container">
+        {% if actor.image %}
+            <img class="pull-right" src="/media/actors/{{ actor.id }}.png" alt="{{ actor.name }}" width="150" />
+        {% endif %}
+
+        <h3><b>{{ actor.name }}</b></h3>
+
+        {% if memberships %}
+        <div class="row">
+            <ul>
+            {% for membership in memberships %}
+                <li>
+                    <strong>
+                    {% if membership.role %}
+                        {{ membership.role }}
+                    {% else %}
+                        Member
+                    {% endif %}
+                    </strong>
+
+                {% if membership.on_behalf_of %}
+                    {{ membership.on_behalf_of }}
+                {% else %}
+                    {{ membership.organization }}
+                {% endif %}
+                ({{ membership.start_datetime }}–{{ membership.end_datetime }})
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if influences %}
+        <h3><b>Influences</b></h3>
+        <div class="row">
+            <ul>
+            {% for influence in influences %}
+                <li>{{ influence }} to <a href="{% url 'actor-detail' influence.influences.id %}">{{ influence.influences }}</a> [<a target="_blank" href="{{ influence.source }}">source</a>]</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if influenced_by %}
+        <h3><b>Influenced by</b></h3>
+        <div class="row">
+            <ul>
+            {% for influence in influenced_by %}
+                <li>{{ influence }} from <a href="{% url 'actor-detail' influence.influenced_by.id %}">{{ influence.influenced_by }}</a> [<a target="_blank" href="{{ influence.source }}">source</a>]</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if links %}
+        <h3><b>Links</b></h3>
+        <div class="row">
+            <ul>
+            {% for link in links %}
+                <li>
+                    <a target="_blank" href="{{ link.url }}">{{ link.note }}</a>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if perms.datafetch.can_change_actor %}
+        <a href="{% url 'admin:datafetch_person_change' actor.id %}">Edit this data</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
