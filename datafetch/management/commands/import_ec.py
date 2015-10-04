@@ -99,6 +99,8 @@ class Command(BaseCommand):
         else:
             # create a new person
             person = models.Person.objects.create(**person_dict)
+            name = models.OtherName.objects.create(name=person_dict['name'])
+            person.other_names.add(name)
             if stripped_name != person_dict['name']:
                 other_name = models.OtherName.objects.create(name=stripped_name)
                 person.other_names.add(other_name)

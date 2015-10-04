@@ -88,8 +88,7 @@ class Command(BaseCommand):
                 o, primary_name = self._convert_other_name(n)
                 if primary_name:
                     name_dict = primary_name
-                else:
-                    other_names += o
+                other_names += o
             person['other_names'] = other_names
 
             for x in ['given_name', 'additional_name', 'family_name', 'honorific_prefix', 'honorific_suffix']:
