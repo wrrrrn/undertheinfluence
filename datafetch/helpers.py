@@ -14,16 +14,13 @@ import requests
 """
 very basic caching sort of thing
 """
-def fetch_text(url, filename, path=None, refresh=False, headers=None, encoding=None):
-    kwargs = {}
-    if headers:
-        kwargs["headers"] = headers
+def fetch_text(url, filename, method="get", path=None, refresh=False, encoding=None, **kwargs):
     datadir = join(settings.BASE_DIR, 'datafetch', 'data')
     if path:
         datadir = join(datadir, path)
     filepath = join(datadir, filename)
     if not exists(filepath) or refresh:
-        r = requests.get(url, **kwargs)
+        r = requests.request(method, url, **kwargs)
         time.sleep(0.5)
         if encoding:
             r.encoding = encoding
