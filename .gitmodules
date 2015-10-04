@@ -1,0 +1,3 @@
+[submodule "datafetch/data/mpsinterests/parldata"]
+	path = datafetch/data/mpsinterests/parldata
+	url = https://github.com/spudmind/parldata.git
