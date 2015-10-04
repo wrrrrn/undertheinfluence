@@ -214,15 +214,18 @@ class Command(BaseCommand):
             if donation['ecref'] in all_ids:
                 # skip this - we have it already.
                 continue
-            if not donation['donor_name']:
-                # this happens when the donation is rejected
-                # TODO: we should do something sensible with these
-                # rejected donations.
+            if donation['donation_action']:
+                # if there's anything in this column, it seems the
+                # donation wasn't made. I guess we can ignore these.
                 continue
-            donor = donor_dict.get(donation['donor_name'])
-            if not donor:
-                donor = self._process_donor(donation)
-                donor_dict[donation['donor_name']] = donor
+            if not donation['donor_name']:
+                # this happens when donations are not reported individually
+                donor = None
+            else:
+                donor = donor_dict.get(donation['donor_name'])
+                if not donor:
+                    donor = self._process_donor(donation)
+                    donor_dict[donation['donor_name']] = donor
 
             recipient = recipient_dict.get(donation['regulated_entity_name'])
             if not recipient:
