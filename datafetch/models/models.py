@@ -232,21 +232,21 @@ class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Mode
     """
 
     CONTACT_TYPES = Choices(
-        ('ADDRESS', 'address', _('Address')),
-        ('EMAIL', 'email', _('Email')),
-        ('URL', 'url', _('Url')),
-        ('MAIL', 'mail', _('Snail mail')),
-        ('TWITTER', 'twitter', _('Twitter')),
-        ('FACEBOOK', 'facebook', _('Facebook')),
-        ('PHONE', 'phone', _('Telephone')),
-        ('MOBILE', 'mobile', _('Mobile')),
-        ('TEXT', 'text', _('Text')),
-        ('VOICE', 'voice', _('Voice')),
-        ('FAX', 'fax', _('Fax')),
-        ('CELL', 'cell', _('Cell')),
-        ('VIDEO', 'video', _('Video')),
-        ('PAGER', 'pager', _('Pager')),
-        ('TEXTPHONE', 'textphone', _('Textphone')),
+        ('address', 'address', _('Address')),
+        ('email', 'email', _('Email')),
+        ('url', 'url', _('Url')),
+        ('mail', 'mail', _('Snail mail')),
+        ('twitter', 'twitter', _('Twitter')),
+        ('facebook', 'facebook', _('Facebook')),
+        ('phone', 'phone', _('Telephone')),
+        ('mobile', 'mobile', _('Mobile')),
+        ('text', 'text', _('Text')),
+        ('voice', 'voice', _('Voice')),
+        ('fax', 'fax', _('Fax')),
+        ('cell', 'cell', _('Cell')),
+        ('video', 'video', _('Video')),
+        ('pager', 'pager', _('Pager')),
+        ('textphone', 'textphone', _('Textphone')),
     )
 
     label = models.CharField(_("label"), max_length=512, blank=True, help_text=_("A human-readable label for the contact detail"))
