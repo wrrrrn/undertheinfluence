@@ -72,10 +72,10 @@ Some very dodgy code for extracting
 honorifics and gender from names
 """
 def parse_name(name):
-    data = {}
-    name = name.replace('.', '').strip()
+    data = {'name': name}
+    stripped_name = name.replace('.', '').strip()
     # TODO: honorary suffixes
-    name = re.sub(r'(\s+[A-Z]{2,})+$', '', name)
+    stripped_name = re.sub(r'(\s+[A-Z]{2,})+$', '', stripped_name)
     prefixes = {
         'female': ('Queen', 'Lady', 'Duchess of', 'Baroness', r'Countess(?: of)?', 'Viscountess', 'Dame', 'Mrs', 'Ms', 'Miss',),
 
@@ -84,17 +84,16 @@ def parse_name(name):
         'unknown': (r'(?:The )?(?:Rt )?Hon(?:ourable)?', 'Bishop', r'(?:Very )?Reverend', 'Archbishop', 'Cllr', 'Dr', r'Prof(?:essor)?',),
     }
     all_prefixes = "|".join([b for a in prefixes.values() for b in a])
-    r = re.match(r"((?:{}) )+(.*)$".format(all_prefixes), name)
+    r = re.match(r"((?:{}) )+(.*)$".format(all_prefixes), stripped_name)
     if r:
         # derive gender from honorific prefix
-        if re.match(r"(({}) )+".format("|".join(prefixes['female'])), name):
+        if re.match(r"(({}) )+".format("|".join(prefixes['female'])), stripped_name):
             data['gender'] = "female"
-        elif re.match(r"(({}) )+".format("|".join(prefixes['male'])), name):
+        elif re.match(r"(({}) )+".format("|".join(prefixes['male'])), stripped_name):
             data['gender'] = "male"
         data['honorific_prefix'] = r.group(1).strip()
-        name = r.group(2)
-    data['name'] = name
-    return data
+        stripped_name = r.group(2)
+    return stripped_name, data
 
 def snake_case(camel_case_text):
     return re.sub(r'([a-z])([A-Z])', r'\1_\2', camel_case_text).lower()

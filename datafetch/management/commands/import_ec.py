@@ -81,8 +81,8 @@ class Command(BaseCommand):
         return donor
 
     def _process_individual(self, name):
-        person_dict = helpers.parse_name(name)
-        person = models.Person.objects.filter(other_names__name=person_dict['name'])
+        stripped_name, person_dict = helpers.parse_name(name)
+        person = models.Person.objects.filter(Q(other_names__name=person_dict['name']) | Q(other_names__name=stripped_name))
         if person:
             person = person[0]
             dirty = False
@@ -98,8 +98,9 @@ class Command(BaseCommand):
         else:
             # create a new person
             person = models.Person.objects.create(**person_dict)
-            other_name = models.OtherName.objects.create(name=person.name)
-            person.other_names.add(other_name)
+            if stripped_name != person_dict['name']:
+                other_name = models.OtherName.objects.create(name=stripped_name)
+                person.other_names.add(other_name)
             created = True
         return person, created
 
