@@ -1,39 +1,12 @@
 {% load cms_tags wagtailcore_tags %}
 
-<nav class="navbar navbar-inverse" role="navigation">
-    <!-- Brand and toggle get grouped for better mobile display -->
-    <div class="navbar-header">
-        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-        </button>
-        <!-- <a class="navbar-brand" href="{# url 'home' #}">UTI</a> -->
-    </div>
-    <!-- Collect the nav links, forms, and other content for toggling -->
-    <div class="collapse navbar-collapse">
-        <ul class="nav navbar-nav">
-
-
-            {% for menuitem in menuitems %}
-                <li class="{% if menuitem.show_dropdown %}dropdown{% endif %}{% if menuitem.active %} active{% endif %}">
-                    {% if menuitem.show_dropdown %}
-                        <a data-toggle="dropdown" class="dropdown-toggle" href="#">{{ menuitem.specific.menu_title }} <b class="caret"></b></a>
-                        {% top_menu_children parent=menuitem %}
-                    {% else %}
-                        <a href="{% pageurl menuitem %}">{{ menuitem.specific.menu_title }}</a>
-                    {% endif %}
-                </li>
-            {% endfor %}
-
-            <form class="navbar-form navbar-left" action="{% url 'search' %}" method="get">
-                <div class="input-group">
-                    <input type="text" name="query" class="form-control" placeholder="Search…" value="{{ search_query }}" />
-                </div>
-            </form>
-
-        </ul>
-
-    </div><!-- /.navbar-collapse -->
-</nav>
+{% for menuitem in menuitems %}
+    <li class="{% if menuitem.show_dropdown %}dropdown{% endif %}{% if menuitem.active %} active{% endif %}">
+        {% if menuitem.show_dropdown %}
+            <a data-toggle="dropdown" class="dropdown-toggle" href="#">{{ menuitem.specific.menu_title }} <b class="caret"></b></a>
+            {% top_menu_children parent=menuitem %}
+        {% else %}
+            <a href="{% pageurl menuitem %}">{{ menuitem.specific.menu_title }}</a>
+        {% endif %}
+    </li>
+{% endfor %}

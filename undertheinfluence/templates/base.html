@@ -45,10 +45,35 @@
         <h1><a href="/" style="color: #000000"><em>underthe</em><b>Influence</b></a></h1>
         <p>Exposing Money and influence in British politics</p>
 
-        {% block menu %}
-            {% get_site_root as site_root %}
-            {% top_menu parent=site_root calling_page=self %}
-        {% endblock %}
+        <nav class="navbar navbar-inverse" role="navigation">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <!-- <a class="navbar-brand" href="{# url 'home' #}">UTI</a> -->
+            </div>
+            <!-- Collect the nav links, forms, and other content for toggling -->
+            <div class="collapse navbar-collapse">
+                <ul class="nav navbar-nav">
+
+                    {% get_site_root as site_root %}
+                    {% top_menu parent=site_root calling_page=self %}
+
+                    <form class="navbar-form navbar-left" action="{% url 'search' %}" method="get">
+                        <div class="input-group">
+                            <input type="text" name="q" class="form-control" placeholder="Search…" value="{{ query }}" />
+                        </div>
+                    </form>
+
+                </ul>
+
+            </div><!-- /.navbar-collapse -->
+        </nav>
+
     </div>
     <div class="col-md-1"></div>
 </div>
