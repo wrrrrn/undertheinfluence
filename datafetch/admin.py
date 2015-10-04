@@ -18,8 +18,8 @@ class InfluencedByInline(admin.StackedInline):
     model = models.Relationship
     verbose_name_plural = "Seeks to influence"
     fk_name = 'influenced_by'
-    fields = ('influences', 'start_date',)
-    readonly_fields = ('influences', 'start_date',)
+    fields = ('influences', 'source',)
+    readonly_fields = ('influences', 'source',)
     ordering = ('start_date',)
     extra = 0
 
@@ -28,8 +28,8 @@ class InfluencingInline(admin.StackedInline):
     model = models.Relationship
     verbose_name_plural = "Is influenced by"
     fk_name = 'influences'
-    fields = ('influenced_by', 'start_date',)
-    readonly_fields = ('influenced_by', 'start_date',)
+    fields = ('influenced_by', 'source',)
+    readonly_fields = ('influenced_by', 'source',)
     ordering = ('start_date',)
     extra = 0
 
