@@ -21,8 +21,8 @@ class Relationship(PolymorphicModel, Dateframeable, Timestampable):
 
     label = models.CharField(_("label"), max_length=512, blank=True, help_text=_("A label describing the relationship"))
 
-    influenced_by = models.ForeignKey(Actor, related_name='influenced_by', null=True)
-    influences = models.ForeignKey(Actor, related_name='influences', null=True)
+    influenced_by = models.ForeignKey(Actor, related_name='influences', null=True)
+    influences = models.ForeignKey(Actor, related_name='influenced_by', null=True)
 
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     links = GenericRelation('Link', help_text="URLs to documents about the relationship")
@@ -71,15 +71,29 @@ class Donation(Relationship):
         "Start Up Grant (Discontinued)",
     )
     value = models.DecimalField(_("value"), blank=True, max_digits=12, decimal_places=2, help_text=_("The monetary value of the donation"))
-    category = models.CharField(_("category"), max_length=512, help_text=_("The category of the donation e.g. cash"))
-    nature = models.CharField(_("nature"), max_length=512, blank=True, help_text=_("The nature of the donation e.g. hospitality"))
-    accepted_date = models.CharField(_("accepted date"), max_length=10, help_text=_("The date the donation was accepted"))
+    donation_type = models.CharField(_("donation type"), max_length=128, help_text=_("The type of donation e.g. cash"))
+    nature_of_donation = models.CharField(_("nature of donation"), max_length=128, blank=True, help_text=_("The nature of the donation e.g. hospitality"))
+    received_date = models.DateField(_("received date"), null=True, blank=True)
+    accepted_date = models.DateField(_("accepted date"), null=True, blank=True)
+    reported_date = models.DateField(_("reported date"), null=True, blank=True)
+    accounting_unit_name = models.CharField(_("accounting unit name"), max_length=128, blank=True)
+    accounting_units_as_central_party = models.BooleanField(_("accounting units as central party"))
+    purpose_of_visit = models.CharField(_("purpose of visit"), max_length=512, blank=True)
+    is_bequest = models.BooleanField(_("is bequest"))
+    is_aggregation = models.BooleanField(_("is aggregation"))
+    is_sponsorship = models.BooleanField(_("is sponsorship"))
+
 
     def start_date(self):
         return self.accepted_date
 
     def __str__(self):
-        return "Donation of £{:,d} ({}, {})".format(int(self.value), self.category, self.nature)
+        if self.donation_type == "Cash":
+            return "Donation of £{:,d}".format(int(self.value))
+        if self.donation_type == "Visit":
+            return "Donation of £{:,d} (Visit to {})".format(int(self.value), self.purpose_of_visit)
+        if self.donation_type == "Non Cash":
+            return "Donation of £{:,d} ({})".format(int(self.value), self.nature_of_donation)
 
 
 class Note(Timestampable, GenericRelatable, models.Model):

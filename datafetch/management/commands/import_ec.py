@@ -3,6 +3,7 @@ from os.path import join, exists
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 
 from datafetch import models, helpers
 
@@ -18,7 +19,7 @@ class Command(BaseCommand):
     # from dd-mm-(yy)yy to yyyy-mm-dd
     def _parse_date(self, date):
         if not date:
-            return ""
+            return None
         date = "{}-{}-{}".format(date[6:], date[3:5], date[:2])
         if len(date) == 8:
             date = "20" + date
@@ -181,21 +182,20 @@ class Command(BaseCommand):
 
         donation_dict = {
             "value": donation['value'][1:].replace(',', ''),
-            "category": donation['donation_type'],
-            "nature": donation['nature_of_donation'],
-            "accepted_date": self._parse_date(donation["accepted_date"]),
+            "donation_type": donation['donation_type'],
+            "nature_of_donation": donation['nature_of_donation'],
             "influenced_by": donor,
             "influences": recipient,
             "source": self.donation_source_tmpl.format(id_),
-            # "is_aggregation": "True",
-            # "accounting_unit_name": "Central Party",
-            # "reporting_period_name": "Q1 2001",
-            # "purpose_of_visit": "",
-            # "is_sponsorship": "False",
-            # "is_reported_pre_poll": "False",
-            # "is_bequest": "False",
-            # "donation_action": "",
-            # "accounting_units_as_central_party": "False",
+            "received_date": self._parse_date(donation["received_date"]),
+            "accepted_date": self._parse_date(donation["accepted_date"]),
+            "reported_date": self._parse_date(donation["reported_date"]),
+            "purpose_of_visit": donation['purpose_of_visit'],
+            "accounting_unit_name": donation['accounting_unit_name'],
+            "accounting_units_as_central_party": donation['accounting_units_as_central_party'] == "True",
+            "is_bequest": donation['is_bequest'] == "True",
+            "is_aggregation": donation['is_aggregation'] == "True",
+            "is_sponsorship": donation['is_sponsorship'] == "True",
         }
 
         # create the donation
