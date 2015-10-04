@@ -11,8 +11,6 @@
     <link rel="stylesheet" type="text/css" href="{% static 'bootstrap/css/bootstrap.min.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'material/css/ripples.min.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'material/css/material.min.css' %}">
-    {% block extra_css %}{% endblock %}
-
     <style type="text/css">
         body {
             padding-top: 20px;
@@ -34,6 +32,7 @@
             border-bottom: 1px solid #ffffff;
         }
     </style>
+    {% block extra_css %}{% endblock %}
 </head>
 
 <body class="container">
