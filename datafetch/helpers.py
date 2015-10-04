@@ -77,9 +77,9 @@ def parse_name(name):
     # TODO: honorary suffixes
     stripped_name = re.sub(r'(\s+[A-Z]{2,})+$', '', stripped_name)
     prefixes = {
-        'female': ('Queen', 'Lady', 'Duchess of', 'Baroness', r'Countess(?: of)?', 'Viscountess', 'Dame', 'Mrs', 'Ms', 'Miss',),
+        'female': ('Queen', r'Lady(?: na)?', 'Duchess of', 'Baroness', r'Countess(?: of)?', 'Viscountess', 'Dame', 'Mrs', 'Ms', 'Miss',),
 
-        'male': ('Colonel', 'Major', 'Baron', r'Marquess(?: of)?', 'Duke', 'Viscount', 'Count', 'Lord', r'Earl(?: of)?', 'Sir', 'Mr', r'Lieut(?:enant|-General|-Commander|-Colonel)', 'Admiral', r'Air (?:Commodore|Vice-Marshall)', r'Brigadier(?:-General)?', 'Captain', 'Colonel', 'Commander', 'Commodore', 'Field Marshal', 'Flight Lieut', 'General', 'Group Captain', 'Vice-Admiral', r'Major(?:-General)?', 'Master of', 'Rear-Admiral', 'Squadron Leader', 'Sub-Lieutenant', 'Wing Commander',),
+        'male': ('Colonel', 'Major', 'Baron', r'Marquess(?: of)?', 'Duke', 'Viscount', 'Count', r'Lord(?: na)?', r'Earl(?: of)?', 'Sir', 'Mr', r'Lieut(?:enant|-General|-Commander|-Colonel)', 'Admiral', r'Air (?:Commodore|Vice-Marshall)', r'Brigadier(?:-General)?', 'Captain', 'Colonel', 'Commander', 'Commodore', 'Field Marshal', 'Flight Lieut', 'General', 'Group Captain', 'Vice-Admiral', r'Major(?:-General)?', 'Master of', 'Rear-Admiral', 'Squadron Leader', 'Sub-Lieutenant', 'Wing Commander',),
 
         'unknown': (r'(?:The )?(?:Rt )?Hon(?:ourable)?', 'Bishop', r'(?:Very )?Reverend', 'Archbishop', 'Cllr', 'Dr', r'Prof(?:essor)?',),
     }
