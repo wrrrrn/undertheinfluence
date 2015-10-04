@@ -101,6 +101,9 @@ def parse_name(name):
         stripped_name = r.group(2)
     return stripped_name, data
 
+def parse_company_name(name):
+    return re.sub(u"^(.*?), The$", r"The \1", name.strip())
+
 def snake_case(camel_case_text):
     return re.sub(r'([a-z])([A-Z])', r'\1_\2', camel_case_text).lower()
 

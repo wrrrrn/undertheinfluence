@@ -63,9 +63,10 @@ class Command(BaseCommand):
         else:
             donor_type = 'organization'
             donor_dict = {
-                'name': donation['donor_name'].strip(),
+                'name': helpers.parse_company_name(donation['donor_name']),
                 'classification': donation['donor_status'],
             }
+            # Create a new donor organization
             donor, created = models.Organization.objects.get_or_create(name__iexact=donor_dict['name'], defaults=donor_dict)
 
         if ec_identifier:
