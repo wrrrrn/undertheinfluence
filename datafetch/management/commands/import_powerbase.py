@@ -4,11 +4,9 @@ from django.core.management.base import BaseCommand, CommandError
 import requests
 
 from datafetch import models
-from datafetch.helpers import fetch_json
 
 class Command(BaseCommand):
-    help = 'Import Electoral Commission data'
-    refresh = False
+    help = 'Import Powerbase links'
 
     def _fetch_powerbase(self, politicians):
         search_url = "http://powerbase.info/api.php?action=opensearch&search={}&limit=10&format=json"

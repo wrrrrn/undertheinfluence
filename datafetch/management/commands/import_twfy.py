@@ -3,17 +3,20 @@ import datetime
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from datafetch import models
-from datafetch.helpers import fetch_json, create_data_folder
+from datafetch import models, helpers
 
 
 class Command(BaseCommand):
-    help = 'Import ParlParse data'
+    help = 'Import TheyWorkForYou data'
+
+    def add_arguments(self, parser):
+        parser.add_argument('--since', nargs='?', type=int)
+        parser.add_argument('--refresh', action='store_true')
 
     base_url = "http://www.theyworkforyou.com"
     # local directory to save fetched files to
     api_key = settings.TWFY_API_KEY
-    create_data_folder('twfy')
+    helpers.create_data_folder('twfy')
 
     def _get_overview_data(self, date):
         date_str = date.strftime("%d/%m/%Y")
@@ -21,7 +24,7 @@ class Command(BaseCommand):
 
         filename = "mps_overview_{}.json".format(str(date))
         url = "{}/api/getMPs?key={}&date={}".format(self.base_url, self.api_key, date_str)
-        mps = fetch_json(url, filename, path='twfy')
+        mps = fetch_json(url, filename, path='twfy', refresh=self.refresh)
         return [mp["person_id"] for mp in mps]
 
     def _get_mps_since(self, since, increment):
@@ -43,20 +46,23 @@ class Command(BaseCommand):
             self.api_key,
             mp_id,
             extra_fields)
-        info = fetch_json(url, filename, path='twfy')
+        info = fetch_json(url, filename, path='twfy', refresh=self.refresh)
 
         filename = "twfy_{}.json".format(mp_id)
         url = "{}/api/getMP?key={}&id={}".format(
             self.base_url,
             self.api_key,
             mp_id)
-        info['details'] = fetch_json(url, filename, path='twfy')
+        info['details'] = fetch_json(url, filename, path='twfy', refresh=self.refresh)
 
         return info
 
     def handle(self, *args, **options):
+        self.refresh = options.get('refresh')
+        since = options.get('since')
+
         # print("Fetching MPs ...")
-        mp_ids = self._get_mps_since("2000-01-01", 180)
+        mp_ids = self._get_mps_since("{}-01-01".format(since), 180)
         # print("Fetching individual MP data ...")
         for mp_id in mp_ids:
             # print("  Fetching MP details for person ID {} ... ({} / {})".format(mp_id, idx+1, len(mp_ids)))

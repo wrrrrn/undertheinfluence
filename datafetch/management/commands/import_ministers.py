@@ -8,6 +8,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--since', nargs='?', type=int)
+        parser.add_argument('--refresh', action='store_true')
 
     def _process_organizations(self, organizations):
         organizations_dict = {}
@@ -33,9 +34,11 @@ class Command(BaseCommand):
         models.Membership.objects.get_or_create(defaults=defaults, **unique)
 
     def handle(self, *args, **options):
+        self.refresh = options.get('refresh')
+
         for filename in ["ministers.json", "ministers-2010.json"]:
             url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/{}".format(filename)
-            j = helpers.fetch_json(url, filename)
+            j = helpers.fetch_json(url, filename, refresh=self.refresh)
 
             since = options.get('since')
             if since:

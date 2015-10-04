@@ -10,8 +10,11 @@ from datafetch import models, helpers
 
 class Command(BaseCommand):
     help = 'Import Electoral Commission data'
+
+    def add_arguments(self, parser):
+        parser.add_argument('--refresh', action='store_true')
+
     data_directory = join(settings.BASE_DIR, 'datafetch', 'data')
-    refresh = False
 
     donation_source_tmpl = "http://search.electoralcommission.org.uk/English/Donations/{}"
     reg_source_tmpl = "http://{}.electoralcommission.org.uk/English/Registrations/{}"
@@ -237,11 +240,13 @@ class Command(BaseCommand):
             self._save_donation(donor, recipient, donation)
 
     def handle(self, *args, **options):
+        self.refresh = options.get('refresh')
+
         donations_url = "http://search.electoralcommission.org.uk/api/csv/Donations"
-        donations = helpers.fetch_ec_csv(donations_url, "ec.csv")
+        donations = helpers.fetch_ec_csv(donations_url, "ec.csv", self.refresh)
 
         registrations_url = "http://search.electoralcommission.org.uk/api/csv/Registrations"
-        registered_entities = helpers.fetch_ec_csv(registrations_url, "ec_reg.csv")
+        registered_entities = helpers.fetch_ec_csv(registrations_url, "ec_reg.csv", self.refresh)
         # TODO: this is a bit too simple at the moment.
         # If there are multiple entities with the same name
         # listed, an arbitrary one will be used.

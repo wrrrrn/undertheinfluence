@@ -1,21 +1,23 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from datafetch import models
-from datafetch.helpers import fetch_json, create_data_folder
+from datafetch import models, helpers
+
 
 class Command(BaseCommand):
     help = 'Import Companies House data'
-    refresh = False
+
+    def add_arguments(self, parser):
+        parser.add_argument('--refresh', action='store_true')
 
     def _fetch_companies_house(self, identifiers):
         address_parts = ('CareofName', 'PoBox', 'AddressLine1', 'AddressLine2', 'PostTown', 'Postcode', 'County', 'Country',)
-        create_data_folder('companieshouse')
+        helpers.create_data_folder('companieshouse')
 
         for identifier in identifiers:
             url = "http://data.companieshouse.gov.uk/doc/company/{}.json".format(identifier.identifier)
             filename = "ch_{}.json".format(identifier.identifier)
             try:
-                j = fetch_json(url, filename, path='companieshouse')
+                j = helpers.fetch_json(url, filename, path='companieshouse', refresh=self.refresh)
             except ValueError:
                 continue
 
@@ -44,9 +46,11 @@ class Command(BaseCommand):
         for identifier in identifiers:
             url = "https://api.opencorporates.com/companies/gb/{}".format(identifier.identifier)
             filename = "oc_{}.json".format(identifier.identifier)
-            j = fetch_json(url, filename)
+            j = helpers.fetch_json(url, filename, refresh=self.refresh)
 
     def handle(self, *args, **options):
+        self.refresh = options.get('refresh')
+
         print("Fetching extra organizational data from Companies House ...")
         identifiers = models.Identifier.objects.filter(scheme="uk.gov.companieshouse")
         self._fetch_companies_house(identifiers)
