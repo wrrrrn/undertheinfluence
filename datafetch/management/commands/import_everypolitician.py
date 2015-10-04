@@ -20,7 +20,7 @@ class Command(BaseCommand):
             'name', 'contact_details', 'other_names',
         )
 
-        path_to_images = join('..', '..', 'media', 'persons')
+        path_to_images = join('..', '..', 'media', 'actors')
         create_data_folder(path_to_images)
 
         for person in people:
