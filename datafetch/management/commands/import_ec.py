@@ -29,6 +29,7 @@ class Command(BaseCommand):
         return date
 
     def _get_or_create_reg_num_id(self, reg_num):
+        reg_num = reg_num.upper()
         while len(reg_num) < 8:
             reg_num = '0' + reg_num
         id_ = {'identifier': reg_num, 'scheme': "companieshouse"}
