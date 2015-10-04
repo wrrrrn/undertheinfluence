@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'cms',
     'search',
     'datafetch',
+    'appc_redirect',
     'bootstrap_admin',
 
     'wagtail.wagtailforms',
