@@ -2,7 +2,6 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 from model_utils.managers import PassThroughManager
 from django.utils.translation import ugettext_lazy as _
-from polymorphic import PolymorphicModel
 
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 # from .popolo.querysets import DateframeableQuerySet
@@ -12,17 +11,13 @@ from datafetch.models import models as popolo_models
 # class RelationshipQuerySet(DateframeableQuerySet):
 #     pass
 
-
-class Relationship(PolymorphicModel, Dateframeable, Timestampable):
+class Relationship(Dateframeable, Timestampable, models.Model):
     """
     A relationship between two actors
     see schema at http://popoloproject.com/schemas/membership.json#
     """
 
     label = models.CharField(_("label"), max_length=512, blank=True, help_text=_("A label describing the relationship"))
-
-    influenced_by = models.ForeignKey(popolo_models.Actor, related_name='influences', null=True)
-    influences = models.ForeignKey(popolo_models.Actor, related_name='influenced_by', null=True)
 
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     links = GenericRelation('Link', help_text="URLs to documents about the relationship")
@@ -34,12 +29,16 @@ class Relationship(PolymorphicModel, Dateframeable, Timestampable):
 
     # objects = PassThroughManager.for_queryset_class(RelationshipQuerySet)()
 
+    class Meta:
+        abstract = True
+
     def __str__(self):
         return self.label
 
 
 class Consultancy(Relationship):
-    pass
+    client = models.ForeignKey(popolo_models.Actor, related_name='consultants', null=True)
+    agency = models.ForeignKey(popolo_models.Actor, related_name='consults_for', null=True)
 
 
 class Donation(Relationship):
@@ -74,6 +73,10 @@ class Donation(Relationship):
         "Other Payment",
         "Start Up Grant (Discontinued)",
     )
+
+    donor = models.ForeignKey(popolo_models.Actor, related_name='donated_to', null=True)
+    recipient = models.ForeignKey(popolo_models.Actor, related_name='received_donations_from', null=True)
+
     value = models.DecimalField(_("value"), blank=True, max_digits=12, decimal_places=2, help_text=_("The monetary value of the donation"))
     donation_type = models.CharField(_("donation type"), max_length=128, help_text=_("The type of donation e.g. cash"))
     nature_of_donation = models.CharField(_("nature of donation"), max_length=128, blank=True, help_text=_("The nature of the donation e.g. hospitality"))

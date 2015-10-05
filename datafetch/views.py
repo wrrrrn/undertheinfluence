@@ -49,8 +49,12 @@ class ActorView(TemplateView):
         context['actor'] = actor
         context['links'] = actor.links.all()
 
-        context['memberships'] = actor.memberships.order_by('-end_date', '-start_date')
-        context['influences'] = actor.influences.order_by('-start_date')[:10]
-        context['influenced_by'] = actor.influenced_by.order_by('-start_date')[:10]
+        context['memberships'] = actor.memberships.order_by('-end_date', '-start_date')[:10]
+
+        context['donations_from'] = actor.received_donations_from.order_by('-received_date')[:10]
+        context['donations_to'] = actor.donated_to.order_by('-received_date')[:10]
+
+        context['consults_for'] = actor.consults_for.order_by('-received_date')[:10]
+        context['consultants'] = actor.consultants.order_by('-received_date')[:10]
 
         return context

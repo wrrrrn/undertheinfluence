@@ -106,8 +106,8 @@ class Command(BaseCommand):
                 )[0]
                 consultancy_obj = models.Consultancy.objects.get_or_create(
                     label=client_type,
-                    influenced_by=client_obj,
-                    influences=agency_obj,
+                    client=client_obj,
+                    agency=agency_obj,
                     source=source_url,
                     start_date=date_range[0],
                     end_date=date_range[1],

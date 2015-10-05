@@ -14,24 +14,24 @@ class MembershipInline(admin.StackedInline):
     extra = 0
 
 
-class InfluencedByInline(admin.StackedInline):
-    model = models.Relationship
-    verbose_name_plural = "Seeks to influence"
-    fk_name = 'influenced_by'
-    fields = ('influences', 'source',)
-    readonly_fields = ('influences', 'source',)
-    ordering = ('start_date',)
-    extra = 0
+# class InfluencedByInline(admin.StackedInline):
+#     model = models.Relationship
+#     verbose_name_plural = "Seeks to influence"
+#     fk_name = 'influenced_by'
+#     fields = ('influences', 'source',)
+#     readonly_fields = ('influences', 'source',)
+#     ordering = ('start_date',)
+#     extra = 0
 
 
-class InfluencingInline(admin.StackedInline):
-    model = models.Relationship
-    verbose_name_plural = "Is influenced by"
-    fk_name = 'influences'
-    fields = ('influenced_by', 'source',)
-    readonly_fields = ('influenced_by', 'source',)
-    ordering = ('start_date',)
-    extra = 0
+# class InfluencingInline(admin.StackedInline):
+#     model = models.Relationship
+#     verbose_name_plural = "Is influenced by"
+#     fk_name = 'influences'
+#     fields = ('influenced_by', 'source',)
+#     readonly_fields = ('influenced_by', 'source',)
+#     ordering = ('start_date',)
+#     extra = 0
 
 
 class IdentifierInline(generic.GenericTabularInline):
@@ -52,8 +52,6 @@ class PersonAdmin(admin.ModelAdmin):
         'name', 'given_name', 'family_name', 'honorific_prefix', 'honorific_suffix',
         'image', 'email', 'gender', 'birth_date', 'death_date')
     inlines = [
-        InfluencedByInline,
-        InfluencingInline,
         MembershipInline,
         OtherNameInline,
         IdentifierInline,
@@ -64,8 +62,6 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     fields = ('name', 'classification', 'founding_date', 'dissolution_date')
     inlines = [
-        InfluencingInline,
-        InfluencedByInline,
         OtherNameInline,
         IdentifierInline,
     ]
