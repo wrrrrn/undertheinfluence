@@ -6,7 +6,7 @@ from polymorphic import PolymorphicModel
 
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 # from .popolo.querysets import DateframeableQuerySet
-from datafetch.models import Actor
+from datafetch.models import models as popolo_models
 
 
 # class RelationshipQuerySet(DateframeableQuerySet):
@@ -21,8 +21,8 @@ class Relationship(PolymorphicModel, Dateframeable, Timestampable):
 
     label = models.CharField(_("label"), max_length=512, blank=True, help_text=_("A label describing the relationship"))
 
-    influenced_by = models.ForeignKey(Actor, related_name='influences', null=True)
-    influences = models.ForeignKey(Actor, related_name='influenced_by', null=True)
+    influenced_by = models.ForeignKey(popolo_models.Actor, related_name='influences', null=True)
+    influences = models.ForeignKey(popolo_models.Actor, related_name='influenced_by', null=True)
 
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     links = GenericRelation('Link', help_text="URLs to documents about the relationship")
