@@ -3,13 +3,13 @@
 {% load static %}
 
 {% block css_extras %}
-<link href="{% static 'uti/css/theme.bootstrap.min.css' %}" rel="stylesheet">
-<link href="{% static 'uti/css/jquery.tablesorter.pager.min.css' %}" rel="stylesheet">
+<link href="{% static 'bootstrap/css/bootstrap-theme.min.css' %}" rel="stylesheet">
+
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.9.0/bootstrap-table.min.css">
 {% endblock css_extras %}
 
 {% block js_extras %}
-<script src="{% static 'uti/js/jquery.tablesorter.combined.min.js' %}"></script>
-<script src="{% static 'uti/js/jquery.tablesorter.pager.min.js' %}"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.9.0/bootstrap-table.min.js"></script>
 
 <script>
 $(function() {
