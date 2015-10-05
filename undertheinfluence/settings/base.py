@@ -28,7 +28,10 @@ INSTALLED_APPS = [
     'search',
     'datafetch',
     'appc_redirect',
+    'api',
+
     'bootstrap_admin',
+    'rest_framework',
 
     'wagtail.wagtailforms',
     'wagtail.wagtailredirects',
@@ -146,3 +149,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "SAMEORIGIN"  # for the wagtail toolbar
 CSRF_COOKIE_HTTPONLY = True
+
+REST_FRAMEWORK = {
+    # Use Django's standard `django.contrib.auth` permissions,
+    # or allow read-only access for unauthenticated users.
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
+    ),
+    'PAGE_SIZE': 10,
+}

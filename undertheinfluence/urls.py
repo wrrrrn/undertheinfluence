@@ -14,6 +14,8 @@ urlpatterns = [
     url(r'^documents/', include(wagtaildocs_urls)),
 
     url(r'^appc-redirect/', include('appc_redirect.urls')),
+    url(r'^api/', include('api.urls')),
+
     url(r'', include('datafetch.urls')),
 
     url(r'', include(wagtail_urls)),
