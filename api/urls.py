@@ -12,4 +12,6 @@ router.register(r'donations', views.DonationViewSet)
 # Additionally, we include login URLs for the browsable API.
 urlpatterns = [
     url(r'^', include(router.urls)),
+    url(r'actors/(?P<pk>\d+)/donations_from', views.ActorReceivedDonationsFromListViewSet.as_view()),
+    url(r'actors/(?P<pk>\d+)/donations_to', views.ActorDonatedToListViewSet.as_view()),
 ]
