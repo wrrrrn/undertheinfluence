@@ -14,7 +14,7 @@ from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 from .popolo.querysets import PostQuerySet, OtherNameQuerySet, ContactDetailQuerySet, MembershipQuerySet, SubclassingQuerySet
 
 
-class Actor(Dateframeable, Timestampable, GenericRelatable, PolymorphicModel):
+class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
     name = models.CharField(_("name"), max_length=512, help_text=_("A person or organization's preferred full name"))
     image = models.URLField(_("image"), blank=True, null=True, help_text=_("An image representing the person or organization"))
 
