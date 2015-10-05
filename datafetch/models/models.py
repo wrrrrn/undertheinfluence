@@ -35,8 +35,6 @@ class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
 
     notes = GenericRelation('Note', help_text="A note about the person or organization")
 
-    relationships = models.ManyToManyField('self', through='Relationship', symmetrical=False, help_text="Relationships involving the person or organization")
-
     # objects = PassThroughManager.for_queryset_class(ActorQuerySet)()
 
     def __str__(self):
