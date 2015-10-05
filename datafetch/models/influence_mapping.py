@@ -38,6 +38,10 @@ class Relationship(PolymorphicModel, Dateframeable, Timestampable):
         return self.label
 
 
+class Consultancy(Relationship):
+    pass
+
+
 class Donation(Relationship):
     CATEGORY_CHOICES = (
         "Non Cash",
@@ -82,7 +86,6 @@ class Donation(Relationship):
     is_bequest = models.BooleanField(_("is bequest"))
     is_aggregation = models.BooleanField(_("is aggregation"))
     is_sponsorship = models.BooleanField(_("is sponsorship"))
-
 
     def start_date(self):
         return self.accepted_date
