@@ -110,8 +110,8 @@ class Command(BaseCommand):
                     if rel_id == 'identifiers' and rel_dict.get('scheme').endswith('_id'):
                         # strip _id off the end of historichansard and datadotparl
                         rel_dict['scheme'] = rel_dict['scheme'][:-3]
-                    if not getattr(p, rel_id).filter(**rel_dict):
-                        getattr(p, rel_id).add(rel_model.objects.create(**rel_dict))
+                    rel, _ = rel_model.objects.get_or_create(**rel_dict)
+                    getattr(p, rel_id).add(rel)
             people_dict[id_] = p.id
         return people_dict
 
@@ -224,7 +224,7 @@ class Command(BaseCommand):
             defaults = {k: v for k, v in membership.items() if k not in ignore_fields}
             unique = {k: v for k, v in defaults.items() if k in unique_fields}
 
-            m, created = models.Membership.objects.get_or_create(defaults=defaults, **unique)
+            models.Membership.objects.get_or_create(defaults=defaults, **unique)
 
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')
