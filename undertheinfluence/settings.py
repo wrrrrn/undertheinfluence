@@ -26,6 +26,8 @@ with open(configuration_file) as f:
 
 ALLOWED_HOSTS = conf.get('ALLOWED_HOSTS')
 
+BASE_URL = conf.get('BASE_URL')
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 

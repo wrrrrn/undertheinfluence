@@ -32,6 +32,9 @@ ADMINS:
 ALLOWED_HOSTS:
   - '*'
 
+# The base URL for the site
+BASE_URL: 'http://localhost:8000'
+
 # The email address that will be displayed on the site as the contact
 # email for all support requests, and so on:
 SUPPORT_EMAIL: ''

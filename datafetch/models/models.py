@@ -1,6 +1,8 @@
 from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import RegexValidator
+from django.template.defaultfilters import slugify
+from django.core.urlresolvers import reverse
 from django.db import models
 from model_utils import Choices
 from model_utils.managers import PassThroughManager
@@ -10,6 +12,7 @@ from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from polymorphic import PolymorphicModel
 
+from undertheinfluence.settings import BASE_URL
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 from .popolo.querysets import PostQuerySet, OtherNameQuerySet, ContactDetailQuerySet, MembershipQuerySet, SubclassingQuerySet
 
@@ -48,6 +51,11 @@ class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
         for c in contacts:
             self.add_contact_detail(**c)
 
+    def url(self):
+        return BASE_URL + reverse(self.url_name, kwargs={
+            "pk": self.id,
+            "slug": slugify(self.name),
+        })
 
 class Person(Actor):
     """

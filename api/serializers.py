@@ -7,8 +7,7 @@ from datafetch import models
 class ActorSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = models.Actor
-        fields = ('id', 'name',)
-
+        fields = ('id', 'name', 'url',)
 
 class DonationSerializer(serializers.HyperlinkedModelSerializer):
     donor = ActorSerializer()
