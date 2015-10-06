@@ -26,22 +26,38 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ActorReceivedDonationsFromListViewSet(generics.ListAPIView):
-
     serializer_class = DonationSerializer
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
     def get_queryset(self):
         actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
-        queryset = actor.received_donations_from.all()
-        return queryset
+        queryset = actor.received_donations_from
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(donor__name__icontains=search)
+        sort = self.request.GET.get('sort')
+        if sort:
+            if sort == 'donor':
+                sort = 'donor__name'
+            order = '-' if self.request.GET.get('order') == 'desc' else ''
+            queryset = queryset.order_by(order + sort)
+        return queryset.all()
 
 
 class ActorDonatedToListViewSet(generics.ListAPIView):
-
     serializer_class = DonationSerializer
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
     def get_queryset(self):
         actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
-        queryset = actor.donated_to.all()
-        return queryset
+        queryset = actor.donated_to
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(donor__name__icontains=search)
+        sort = self.request.GET.get('sort')
+        if sort:
+            if sort == 'recipient':
+                sort = 'recipient__name'
+            order = '-' if self.request.GET.get('order') == 'desc' else ''
+            queryset = queryset.order_by(order + sort)
+        return queryset.all()

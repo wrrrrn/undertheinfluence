@@ -1,0 +1,16 @@
+<h4 class="list-group-item-heading">Donated to</h4>
+<table class="table table-striped table-hover" data-url="{% url "api_donations_to" pk=actor.id %}?format=json" data-sort-name="reported_date" data-sort-order="desc" data-strict-search="true">
+    <thead>
+        <tr>
+            <th data-sortable="true" data-field="value" data-formatter="moneyFormatter">Amount</th>
+            <th data-sortable="true" data-field="recipient" data-formatter="actorFormatter">Recipient</th>
+            <th data-sortable="true" data-field="nature_of_donation">Nature</th>
+            <th data-sortable="true" data-field="donation_type">Type</th>
+            <th data-sortable="true" data-field="accepted_date" data-formatter="dateFormatter">Accepted</th>
+            <th data-sortable="true" data-field="reported_date" data-formatter="dateFormatter">Reported</th>
+            <th data-field="source" data-formatter="sourceFormatter">Source</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>

@@ -40,22 +40,22 @@ class SearchView(TemplateView):
 
 
 class ActorView(TemplateView):
-    template_name = 'actor.html'
-
     def get_context_data(self, **kwargs):
         context = super(ActorView, self).get_context_data(**kwargs)
 
         actor = get_object_or_404(models.Actor, pk=kwargs['pk'])
+        self.template_name = '{}.html'.format(actor.__class__.__name__.lower())
 
         context['actor'] = actor
         context['links'] = actor.links.all()
 
         context['memberships'] = actor.memberships.order_by('-end_date', '-start_date')[:10]
 
-        context['donations_from'] = actor.received_donations_from.order_by('-received_date')[:10]
-        context['donations_to'] = actor.donated_to.order_by('-received_date')[:10]
-
-        context['consults_for'] = actor.consults_for.order_by('-received_date')[:10]
-        context['consultants'] = actor.consultants.order_by('-received_date')[:10]
+        context['relationships'] = {
+            'donations_from': actor.received_donations_from.count(),
+            'donations_to': actor.donated_to.count(),
+            'consults_for': actor.consults_for.count(),
+            'consultants': actor.consultants.count(),
+        }
 
         return context
