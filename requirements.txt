@@ -13,3 +13,5 @@ django-polymorphic==0.7.2
 markdown==2.6.2
 djangorestframework
 django-filter==0.11.0
+
+django-bower==5.0.4

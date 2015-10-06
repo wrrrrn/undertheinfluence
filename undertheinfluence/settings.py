@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 
     'bootstrap_admin',
     'rest_framework',
+    'djangobower',
 
     'wagtail.wagtailforms',
     'wagtail.wagtailredirects',
@@ -165,6 +166,7 @@ STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
     'compressor.finders.CompressorFinder',
+    'djangobower.finders.BowerFinder',
 )
 
 STATICFILES_DIRS = (
@@ -176,6 +178,17 @@ STATIC_URL = '/static/'
 
 MEDIA_ROOT = join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
+
+# Django-bower settings
+BOWER_COMPONENTS_ROOT = BASE_DIR
+
+BOWER_INSTALLED_APPS = (
+    'jquery#2.1.1',
+    'bootstrap',
+    'bootstrap-material-design',
+    'bootstrap-table',
+    'moment',
+)
 
 # Wagtail settings
 
