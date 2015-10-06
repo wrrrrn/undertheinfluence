@@ -12,7 +12,7 @@
         <ul>
             {% for result in results %}
             <li>
-                <a href="{% url result.url_name id=result.id slug=result.name|slugify %}">{{ result.name }}</a>
+                <a href="{% url result.url_name pk=result.id slug=result.name|slugify %}">{{ result.name }}</a>
             </li>
             {% endfor %}
         </ul>

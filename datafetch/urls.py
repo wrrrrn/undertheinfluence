@@ -8,7 +8,7 @@ urlpatterns = [
 
     # url(r'^api/(?P<rel_type>.+)/(?P<direction>.+)/(?P<id>\d+)/?$', ApiView.as_view()),
 
-    url(r'^actor/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorRedirectView.as_view(), name='actor-detail'),
-    url(r'^person/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='person-detail'),
-    url(r'^organization/(?P<id>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='organization-detail'),
+    url(r'^actor/(?P<pk>\d+)(?:/(?P<slug>.*))?$', ActorRedirectView.as_view(), name='actor-detail'),
+    url(r'^person/(?P<pk>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='person-detail'),
+    url(r'^organization/(?P<pk>\d+)(?:/(?P<slug>.*))?$', ActorView.as_view(), name='organization-detail'),
 ]

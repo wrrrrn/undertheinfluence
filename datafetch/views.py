@@ -13,7 +13,7 @@ class ActorRedirectView(RedirectView):
     query_string = True
 
     def get_redirect_url(self, *args, **kwargs):
-        actor = get_object_or_404(models.Actor, pk=kwargs['id'])
+        actor = get_object_or_404(models.Actor, pk=kwargs['pk'])
         self.pattern_name = actor.url_name
         kwargs['slug'] = slugify(actor.name)
         return super(ActorRedirectView, self).get_redirect_url(*args, **kwargs)
@@ -45,7 +45,8 @@ class ActorView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super(ActorView, self).get_context_data(**kwargs)
 
-        actor = get_object_or_404(models.Actor, pk=kwargs['id'])
+        actor = get_object_or_404(models.Actor, pk=kwargs['pk'])
+
         context['actor'] = actor
         context['links'] = actor.links.all()
 
