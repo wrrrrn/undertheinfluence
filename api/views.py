@@ -2,7 +2,8 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User, Group
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, generics, renderers
+from rest_framework.pagination import PageNumberPagination
 from api.serializers import DonationSerializer, ActorSerializer
 
 from datafetch import models
@@ -24,23 +25,23 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DonationSerializer
 
 
-class ActorReceivedDonationsFromListViewSet(APIView):
+class ActorReceivedDonationsFromListViewSet(generics.ListAPIView):
 
+    serializer_class = DonationSerializer
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
-    def get(self, request, pk):
-        actor = get_object_or_404(models.Actor, pk=pk)
+    def get_queryset(self):
+        actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
         queryset = actor.received_donations_from.all()
-        serializer = DonationSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
+        return queryset
 
 
-class ActorDonatedToListViewSet(APIView):
+class ActorDonatedToListViewSet(generics.ListAPIView):
 
+    serializer_class = DonationSerializer
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
-    def get(self, request, pk):
-        actor = get_object_or_404(models.Actor, pk=pk)
+    def get_queryset(self):
+        actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
         queryset = actor.donated_to.all()
-        serializer = DonationSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
+        return queryset
