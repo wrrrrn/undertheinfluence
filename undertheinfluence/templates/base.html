@@ -93,28 +93,9 @@
 <script type="text/javascript" src="{% static 'jquery/dist/jquery.min.js' %}"></script>
 <script type="text/javascript" src="{% static 'bootstrap/dist/js/bootstrap.min.js' %}"></script>
 <script type="text/javascript" src="{% static 'bootstrap-material-design/dist/js/ripples.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'uti/js/main.js' %}"></script>
 
-
-<!-- <script src="{% static 'uti/js/app/main.js' %}"></script> -->
-<script type="text/javascript">
-    // Popup window code
-    function newPopup(url) {
-        popupWindow = window.open(
-                url,'popUpWindow','height=700,width=800,left=10,top=10,resizable=yes,scrollbars=yes,toolbar=yes,menubar=no,location=no,directories=no,status=yes')
-    }
-
-    $(document).ready(function() {
-        $.material.init();
-        $("[data-toggle=tooltip]").tooltip();
-
-        // Add an icon to illustrate a link is an external link
-        $('a').filter(function() {
-            return this.hostname && this.hostname !== location.hostname;
-        }).append(' <span class="glyphicon glyphicon-share" aria-hidden="true"></span>');
-    });
-</script>
-
-{% block js_extras %}{% endblock %}
+{% block extra_js %}{% endblock %}
 
 </body>
 </html>
