@@ -1,0 +1,43 @@
+# Is this a staging or development server? Set STAGING to 1 if so,
+# otherwise set 0 for a production site
+STAGING: '1'
+
+# This can be either 'postgresql' or 'sqlite':
+DATABASE_SYSTEM: 'sqlite'
+
+# These settings are for when you've set 'postgresql' as the
+# DATABASE_SYSTEM above, otherwise (if you're using 'sqlite')
+# they're ignored.
+UTI_DB_USER: ''
+UTI_DB_NAME: ''
+UTI_DB_PASS: ''
+UTI_DB_HOST: ''
+UTI_DB_PORT: ''
+
+# SECRET_KEY should be a random string of characters
+SECRET_KEY: '4b920da4e3c346a098d7'
+
+# TheyWorkForYou API key
+TWFY_API_KEY: ''
+
+# The email addresses that error emails will be sent to, e.g.:
+# ADMINS:
+#   - ['Example User A', 'alice@example.org']
+#   - ['Example User B', 'bob@example.org']
+ADMINS:
+  - []
+
+# For a public server, you should restrict this to the hostnames
+# that the site will actually be hosted at.
+ALLOWED_HOSTS:
+  - '*'
+
+# The email address that will be displayed on the site as the contact
+# email for all support requests, and so on:
+SUPPORT_EMAIL: ''
+
+# The From = address for error emails
+SERVER_EMAIL: ''
+
+# The From = address for all emails except error emails
+DEFAULT_FROM_EMAIL: ''
