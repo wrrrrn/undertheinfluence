@@ -36,7 +36,6 @@ BASE_URL = conf.get('BASE_URL')
 
 INSTALLED_APPS = [
     'cms',
-    'search',
     'datafetch',
     'appc_redirect',
     'api',
@@ -53,7 +52,6 @@ INSTALLED_APPS = [
     'wagtail.wagtailsnippets',
     'wagtail.wagtaildocs',
     'wagtail.wagtailimages',
-    'wagtail.wagtailsearch',
     'wagtail.wagtailadmin',
     'wagtail.wagtailcore',
 
