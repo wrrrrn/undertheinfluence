@@ -37,8 +37,8 @@ class Relationship(Dateframeable, Timestampable, models.Model):
 
 
 class Consultancy(Relationship):
-    client = models.ForeignKey(popolo_models.Actor, related_name='consultants', null=True)
-    agency = models.ForeignKey(popolo_models.Actor, related_name='consults_for', null=True)
+    client = models.ForeignKey(popolo_models.Actor, related_name='consulting_agencies', null=True)
+    agency = models.ForeignKey(popolo_models.Actor, related_name='consulting_clients', null=True)
 
 
 class Donation(Relationship):

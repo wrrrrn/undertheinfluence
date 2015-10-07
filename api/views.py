@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets, permissions, generics, renderers
 from rest_framework.pagination import PageNumberPagination
-from api.serializers import DonationSerializer, ActorSerializer
+from api.serializers import DonationSerializer, ActorSerializer, ConsultancySerializer
 
 from datafetch import models
 
@@ -25,39 +25,49 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DonationSerializer
 
 
-class ActorReceivedDonationsFromListViewSet(generics.ListAPIView):
-    serializer_class = DonationSerializer
+class InfluenceListViewSet(generics.ListAPIView):
     permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
-    def get_queryset(self):
+    def apply_filters(self, fk, search_field):
         actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
-        queryset = actor.received_donations_from
+        queryset = getattr(actor, fk)
+
         search = self.request.GET.get('search')
         if search:
-            queryset = queryset.filter(donor__name__icontains=search)
+            query = {'{}__icontains'.format(search_field): search}
+            queryset = queryset.filter(**query)
         sort = self.request.GET.get('sort')
         if sort:
-            if sort == 'donor':
-                sort = 'donor__name'
+            # if sort == 'donor':
+            #     sort = 'donor__name'
             order = '-' if self.request.GET.get('order') == 'desc' else ''
             queryset = queryset.order_by(order + sort)
         return queryset.all()
 
 
-class ActorDonatedToListViewSet(generics.ListAPIView):
+class ActorReceivedDonationsFromListViewSet(InfluenceListViewSet):
     serializer_class = DonationSerializer
-    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
     def get_queryset(self):
-        actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
-        queryset = actor.donated_to
-        search = self.request.GET.get('search')
-        if search:
-            queryset = queryset.filter(donor__name__icontains=search)
-        sort = self.request.GET.get('sort')
-        if sort:
-            if sort == 'recipient':
-                sort = 'recipient__name'
-            order = '-' if self.request.GET.get('order') == 'desc' else ''
-            queryset = queryset.order_by(order + sort)
-        return queryset.all()
+        return self.apply_filters("received_donations_from", search_field="donor__name")
+
+
+class ActorDonatedToListViewSet(InfluenceListViewSet):
+    serializer_class = DonationSerializer
+
+    def get_queryset(self):
+        return self.apply_filters("donated_to", search_field="recipient__name")
+
+
+class ActorHasUsedAgenciesListViewSet(InfluenceListViewSet):
+    serializer_class = ConsultancySerializer
+
+    def get_queryset(self):
+        return self.apply_filters("consulting_agencies", search_field="agency__name")
+
+
+class ActorHasConsultedForListViewSet(InfluenceListViewSet):
+    serializer_class = ConsultancySerializer
+
+    def get_queryset(self):
+        return self.apply_filters("consulting_clients", search_field="client__name")

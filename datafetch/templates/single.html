@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block content %}
+<div class="col-md-1"></div>
+<div class="col-md-10">
+    <div id="government-container">
+        {% if actor.image %}
+            <img class="pull-right" src="/media/actors/{{ actor.id }}.png" alt="{{ actor.name }}" width="150" />
+        {% endif %}
+
+        <h3><b>{{ actor.name }}</b></h3>
+
+        {% if memberships %}
+        <div class="row">
+            <ul>
+            {% for membership in memberships %}
+                <li>
+                    <strong>
+                    {% if membership.role %}
+                        {{ membership.role }}
+                    {% else %}
+                        Member
+                    {% endif %}
+                    </strong>
+
+                {% if membership.on_behalf_of %}
+                    {{ membership.on_behalf_of }}
+                {% else %}
+                    {{ membership.organization }}
+                {% endif %}
+                ({{ membership.start_datetime }}–{{ membership.end_datetime }})
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if links %}
+        <h3><b>Links</b></h3>
+        <div class="row">
+            <ul>
+            {% for link in links %}
+                <li>
+                    <a target="_blank" href="{{ link.url }}">{{ link.note.title }}</a>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if relationships.donations_to %}
+            {% include "_partials/_donations_to.html" %}
+        {% endif %}
+
+        {% if relationships.donations_from %}
+            {% include "_partials/_donations_from.html" %}
+        {% endif %}
+
+        {% if relationships.consulting_agencies %}
+            {% include "_partials/_consulting_agencies.html" %}
+        {% endif %}
+
+        {% if relationships.consulting_clients %}
+            {% include "_partials/_consulting_clients.html" %}
+        {% endif %}
+
+        {% if perms.datafetch.can_change_actor %}
+        <a href="{% url 'admin:datafetch_person_change' actor.id %}">Edit this data</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'bootstrap-table/dist/bootstrap-table.min.css' %}">
+{% endblock extra_css %}
+
+{% block extra_js %}
+<script src="{% static 'bootstrap-table/dist/bootstrap-table.min.js' %}"></script>
+<script src="{% static 'moment/min/moment.min.js' %}"></script>
+<script src="{% static 'datafetch/js/actor.js' %}"></script>
+{% endblock extra_js %}

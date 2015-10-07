@@ -13,4 +13,7 @@ urlpatterns = [
 
     url(r'^actors/(?P<pk>\d+)/donations-from', views.ActorReceivedDonationsFromListViewSet.as_view(), name='api_donations_from'),
     url(r'^actors/(?P<pk>\d+)/donations-to', views.ActorDonatedToListViewSet.as_view(), name='api_donations_to'),
+
+    url(r'^actors/(?P<pk>\d+)/consulting-agencies', views.ActorHasUsedAgenciesListViewSet.as_view(), name='api_consulting_agencies'),
+    url(r'^actors/(?P<pk>\d+)/consulting-clients', views.ActorHasConsultedForListViewSet.as_view(), name='api_consulting_clients'),
 ]

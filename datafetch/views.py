@@ -54,8 +54,8 @@ class ActorView(TemplateView):
         context['relationships'] = {
             'donations_from': actor.received_donations_from.count(),
             'donations_to': actor.donated_to.count(),
-            'consults_for': actor.consults_for.count(),
-            'consultants': actor.consultants.count(),
+            'consulting_clients': actor.consulting_clients.count(),
+            'consulting_agencies': actor.consulting_agencies.count(),
         }
 
         return context
