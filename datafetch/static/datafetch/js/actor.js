@@ -20,21 +20,18 @@ $(function() {
     };
 
     $('table').each(function(idx, tbl) {
-        $tbl = $(tbl);
-        $tbl.bootstrapTable({
+        $(tbl).bootstrapTable({
             dataField: 'results',
             sidePagination: 'server',
             pagination: true,
             search: true,
+            onLoadSuccess: function() {
+                externalLinks(tbl);
+            },
             responseHandler: function(res) {
                 res.total = res.count;
                 return res;
             }
         });
     });
-
-    // $('table').on('onLoadSuccess', function() {
-    //     alert('test');
-    //     externalLinks();
-    // });
 });
