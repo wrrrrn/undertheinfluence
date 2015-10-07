@@ -66,11 +66,15 @@ This is a manual process at the moment :( Check the various management commands 
 
 ```
 python manage.py import_parlparse --since 2010
+
 python manage.py import_ministers --since 2010
+
 # this is slow because it downloads lots of big images
 python manage.py import_everypolitician
+
 # electoral commission data
 python manage.py import_ec
+
 # current APPC register
 python manage.py import_appc
 ```
