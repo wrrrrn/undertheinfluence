@@ -1,101 +1,75 @@
 {% load static wagtailuserbar cms_tags %}
-
 <!doctype html>
-<head xmlns="http://www.w3.org/1999/html">
-    <meta charset="utf-8">
-    <title>Under The Influence</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="">
-    <meta name="author" content="">
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link rel="stylesheet" type="text/css" href="{% static 'bootstrap/dist//css/bootstrap.min.css' %}">
-    <link rel="stylesheet" type="text/css" href="{% static 'bootstrap-material-design/dist/css/material.min.css' %}">
-    <link rel="stylesheet" type="text/css" href="{% static 'bootstrap-material-design/dist/css/ripples.min.css' %}">
-    <style type="text/css">
-        body {
-            padding-top: 20px;
-            padding-bottom: 20px;
-        }
-        hr {
-            display: block;
-            position: relative;
-            padding: 0;
-            margin: 8px auto;
-            height: 0;
-            width: 100%;
-            max-height: 0;
-            font-size: 1px;
-            line-height: 0;
-            clear: both;
-            border: none;
-            border-top: 1px solid #aaaaaa;
-            border-bottom: 1px solid #ffffff;
-        }
-    </style>
-    {% block extra_css %}{% endblock %}
-</head>
+        <meta name="description" content="">
+        <meta name="author" content="">
 
-<body class="container">
-{% wagtailuserbar %}
+        <title>Under The Influence</title>
 
-<div class="row">
-    <div class="col-md-1"></div>
-    <div class="col-md-10">
-        <h1><a href="/" style="color: #000000"><em>underthe</em><b>Influence</b></a></h1>
-        <p>Exposing Money and influence in British politics</p>
+        <link rel="stylesheet" type="text/css" href="{% static 'bootstrap/dist/css/bootstrap.min.css' %}">
+        <link rel="stylesheet" type="text/css" href="{% static 'bootstrap-material-design/dist/css/material.min.css' %}">
+        <link rel="stylesheet" type="text/css" href="{% static 'bootstrap-material-design/dist/css/ripples.min.css' %}">
+        <link rel="stylesheet" type="text/css" href="{% static 'uti/css/main.css' %}">
+        {% block extra_css %}{% endblock %}
+    </head>
 
-        <nav class="navbar navbar-inverse" role="navigation">
-            <!-- Brand and toggle get grouped for better mobile display -->
-            <div class="navbar-header">
-                <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
-                    <span class="sr-only">Toggle navigation</span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                </button>
-                <!-- <a class="navbar-brand" href="{# url 'home' #}">UTI</a> -->
+    <body>
+        <div class="container">
+            {% wagtailuserbar %}
+
+            <div class="header">
+                <h1><a href="/"><span id="title-underthe">underthe</span>Influence</a></h1>
+                <p class="lead">Exposing Money and influence in British politics</p>
             </div>
-            <!-- Collect the nav links, forms, and other content for toggling -->
-            <div class="collapse navbar-collapse">
-                <ul class="nav navbar-nav">
 
-                    {% get_site_root as site_root %}
-                    {% top_menu parent=site_root calling_page=self %}
+            <div class="row">
+                <nav class="navbar navbar-inverse" role="navigation">
+                    <!-- Brand and toggle get grouped for better mobile display -->
+                    <div class="navbar-header">
+                        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                            <span class="sr-only">Toggle navigation</span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                            <span class="icon-bar"></span>
+                        </button>
+                        <!-- <a class="navbar-brand" href="{# url 'home' #}">UTI</a> -->
+                    </div>
+                    <!-- Collect the nav links, forms, and other content for toggling -->
+                    <div class="collapse navbar-collapse">
+                        <ul class="nav navbar-nav">
 
-                    <form class="navbar-form navbar-left" action="{% url 'search' %}" method="get">
-                        <div class="input-group">
-                            <input type="text" name="q" class="form-control" placeholder="Search…" value="{{ query }}" />
-                        </div>
-                    </form>
+                            {% get_site_root as site_root %}
+                            {% top_menu parent=site_root calling_page=self %}
 
-                </ul>
+                            <form class="navbar-form navbar-left" action="/search" method="get">
+                                <div class="input-group">
+                                    <input type="text" name="q" class="form-control" placeholder="Search…" value="{{ query }}" />
+                                </div>
+                            </form>
 
-            </div><!-- /.navbar-collapse -->
-        </nav>
+                        </ul>
 
-    </div>
-    <div class="col-md-1"></div>
-</div>
+                    </div><!-- /.navbar-collapse -->
+                </nav>
+            </div>
 
-{% block content %}{% endblock %}
+            {% block content %}{% endblock %}
 
-<div class="row">
-    <div class="col-md-12">
-        <hr>
-    </div>
-</div>
+            <footer></footer>
 
-<footer>
-</footer>
+        </div> <!-- /container -->
 
-</div> <!-- /container -->
+        <script type="text/javascript" src="{% static 'jquery/dist/jquery.min.js' %}"></script>
+        <script type="text/javascript" src="{% static 'bootstrap/dist/js/bootstrap.min.js' %}"></script>
+        <script type="text/javascript" src="{% static 'bootstrap-material-design/dist/js/ripples.min.js' %}"></script>
+        <script type="text/javascript" src="{% static 'uti/js/main.js' %}"></script>
 
-<script type="text/javascript" src="{% static 'jquery/dist/jquery.min.js' %}"></script>
-<script type="text/javascript" src="{% static 'bootstrap/dist/js/bootstrap.min.js' %}"></script>
-<script type="text/javascript" src="{% static 'bootstrap-material-design/dist/js/ripples.min.js' %}"></script>
-<script type="text/javascript" src="{% static 'uti/js/main.js' %}"></script>
+        {% block extra_js %}{% endblock %}
 
-{% block extra_js %}{% endblock %}
-
-</body>
+    </body>
 </html>

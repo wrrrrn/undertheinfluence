@@ -1,0 +1,13 @@
+.header h1 {
+    font-weight: bold;
+}
+.header h1 a {
+    color: #000;
+}
+.header h1 a:hover {
+    text-decoration: none;
+}
+.header #title-underthe {
+    font-weight: normal;
+    font-style: italic;
+}

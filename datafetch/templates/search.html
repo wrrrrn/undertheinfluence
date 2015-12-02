@@ -3,22 +3,17 @@
 {% load static %}
 
 {% block content %}
-<div class="col-md-1"></div>
-<div class="col-md-10">
-    <div id="government-container">
-        <h3><b>Search Results</b></h3>
-        {% if results %}
-        <p>{{ num_results }} results found for query '{{ query }}':</p>
-        <ul>
-            {% for result in results %}
-            <li>
-                <a href="{% url result.url_name pk=result.id slug=result.name|slugify %}">{{ result.name }}</a>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p>No results found matching your query.</p>
-        {% endif %}
-    </div>
-</div>
+    <h2>Search Results</h2>
+    {% if results %}
+    <p>{{ num_results }} results found for query '{{ query }}':</p>
+    <ul>
+        {% for result in results %}
+        <li>
+            <a href="{% url result.url_name pk=result.id slug=result.name|slugify %}">{{ result.name }}</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No results found matching your query.</p>
+    {% endif %}
 {% endblock %}

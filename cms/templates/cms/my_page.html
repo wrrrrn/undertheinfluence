@@ -3,40 +3,28 @@
 {% load wagtailcore_tags %}
 
 {% block content %}
-    <div class="col-md-1"></div>
-    <div class="col-md-10">
-        <div id="government-container">
-            <h3>
-                <b>{{ self.title }}</b>
-            </h3>
-                {% if self.quote %}
-                <div class="row">
-                    {# TODO: Fix this because it's horrible #}
-                    <div class="col-md-7">
-                {% endif %}
+<h2>{{ self.title }}</h2>
+{% if self.quote %}
+<div class="row">
+    {# TODO: Fix this because it's horrible #}
+    <div class="col-md-7">
+{% endif %}
 
-                {{ self.body|richtext }}
+{{ self.body|richtext }}
 
-                {% if self.quote %}
-                    </div>
-                    {% include 'cms/snippets/quote.html' %}
-                </div>
-                {% endif %}
-        </div>
-
-        {% if self.analysis or self.profile %}
-            <hr>
-            <div class="row">
-            {% if self.analysis %}
-                {% include 'cms/snippets/analysis.html' %}
-            {% endif %}
-
-            {% if self.profile %}
-                {% include 'cms/snippets/profile.html' %}
-            {% endif %}
-            </div>
-        {% endif %}
-
+{% if self.quote %}
     </div>
-    <div class="col-md-1"></div>
+    {% include 'cms/snippets/quote.html' %}
+</div>
+{% endif %}
+
+{% if self.analysis or self.profile %}
+    {% if self.analysis %}
+        {% include 'cms/snippets/analysis.html' %}
+    {% endif %}
+
+    {% if self.profile %}
+        {% include 'cms/snippets/profile.html' %}
+    {% endif %}
+{% endif %}
 {% endblock %}
