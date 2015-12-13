@@ -15,7 +15,7 @@ import requests
 very basic caching sort of thing
 """
 def fetch_text(url, filename, method="get", path=None, refresh=False, encoding=None, **kwargs):
-    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
+    datadir = join(settings.BASE_DIR, 'data')
     if path:
         datadir = join(datadir, path)
     filepath = join(datadir, filename)
@@ -39,8 +39,8 @@ def fetch_json(url, filename, path=None, refresh=False, headers=None, encoding=N
 """
 similar to fetch_json, but for images
 """
-def fetch_file(url, filename, path=None, refresh=False):
-    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
+def fetch_file(url, filename, path=None, refresh=False, **kwargs):
+    datadir = join(settings.BASE_DIR, 'data')
     if path:
         datadir = join(datadir, path)
     filepath = join(datadir, filename)
@@ -55,7 +55,7 @@ def fetch_file(url, filename, path=None, refresh=False):
 create a folder (relative to the data directory)
 """
 def create_data_folder(path):
-    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
+    datadir = join(settings.BASE_DIR, 'data')
     path = join(datadir, path)
     if not exists(path):
         makedirs(path)
@@ -108,7 +108,7 @@ def snake_case(camel_case_text):
     return re.sub(r'([a-z])([A-Z])', r'\1_\2', camel_case_text).lower()
 
 def fetch_ec_csv(url, filename, path=None, refresh=False):
-    datadir = join(settings.BASE_DIR, 'datafetch', 'data')
+    datadir = join(settings.BASE_DIR, 'data')
     if path:
         datadir = join(datadir, path)
     filepath = join(datadir, filename)
