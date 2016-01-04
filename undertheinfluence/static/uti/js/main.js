@@ -8,7 +8,7 @@ $(function() {
         }).append(' <span class="glyphicon glyphicon-share" aria-hidden="true"></span>');
     }
 
-    document.body.innerHTML = document.body.innerHTML.replace(/undertheInfluence/g, "<em>underthe</em><strong>Influence</strong>");
+    // document.body.innerHTML = document.body.innerHTML.replace(/undertheInfluence/g, "<em>underthe</em><strong>Influence</strong>");
 
     externalLinks(document);
 });
