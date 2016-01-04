@@ -334,7 +334,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='membership',
             name='person',
-            field=models.ForeignKey(to_field='id', help_text='The person who is a party to the relationship', related_name='memberships', to='datafetch.Person'),
+            field=models.ForeignKey(help_text='The person who is a party to the relationship', related_name='memberships', to='datafetch.Person'),
         ),
         migrations.AlterUniqueTogether(
             name='areai18name',

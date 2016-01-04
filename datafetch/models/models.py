@@ -198,7 +198,7 @@ class Membership(Dateframeable, Timestampable, models.Model):
     role = models.CharField(_("role"), max_length=512, blank=True, help_text=_("The role that the person fulfills in the organization"))
 
     # reference to "http://popoloproject.com/schemas/person.json#"
-    person = models.ForeignKey('Person', to_field="id", related_name='memberships',
+    person = models.ForeignKey('Person', related_name='memberships',
                                help_text=_("The person who is a party to the relationship"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
@@ -229,7 +229,7 @@ class Membership(Dateframeable, Timestampable, models.Model):
     objects = PassThroughManager.for_queryset_class(MembershipQuerySet)()
 
     def __str__(self):
-        return self.label
+        return self.role
 
 class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Model):
     """
