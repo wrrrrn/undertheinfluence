@@ -11,6 +11,10 @@ router = routers.DefaultRouter()
 urlpatterns = [
     url(r'^', include(router.urls)),
 
+    url(r'^actors', views.ActorViewSet.as_view(), name='api_actors'),
+    url(r'^politicians', views.PoliticianViewSet.as_view(), name='api_politicians'),
+    url(r'^memberships', views.MembershipViewSet.as_view(), name='api_memberships'),
+
     url(r'^actors/(?P<pk>\d+)/donations-from', views.ActorReceivedDonationsFromListViewSet.as_view(), name='api_donations_from'),
     url(r'^actors/(?P<pk>\d+)/donations-to', views.ActorDonatedToListViewSet.as_view(), name='api_donations_to'),
 

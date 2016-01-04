@@ -1,4 +1,3 @@
-from django.contrib.auth.models import User, Group
 from rest_framework import serializers
 
 from datafetch import models
@@ -9,12 +8,20 @@ class ActorSerializer(serializers.HyperlinkedModelSerializer):
         model = models.Actor
         fields = ('id', 'name', 'url',)
 
+
+class MembershipSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = models.Membership
+        fields = ('role',)
+
+
 class DonationSerializer(serializers.HyperlinkedModelSerializer):
     donor = ActorSerializer()
     recipient = ActorSerializer()
     class Meta:
         model = models.Donation
         fields = ('id', 'donor', 'recipient', 'value', 'nature_of_donation', 'donation_type', 'accepted_date', 'reported_date', 'source',)
+
 
 class ConsultancySerializer(serializers.HyperlinkedModelSerializer):
     client = ActorSerializer()
