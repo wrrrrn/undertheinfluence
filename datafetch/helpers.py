@@ -11,10 +11,10 @@ from django.conf import settings
 import requests
 
 
-"""
-very basic caching sort of thing
-"""
 def fetch_text(url, filename, method="get", path=None, refresh=False, encoding=None, **kwargs):
+    """
+    very basic caching sort of thing
+    """
     datadir = join(settings.BASE_DIR, 'data')
     if path:
         datadir = join(datadir, path)
@@ -32,14 +32,22 @@ def fetch_text(url, filename, method="get", path=None, refresh=False, encoding=N
             t = f.read()
     return t
 
-def fetch_json(url, filename, path=None, refresh=False, headers=None, encoding=None):
-    text = fetch_text(url, filename, path, refresh, headers, encoding)
+
+def fetch_json(url, filename, path=None, refresh=False, encoding=None, headers=None):
+    text = fetch_text(
+        url=url,
+        filename=filename,
+        path=path,
+        refresh=refresh,
+        encoding=encoding
+    )
     return json.loads(text)
 
-"""
-similar to fetch_json, but for images
-"""
+
 def fetch_file(url, filename, path=None, refresh=False, **kwargs):
+    """
+    similar to fetch_json, but for images
+    """
     datadir = join(settings.BASE_DIR, 'data')
     if path:
         datadir = join(datadir, path)
@@ -51,21 +59,22 @@ def fetch_file(url, filename, path=None, refresh=False, **kwargs):
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
-"""
-create a folder (relative to the data directory)
-"""
+
 def create_data_folder(path):
+    """
+    create a folder (relative to the data directory)
+    """
     datadir = join(settings.BASE_DIR, 'data')
     path = join(datadir, path)
     if not exists(path):
         makedirs(path)
 
-"""
-Just a helper I use quite often for exploring the data.
-Pass it a list of dicts and a key for a breakdown by
-the numbers
-"""
+
 def count_breakdown(things, key):
+    """
+    Just a helper I use quite often for exploring the data.
+    Pass it a list of dicts and a key for a breakdown by the numbers
+    """
     counts = {}
     for thing in things:
         if thing.get(key) not in counts:
@@ -73,11 +82,11 @@ def count_breakdown(things, key):
         counts[thing.get(key)] += 1
     return counts
 
-"""
-Some very dodgy code for extracting
-honorifics and gender from names
-"""
+
 def parse_name(name):
+    """
+    Some very dodgy code for extracting honorifics and gender from names
+    """
     data = {'name': name}
     stripped_name = name.replace('.', '').strip()
     # TODO: honorary suffixes
