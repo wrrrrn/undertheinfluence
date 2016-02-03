@@ -12,7 +12,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--refresh', action='store_true')
 
-    mps_datadir = join(settings.BASE_DIR, 'datafetch', 'data', 'mpsinterests')
+    mps_datadir = join(settings.BASE_DIR, 'data', 'mpsinterests')
     base_url = "http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/"
 
     # deprecated in favour of bulk download
@@ -20,6 +20,7 @@ class Command(BaseCommand):
         helpers.create_data_folder("mpsinterests")
 
         parl_data_path = join(self.mps_datadir, 'parldata', 'scrapedxml', 'regmem')
+        print(parl_data_path)
         if not exists(parl_data_path):
             raise CommandError("You should fetch historical MPs’ interests data with `git submodule update`")
 
