@@ -18,9 +18,9 @@ __Usage__
 python manage.py import_ec
 ```
 __Current status__  
-* fetching: `working`
-* parsing: `working`
-* importing: `working`
+- [x] fetching
+- [x] parsing
+- [x] importing
 
 __Fetching__
 * Data is fetched / saved in csv format [search.electoralcommission.org.uk/api/csv/Donations](http://search.electoralcommission.org.uk/api/csv/Donations)
@@ -41,25 +41,6 @@ The csv parsed and and saved into the following data models:
 |  |  Note |   
 
 
-## Register of Lords’ Financial Interests
-
-We mine MP's declared interests outside to record the monetary value of declared interests and well as the individuals / organisations with whom they have these interests.
- 
-__Data sources__  
-* [data.parliament.uk](http://data.parliament.uk/)
-__Usage__  
-```
-python manage.py import_lordsinterests
-```
-__Current status__  
-* fetching: `working`
-* parsing: `not started`
-* importing: `not started`
-
-__Fetching__
-* Current data is fetched / saved in xml format [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
-
-
 ## Register of Members’ Financial Interests
 
 We mine MP's declared interests outside to record the monetary value of declared interests and well as the individuals / organisations with whom they have these interests.
@@ -72,14 +53,34 @@ __Usage__
 python manage.py import_mpsinterests
 ```
 __Current status__  
-* fetching: `working`
-* parsing: `not started`
-* importing: `not started`
+- [x] fetching
+- [ ] parsing
+- [ ] importing
+
 
 __Fetching__
 * Historical records should be fetched with `git submodule update`
 * Current data is fetched / saved in xml format [theyworkforyou.com/pwdata/scrapedxml/regmem](http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
 
+
+## Register of Lords’ Financial Interests
+
+We mine MP's declared interests outside to record the monetary value of declared interests and well as the individuals / organisations with whom they have these interests.
+ 
+__Data sources__  
+* [data.parliament.uk](http://data.parliament.uk/)
+__Usage__  
+```
+python manage.py import_lordsinterests
+```
+__Current status__  
+- [x] fetching
+- [ ] parsing
+- [ ] importing
+
+
+__Fetching__
+* Current data is fetched / saved in xml format [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
 
 
 ## Association of Professional Political Consultants
@@ -96,9 +97,9 @@ python manage.py import_appc
 ```
 
 __Current status__  
-* fetching: `working`
-* parsing: `working`
-* importing: `working`
+- [x] fetching
+- [x] parsing
+- [x] importing
 
 __Fetching__
 * The list of agencies is scraped from [appc.org.uk/members/register](http://www.appc.org.uk/members/register/)
@@ -128,9 +129,9 @@ __Usage__
 python manage.py import_companieshouse
 ```
 __Current status__  
-* fetching: `not working`
-* parsing: `unknown`
-* importing: `unknown`
+- [x] fetching
+- [ ] parsing
+- [ ] importing
 
 __Fetching__
 * Each company profile is saved in json format to the data/companieshouse folder
