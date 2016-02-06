@@ -1,9 +1,8 @@
 # Importing Data
 
-Data is imported with the following Django management commands found in `datafetch/management/commands`. These imports fetch, parse and import data into the system.
+Data is imported with the following Django management commands found in `datafetch/management/commands`. Each command __fetches__, __parses__ and __imports data__ into the system.
 
-The imports currently implemented are:
-
+Management commands have been implemented for the following data sources:
 
 ## MySociety ParlParse
 
@@ -14,7 +13,7 @@ __Data sources__
 
 __Usage__  
 ```
-python manage.py import_parlparse
+python manage.py import_parlparse --since 2010
 ```
 __Current status__  
 - [x] fetching
@@ -35,6 +34,33 @@ people.json is parsed and and saved into the following data models:
 | Political parties, legislature, |  Organizations |   
 | Posts |  Post |  
 | Memberships |  Membership |
+
+
+## MySociety ParlParse - Ministers
+
+__Data sources__  
+* [ParlParse](parser.theyworkforyou.com)  
+
+__Usage__  
+```
+python manage.py import_ministers --since 2010
+```
+__Current status__  
+- [x] fetching
+- [x] parsing
+- [x] importing
+
+__Fetching__
+* Current data is saved from [cdn.rawgit.com/mysociety/parlparse/master/members/ministers.json](https://cdn.rawgit.com/mysociety/parlparse/master/members/ministers.json)
+
+__Parsing & importing__  
+ministers.json is parsed and and saved into the following data models:
+  
+| Information | Data Model |  
+|--------------|------------:|  
+| Political parties |  Organization |   
+| Ministers |  Person |  
+| Memberships |  Membership |   
 
 
 ## The Electoral Commission
