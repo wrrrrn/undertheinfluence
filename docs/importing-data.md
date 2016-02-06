@@ -1,8 +1,40 @@
 # Importing Data
 
-Data is imported with the following Django management commands found in datafetch/management/commands. These imports fetch, parse and import data into the system.
+Data is imported with the following Django management commands found in `datafetch/management/commands`. These imports fetch, parse and import data into the system.
 
 The imports currently implemented are:
+
+
+## MySociety ParlParse
+
+> Data of all MPs, Lords, MSPs and MLAs covered by the project, in Popolo format, including names (and alternate names such as misspellings or name changes), party, constituency (non-Lords), and peerage information (Lords). There is a unique identifier for each element.   
+
+__Data sources__  
+* [ParlParse](parser.theyworkforyou.com)  
+
+__Usage__  
+```
+python manage.py import_parlparse
+```
+__Current status__  
+- [x] fetching
+- [x] parsing
+- [x] importing
+
+__Fetching__
+* Current data is saved from [cdn.rawgit.com/mysociety/parlparse/master/members/people.json](https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json)
+
+__Parsing & importing__  
+people.json is parsed and and saved into the following data models:
+  
+| Information | Data Model |  
+|--------------|------------:|  
+| Person ids |  Identifier |   
+| Person other names |  OtherName |  
+| People |  Person |   
+| Political parties, legislature, |  Organizations |   
+| Posts |  Post |  
+| Memberships |  Membership |
 
 
 ## The Electoral Commission
@@ -30,15 +62,38 @@ The csv parsed and and saved into the following data models:
   
 | Information | Data Model |  
 |--------------|------------:|  
-| ECRef |  Identifier |   
+| ECRefs |  Identifier |   
 | Company registration no. |  Identifier |  
-| Individual donor |  Person |   
-| Company / organisation donor |  Organization |   
-| Donor postcode |  ContactDetails |   
-| Individual recipient |  Person |   
-| Political Party |  Organization |  
-| Donation |  Donation |  
+| Individual donors |  Person |   
+| Company / organisation donors |  Organization |   
+| Donor postcodes |  ContactDetails |   
+| Individual recipients |  Person |   
+| Political parties |  Organization |  
+| Donations |  Donation |  
 |  |  Note |   
+
+
+## TheyWorkForYou
+
+> TheyWorkForYou lets you find out what your MP, MSP or MLA is doing in your name, read debates, written answers   
+
+__Data sources__  
+* [TheyWorkForYou](http://www.theyworkforyou.com/api/)  
+
+__Usage__  
+```
+python manage.py import_twfy
+```
+__Current status__  
+- [x] fetching
+- [ ] parsing
+- [ ] importing
+
+__Fetching__
+* Current data is fetched / saved in json format from [theyworkforyou.com/api](http://www.theyworkforyou.com/api/)
+
+__Parsing & importing__  
+* __\#TODO__
 
 
 ## Register of Members’ Financial Interests
@@ -60,7 +115,10 @@ __Current status__
 
 __Fetching__
 * Historical records should be fetched with `git submodule update`
-* Current data is fetched / saved in xml format [theyworkforyou.com/pwdata/scrapedxml/regmem](http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
+* Current data is fetched / saved in xml format from [theyworkforyou.com/pwdata/scrapedxml/regmem](http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
+
+__Parsing & importing__  
+* __\#TODO__
 
 
 ## Register of Lords’ Financial Interests
@@ -78,9 +136,11 @@ __Current status__
 - [ ] parsing
 - [ ] importing
 
-
 __Fetching__
-* Current data is fetched / saved in xml format [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
+* Current data is fetched / saved in xml format from [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
+
+__Parsing & importing__  
+* __\#TODO__
 
 
 ## Association of Professional Political Consultants
@@ -110,11 +170,38 @@ Data is scraped from the saved pages and saved into the following data models:
 
 | Information | Data Model |  
 --------------|------------:|  
-| Lobby agency|  Organisation |   
+| Lobby agencies |  Organisation |   
 | Lobby agency contact details| ContactDetail |  
-| Lobby agency employee | Person |  
-| Client |  Person  |  
-| Lobby agency / client relationship | Consultancy |  
+| Lobby agency employees | Person |  
+| Clients |  Person  |  
+| Lobby agency / client relationships | Consultancy |  
+
+
+## EveryPolitician
+
+> EveryPolitician aims to provide data about, well, every politician. In the world.   
+
+__Data sources__  
+* [EveryPolitician](http://everypolitician.org/uk/)  
+
+__Usage__  
+```
+python manage.py import_everypolitician
+```
+__Current status__  
+- [x] fetching
+- [x] parsing
+- [x] importing
+
+__Fetching__
+* Current data is fetched / saved in json format from [cdn.rawgit.com/everypolitician/everypolitician-data/master/data/UK/Commons/ep-popolo-v1.0.json](https://cdn.rawgit.com/everypolitician/everypolitician-data/master/data/UK/Commons/ep-popolo-v1.0.json)
+
+__Parsing & importing__  
+This data is used to update the following model:
+
+| Information | Data Model |  
+--------------|------------:|  
+| Politicans |  Person |  
 
 
 ## Extra company / organizational data
@@ -143,7 +230,7 @@ Data models used:
 
 | Information | Data Model |  
 --------------|------------:|  
-| Company |  Organisation |  
+| Companies |  Organisation |  
 
 
 
