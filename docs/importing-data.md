@@ -81,10 +81,10 @@ __Current status__
 - [x] importing
 
 __Fetching__
-* Data is fetched / saved in csv format [search.electoralcommission.org.uk/api/csv/Donations](http://search.electoralcommission.org.uk/api/csv/Donations)
+* Data is fetched / saved in csv format from [search.electoralcommission.org.uk/api/csv/Donations](http://search.electoralcommission.org.uk/api/csv/Donations)
 
 __Parsing & importing__  
-The csv parsed and and saved into the following data models:
+The csv parsed and saved into the following data models:
   
 | Information | Data Model |  
 |--------------|------------:|  
@@ -189,7 +189,7 @@ __Current status__
 
 __Fetching__
 * The list of agencies is scraped from [appc.org.uk/members/register](http://www.appc.org.uk/members/register/)
-* Each individual agency profile is saved to the data/appc folder
+* Each individual agency profile is saved to the `data/appc` folder
 
 __Parsing & importing__  
 Data is scraped from the saved pages and saved into the following data models:
@@ -247,7 +247,7 @@ __Current status__
 - [ ] importing
 
 __Fetching__
-* Each company profile is saved in json format to the data/companieshouse folder
+* Each company profile is saved in json format to the `data/companieshouse` folder
 
 __Parsing & importing__  
 The saved json is parsed and if a company exists within our data set it is updated with the extra information.  
