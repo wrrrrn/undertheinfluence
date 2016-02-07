@@ -17,11 +17,11 @@ There are currently two data sources, __EveryPolitician__ and __ParlParse__, tha
 > Data of all MPs, Lords, MSPs and MLAs covered by the project, in Popolo format, including names (and alternate names such as misspellings or name changes), party, constituency (non-Lords), and peerage information (Lords). There is a unique identifier for each element. Each membership is a continuous period of holding office, loyal to the same party.
 
 ---
-These the data models implemented for UnderTheIfluence
+These the primary data models implemented for UnderTheIfluence
 
 ## ```datafetch/models.py```
 
-#### class Actor()
+#### ```class Actor()```
 
 | Field | Type | Notes |  
 |-------|-----:|:------|  
@@ -36,9 +36,9 @@ These the data models implemented for UnderTheIfluence
 
 
 
-#### class Person(*Actor*)
+#### ```class Person(Actor)```
 *A real person, alive or dead.*   
-http://popoloproject.com/schemas/person.json
+* http://popoloproject.com/schemas/person.json
 
 | Field | Type | Notes |  
 |-------|-----:|:------|  
@@ -61,9 +61,9 @@ http://popoloproject.com/schemas/person.json
 
 
 
-#### class Organization(*Actor*)
+#### ```class Organization(Actor)```
 *A group with a common purpose or reason for existence that goes beyond the set of people belonging to it.*   
-http://popoloproject.com/schemas/organization.json
+* http://popoloproject.com/schemas/organization.json
 
 | Field | Type | Notes |  
 |-------|-----:|:------|  
@@ -78,17 +78,37 @@ http://popoloproject.com/schemas/organization.json
 
 
 
-#### class Post()
+#### ```class Post()```
 *A position that exists independent of the person holding it.*  
-http://popoloproject.com/schemas/post.json   
+* http://popoloproject.com/schemas/post.json   
 
 | Field | Type | Notes |  
 |-------|-----:|:------|  
-|```name``` | ```CharField``` |  |  
-|```image``` | ```URLField``` |  |  
-|```other_names``` | ```GenericRelation``` | http://popoloproject.com/schemas/other_name.json |  
-|```identifiers``` | ```GenericRelation``` | http://popoloproject.com/schemas/identifier.json |  
+|```label``` | ```CharField``` |  |  
+|```other_label``` | ```CharField``` |  |  
+|```organization``` | ```ForeignKey``` | http://popoloproject.com/schemas/organization.json |  
+|```area``` | ```ForeignKey``` | http://popoloproject.com/schemas/area.json |  
 |```contact_details``` | ```GenericRelation``` | http://popoloproject.com/schemas/contact_detail.json |
 |```links``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
 |```sources``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
-|```notes``` | ```GenericRelation``` |  |  
+
+
+
+#### ```class Membership()```
+*A relationship between a person and an organization*  
+* http://popoloproject.com/schemas/membership.json   
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```label``` | ```CharField``` |  |  
+|```role``` | ```CharField``` |  |  
+|```person``` | ```ForeignKey``` | http://popoloproject.com/schemas/person.json |  
+|```organization``` | ```ForeignKey``` | http://popoloproject.com/schemas/organization.json |  
+|```on_behalf_of``` | ```ForeignKey``` |  |
+|```post``` | ```ForeignKey``` | http://popoloproject.com/schemas/post.json |
+|```area``` | ```ForeignKey``` | http://popoloproject.com/schemas/area.json |
+|```contact_details``` | ```GenericRelation``` | http://popoloproject.com/schemas/contact_detail.json |
+|```links``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
+|```sources``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
+
+
