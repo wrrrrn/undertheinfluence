@@ -44,20 +44,20 @@ These the primary data models implemented for UnderTheIfluence
 |-------|-----:|:------|  
 |```json_ld_context``` |  |  |  
 |```json_ld_type``` |  |  |  
-|```family_name``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```given_name``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```additional_name``` | ```CharField``` | http://popoloproject.com/schemas/person.json |
-|```honorific_prefix``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```honorific_suffix``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```patronymic_name``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```sort_name``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```email``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```gender``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```birth_date``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```death_date``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```summary``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```biography``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
-|```national_identity``` | ```CharField``` | http://popoloproject.com/schemas/person.json |  
+|```family_name``` | ```CharField``` |  |   
+|```given_name``` | ```CharField``` |  |   
+|```additional_name``` | ```CharField``` |  |   
+|```honorific_prefix``` | ```CharField``` |  |   
+|```honorific_suffix``` | ```CharField``` |  |   
+|```patronymic_name``` | ```CharField``` |  |   
+|```sort_name``` | ```CharField``` |  |   
+|```email``` | ```CharField``` |  |    
+|```gender``` | ```CharField``` |  |   
+|```birth_date``` | ```CharField``` |  |   
+|```death_date``` | ```CharField``` |  |    
+|```summary``` | ```CharField``` |  |    
+|```biography``` | ```CharField``` |  |   
+|```national_identity``` | ```CharField``` |  |   
 
 
 
@@ -112,3 +112,47 @@ These the primary data models implemented for UnderTheIfluence
 |```sources``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
 
 
+#### ```class Identifier()```
+*An issued identifier.*  
+* http://popoloproject.com/schemas/identifier.json   
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```identifier``` | ```CharField``` | An issued identifier, e.g. a DUNS number |  
+|```scheme``` | ```CharField``` | An identifier scheme, e.g. DUNS |  
+
+
+#### ```class Link()```
+*A URL.*   
+* http://popoloproject.com/schemas/link.json
+
+
+#### ```class Source()```
+*A URL for referring to sources of information.*   
+* http://popoloproject.com/schemas/link.json
+
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```url``` | ```CharField``` | A URL |  
+|```note``` | ```CharField``` | A note, e.g. 'Parliament website' |  
+
+
+#### ```class ContactDetail()```
+*A means of contacting an entity.*   
+* http://popoloproject.com/schemas/contact-detail.json
+
+
+#### ```class OtherName()```
+*An alternate or former name.*   
+* http://popoloproject.com/schemas/name-component.json
+
+
+#### ```class Link()```
+*A URL.*   
+* http://popoloproject.com/schemas/link.json
+
+
+#### ```class Area()```
+*An area is a geographic area whose geometry may change over time..*   
+* http://popoloproject.com/schemas/area.json
