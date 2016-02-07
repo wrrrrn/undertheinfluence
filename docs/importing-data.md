@@ -28,12 +28,12 @@ people.json is parsed and and saved into the following data models:
   
 | Information | Data Model |  
 |--------------|------------:|  
-| Person ids |  Identifier |   
-| Person other names |  OtherName |  
-| People |  Person |   
-| Political parties, legislature, |  Organizations |   
-| Posts |  Post |  
-| Memberships |  Membership |
+| Person ids |  ```Identifier``` |   
+| Person other names |  ```OtherName``` |  
+| People |  ```Person``` |   
+| Political parties, legislature, |  ```Organization``` |   
+| Posts | ```Post``` |  
+| Memberships | ```Membership``` |
 
 
 ## MySociety ParlParse - Ministers
@@ -58,9 +58,9 @@ ministers.json is parsed and and saved into the following data models:
   
 | Information | Data Model |  
 |--------------|------------:|  
-| Political parties |  Organization |   
-| Ministers |  Person |  
-| Memberships |  Membership |   
+| Political parties |  ```Organization``` |   
+| Ministers |  ```Person``` |  
+| Memberships |  ```Membership``` |    
 
 
 ## The Electoral Commission
@@ -88,15 +88,15 @@ The csv parsed and saved into the following data models:
   
 | Information | Data Model |  
 |--------------|------------:|  
-| ECRefs |  Identifier |   
-| Company registration no. |  Identifier |  
-| Individual donors |  Person |   
-| Company / organisation donors |  Organization |   
-| Donor postcodes |  ContactDetails |   
-| Individual recipients |  Person |   
-| Political parties |  Organization |  
-| Donations |  Donation |  
-|  |  Note |   
+| ECRefs |  ```Identifier``` |     
+| Company registration no. |  ```Identifier``` |    
+| Individual donors |  ```Person``` |   
+| Company / organisation donors |  ```Organization``` |   
+| Donor postcodes | ```ContactDetails``` |   
+| Individual recipients |  ```Person``` |   
+| Political parties |  ```Organization``` |  
+| Donations |  ```Donation``` |  
+|  |  ```Note``` |   
 
 
 ## TheyWorkForYou
@@ -196,11 +196,11 @@ Data is scraped from the saved pages and saved into the following data models:
 
 | Information | Data Model |  
 --------------|------------:|  
-| Lobby agencies |  Organisation |   
-| Lobby agency contact details| ContactDetail |  
-| Lobby agency employees | Person |  
-| Clients |  Person  |  
-| Lobby agency / client relationships | Consultancy |  
+| Lobby agencies |  ```Organization``` |   
+| Lobby agency contact details| ```ContactDetail``` |  
+| Lobby agency employees | ```Person``` |  
+| Clients |  ```Person```  |  
+| Lobby agency / client relationships | ```Consultancy``` |  
 
 
 ## EveryPolitician
@@ -227,7 +227,7 @@ This data is used to update the following model:
 
 | Information | Data Model |  
 --------------|------------:|  
-| Politicans |  Person |  
+| Politicans |  ```Person``` |  
 
 
 ## Extra company / organizational data
@@ -256,7 +256,7 @@ Data models used:
 
 | Information | Data Model |  
 --------------|------------:|  
-| Companies |  Organisation |  
+| Companies |  ```Organization``` |  
 
 
 
