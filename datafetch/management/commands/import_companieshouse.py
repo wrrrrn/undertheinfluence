@@ -52,5 +52,6 @@ class Command(BaseCommand):
         self.refresh = options.get('refresh')
 
         print("Fetching extra organizational data from Companies House ...")
+        # TODO: Create Identifier
         identifiers = models.Identifier.objects.filter(scheme="uk.gov.companieshouse")
         self._fetch_companies_house(identifiers)
