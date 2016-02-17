@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
         filename = "mps_overview_{}.json".format(str(date))
         url = "{}/api/getMPs?key={}&date={}".format(self.base_url, self.api_key, date_str)
-        mps = fetch_json(url, filename, path='twfy', refresh=self.refresh)
+        mps = helpers.fetch_json(url, filename, path='twfy', refresh=self.refresh)
         return [mp["person_id"] for mp in mps]
 
     def _get_mps_since(self, since, increment):
@@ -46,14 +46,14 @@ class Command(BaseCommand):
             self.api_key,
             mp_id,
             extra_fields)
-        info = fetch_json(url, filename, path='twfy', refresh=self.refresh)
+        info = helpers.fetch_json(url, filename, path='twfy', refresh=self.refresh)
 
         filename = "twfy_{}.json".format(mp_id)
         url = "{}/api/getMP?key={}&id={}".format(
             self.base_url,
             self.api_key,
             mp_id)
-        info['details'] = fetch_json(url, filename, path='twfy', refresh=self.refresh)
+        info['details'] = helpers.fetch_json(url, filename, path='twfy', refresh=self.refresh)
 
         return info
 
@@ -68,13 +68,13 @@ class Command(BaseCommand):
             # print("  Fetching MP details for person ID {} ... ({} / {})".format(mp_id, idx+1, len(mp_ids)))
             mp_info = self._get_mp_info(mp_id)
 
-            for term in mp_info["details"]:
-                end_date = term["left_house"] if term["left_house"] != "9999-12-31" else None
-                membership = models.Membership.objects.get(
-                    person_id="person/{}".format(mp_id),
-                    start_date=term["entered_house"],
-                    end_date=end_date)
-                print(membership.organization)
+            # for term in mp_info["details"]:
+            #    end_date = term["left_house"] if term["left_house"] != "9999-12-31" else None
+            #    membership = models.Membership.objects.get(
+            #        person_id=mp_id,
+            #        start_date=term["entered_house"],
+            #        end_date=end_date)
+            #    print(membership.organization)
             #     positions = term.get("office", [])
             #     for position in positions:
             #         print(position)
