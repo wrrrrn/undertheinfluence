@@ -19,6 +19,50 @@ There are currently two data sources, __EveryPolitician__ and __ParlParse__, tha
 ---
 These the primary data models implemented for UnderTheIfluence
 
+
+
+## ```datafetch/influence_mapping.py```
+
+#### ```class Relationship()```
+*A relationship between two actors.*   
+* http://popoloproject.com/schemas/membership.json 
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```label``` | ```CharField``` |  |  
+|```links``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
+|```sources``` | ```URLField``` | http://popoloproject.com/schemas/link.json |   
+|```identifiers``` | ```GenericRelation``` | http://popoloproject.com/schemas/identifier.json |
+
+
+#### ```class Consultancy()```
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```client``` | ```ForeignKey(Actor)``` |  |  
+|```agency``` | ```ForeignKey(Actor)``` |  |  
+
+
+#### ```class Donation()``` 
+
+| Field | Type | Notes |  
+|-------|-----:|:------|  
+|```donor``` | ```ForeignKey(Actor)``` |  |  
+|```recipient ``` | ```ForeignKey(Actor)``` |  |  
+|```value ``` | ```DecimalField``` | The monetary value of the donation |   
+|```donation_type``` | ```CharField``` | The type of donation e.g. cash |
+|```nature_of_donation``` | ```CharField``` | The nature of the donation e.g. hospitality |
+|```received_date``` | ```DateField``` |  |
+|```accepted_date``` | ```DateField``` |  |
+|```reported_date``` | ```DateField``` |  |
+|```accounting_unit_name``` | ```CharField``` |  |
+|```accounting_units_as_central_party``` | ```BooleanField``` |  |
+|```purpose_of_visit``` | ```CharField``` |  |
+|```is_bequest``` | ```BooleanField``` |  |  
+|```is_aggregation``` | ```BooleanField``` |  |  
+|```is_sponsorship``` | ```BooleanField``` |  |  
+
+
 ## ```datafetch/models.py```
 
 #### ```class Actor()```
@@ -156,48 +200,4 @@ These the primary data models implemented for UnderTheIfluence
 #### ```class Area()```
 *An area is a geographic area whose geometry may change over time..*   
 * http://popoloproject.com/schemas/area.json
-
-
-## ```datafetch/influence_mapping.py```
-
-#### ```class Relationship()```
-*A relationship between two actors.*   
-* http://popoloproject.com/schemas/membership.json 
-
-| Field | Type | Notes |  
-|-------|-----:|:------|  
-|```label``` | ```CharField``` |  |  
-|```links``` | ```GenericRelation``` | http://popoloproject.com/schemas/link.json |  
-|```sources``` | ```URLField``` | http://popoloproject.com/schemas/link.json |   
-|```identifiers``` | ```GenericRelation``` | http://popoloproject.com/schemas/identifier.json |
-
-
-#### ```class Consultancy()```
-
-| Field | Type | Notes |  
-|-------|-----:|:------|  
-|```client``` | ```ForeignKey(Actor)``` |  |  
-|```agency``` | ```ForeignKey(Actor)``` |  |  
-
-
-#### ```class Donation()``` 
-
-| Field | Type | Notes |  
-|-------|-----:|:------|  
-|```donor``` | ```ForeignKey(Actor)``` |  |  
-|```recipient ``` | ```ForeignKey(Actor)``` |  |  
-|```value ``` | ```DecimalField``` | The monetary value of the donation |   
-|```donation_type``` | ```CharField``` | The type of donation e.g. cash |
-|```nature_of_donation``` | ```CharField``` | The nature of the donation e.g. hospitality |
-|```received_date``` | ```DateField``` |  |
-|```accepted_date``` | ```DateField``` |  |
-|```reported_date``` | ```DateField``` |  |
-|```accounting_unit_name``` | ```CharField``` |  |
-|```accounting_units_as_central_party``` | ```BooleanField``` |  |
-|```purpose_of_visit``` | ```CharField``` |  |
-|```is_bequest``` | ```BooleanField``` |  |  
-|```is_aggregation``` | ```BooleanField``` |  |  
-|```is_sponsorship``` | ```BooleanField``` |  |  
-
-
 
