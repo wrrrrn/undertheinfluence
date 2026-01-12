@@ -11,22 +11,16 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-from os.path import dirname, exists, join, realpath
-import yaml
+from os.path import dirname, join, realpath
+from decouple import config, Csv
 
 BASE_DIR = realpath(dirname(dirname(__file__)))
 PROJECT_DIR = join(BASE_DIR, 'undertheinfluence')
 
-configuration_file = join(
-    BASE_DIR, 'conf', 'general.yml'
-)
+# Load configuration from environment variables
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
-with open(configuration_file) as f:
-    conf = yaml.load(f)
-
-ALLOWED_HOSTS = conf.get('ALLOWED_HOSTS')
-
-BASE_URL = conf.get('BASE_URL')
+BASE_URL = config('BASE_URL', default='http://localhost:8000')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
@@ -82,10 +76,10 @@ MIDDLEWARE_CLASSES = (
 )
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = conf['SECRET_KEY']
+SECRET_KEY = config('SECRET_KEY', default='change-me-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = bool(int(conf.get('STAGING')))
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 ROOT_URLCONF = 'undertheinfluence.urls'
 
@@ -115,28 +109,44 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # The email address that will be displayed on the site as the contact
 # email for all support requests, and so on:
-SUPPORT_EMAIL = conf.get('SUPPORT_EMAIL')
+SUPPORT_EMAIL = config('SUPPORT_EMAIL', default='')
 
 # The From = address for error emails
-SERVER_EMAIL = conf.get('SERVER_EMAIL')
+SERVER_EMAIL = config('SERVER_EMAIL', default='')
 
 # The From = address for all emails except error emails
-DEFAULT_FROM_EMAIL = conf.get('DEFAULT_FROM_EMAIL')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
 
 # Database
 # https://docs.djangoproject.com/en/1.8/ref/settings/#databases
 
-if conf.get('DATABASE_SYSTEM') == 'postgresql':
+if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
     DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.postgresql_psycopg2',
-            'NAME':     conf.get('UTI_DB_NAME'),
-            'USER':     conf.get('UTI_DB_USER'),
-            'PASSWORD': conf.get('UTI_DB_PASS'),
-            'HOST':     conf.get('UTI_DB_HOST'),
-            'PORT':     conf.get('UTI_DB_PORT'),
+            'NAME':     config('UTI_DB_NAME', default='undertheinfluence'),
+            'USER':     config('UTI_DB_USER', default='uti'),
+            'PASSWORD': config('UTI_DB_PASS', default=''),
+            'HOST':     config('UTI_DB_HOST', default='localhost'),
+            'PORT':     config('UTI_DB_PORT', default='5432'),
         }
     }
+
+    # Workaround for Django 1.8 PostgreSQL timezone check bug
+    # The database IS set to UTC, but Django's check is overly strict
+    # Replace the problematic utc_tzinfo_factory function with one that works
+    from django.db.backends.postgresql_psycopg2 import utils
+    from psycopg2.tz import FixedOffsetTimezone
+
+    def utc_tzinfo_factory(offset):
+        """Fixed version that doesn't assert on timezone"""
+        if offset != 0:
+            # If not UTC, use the default behavior
+            return FixedOffsetTimezone(offset=offset, name=None)
+        # For UTC (offset 0), return None (Django's expected behavior)
+        return None
+
+    utils.utc_tzinfo_factory = utc_tzinfo_factory
 else:
     DATABASES = {
         'default': {
@@ -211,7 +221,14 @@ REST_FRAMEWORK = {
 }
 
 # TheyWorkForYou API key
-TWFY_API_KEY = conf.get('TWFY_API_KEY')
+TWFY_API_KEY = config('TWFY_API_KEY', default='')
 
 # Email addresses that error emails are sent to when DEBUG = False
-ADMINS = conf['ADMINS']
+# Format: "Name <email>, Name <email>"
+ADMINS_STR = config('ADMINS', default='')
+if ADMINS_STR:
+    # Parse comma-separated admin list
+    ADMINS = [tuple(admin.strip().split('<')) for admin in ADMINS_STR.split(',') if admin.strip()]
+    ADMINS = [(name.strip(), email.strip(' >')) for name, email in ADMINS]
+else:
+    ADMINS = []

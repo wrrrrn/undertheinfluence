@@ -1,17 +1,36 @@
+# Django & Wagtail (Phase 1: keeping Django 1.8, will upgrade in Phase 2)
 Django>=1.8,<1.9
 wagtail==1.1
+django-modelcluster>=0.6,<1.0
+django-treebeard==3.0
 
-beautifulsoup4==4.4.0
-requests==2.7.0
-bootstrap-admin==0.3.6
-psycopg2==2.6.1
-PyYAML==3.11
+# Web scraping & HTTP
+beautifulsoup4==4.12.0
+requests==2.31.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Configuration
+python-decouple==3.8
+PyYAML==6.0.1
+
+# Django utilities
 django-model-utils==2.3.1
-gunicorn==19.3.0
 django-polymorphic==0.7.2
+bootstrap-admin==0.3.6
 
-markdown==2.6.2
-djangorestframework
+# REST API (DRF 3.6.4 is the last version supporting Django 1.8)
+djangorestframework==3.6.4
 django-filter==0.11.0
+markdown==2.6.2
 
+# Production server
+gunicorn==21.2.0
+
+# Frontend (will be replaced in Phase 2.5)
 django-bower==5.0.4
+
+# Testing (compatible with Python 3.7)
+pytest==7.4.3
+pytest-django==4.5.2

@@ -229,7 +229,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')
 
-        url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json"
+        # RawGit CDN was shut down, use GitHub raw content directly
+        url = "https://raw.githubusercontent.com/mysociety/parlparse/master/members/people.json"
         filename = "people.json"
         j = helpers.fetch_json(url, filename, refresh=self.refresh)
 

@@ -66,13 +66,13 @@ class Person(Actor):
     json_ld_context = "http://popoloproject.com/contexts/person.jsonld"
     json_ld_type = "http://www.w3.org/ns/person#Person"
 
-    family_name = models.CharField(_("family name"), max_length=128, blank=True, help_text=_("One or more family names"))
-    given_name = models.CharField(_("given name"), max_length=128, blank=True, help_text=_("One or more primary given names"))
-    additional_name = models.CharField(_("additional name"), max_length=128, blank=True, help_text=_("One or more secondary given names"))
-    honorific_prefix = models.CharField(_("honorific prefix"), max_length=128, blank=True, help_text=_("One or more honorifics preceding a person's name"))
-    honorific_suffix = models.CharField(_("honorific suffix"), max_length=128, blank=True, help_text=_("One or more honorifics following a person's name"))
-    patronymic_name = models.CharField(_("patronymic name"), max_length=128, blank=True, help_text=_("One or more patronymic names"))
-    sort_name = models.CharField(_("sort name"), max_length=128, blank=True, help_text=_("A name to use in an lexicographically ordered list"))
+    family_name = models.CharField(_("family name"), max_length=512, blank=True, help_text=_("One or more family names"))
+    given_name = models.CharField(_("given name"), max_length=512, blank=True, help_text=_("One or more primary given names"))
+    additional_name = models.CharField(_("additional name"), max_length=512, blank=True, help_text=_("One or more secondary given names"))
+    honorific_prefix = models.CharField(_("honorific prefix"), max_length=512, blank=True, help_text=_("One or more honorifics preceding a person's name"))
+    honorific_suffix = models.CharField(_("honorific suffix"), max_length=512, blank=True, help_text=_("One or more honorifics following a person's name"))
+    patronymic_name = models.CharField(_("patronymic name"), max_length=512, blank=True, help_text=_("One or more patronymic names"))
+    sort_name = models.CharField(_("sort name"), max_length=512, blank=True, help_text=_("A name to use in an lexicographically ordered list"))
     email = models.EmailField(_("email"), blank=True, null=True, help_text=_("A preferred email address"))
     gender = models.CharField(_('gender'), max_length=128, blank=True, help_text=_("A gender"))
     birth_date = models.CharField(_("birth date"), max_length=10, blank=True, help_text=_("A date of birth"))
