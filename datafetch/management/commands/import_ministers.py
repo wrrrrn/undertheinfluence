@@ -31,7 +31,10 @@ class Command(BaseCommand):
         defaults = {k: v for k, v in membership.items() if k not in ignore_fields}
         unique = {k: v for k, v in membership.items() if k in unique_fields}
 
-        models.Membership.objects.get_or_create(defaults=defaults, **unique)
+        # Handle potential duplicates by using filter().first() approach instead of get()
+        existing = models.Membership.objects.filter(**unique).first()
+        if not existing:
+            models.Membership.objects.create(**defaults)
 
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')

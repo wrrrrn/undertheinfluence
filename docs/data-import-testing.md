@@ -41,6 +41,7 @@ This document tracks the testing and status of all data import commands.
 - Complements parlparse data
 - Links ministers to their roles
 - **FIXED (Jan 12, 2026)**: Updated defunct `cdn.rawgit.com` URL to `raw.githubusercontent.com`.
+- **FIXED (Jan 13, 2026)**: Fixed duplicate membership handling to avoid MultipleObjectsReturned errors.
 
 ---
 
@@ -115,17 +116,17 @@ This document tracks the testing and status of all data import commands.
 
 #### 6. import_twfy
 **Purpose**: Import data from TheyWorkForYou API
-**Status**: ⏸️ Not tested yet (partial implementation)
-**Command**: `docker compose exec web python manage.py import_twfy`
+**Status**: ⏸️ Partial Implementation (fetch only)
+**Command**: `docker compose exec web python manage.py import_twfy --since 2024`
 
 **Expected data**:
-- MP voting records (potentially)
-- Parliamentary activity
+- MP information and metadata (if import logic were implemented)
 
 **Notes**:
-- Requires TWFY_API_KEY in environment
-- Implementation may be incomplete
-- Check if API still compatible
+- Requires TWFY_API_KEY in .env file
+- **PARTIAL**: API fetching works, but all database import logic is commented out
+- Currently only downloads MP data to `data/twfy/` directory
+- Would need completion of import logic (lines 71-80 are commented out)
 
 ---
 
