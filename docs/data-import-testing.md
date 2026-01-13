@@ -3,7 +3,7 @@
 This document tracks the testing and status of all data import commands.
 
 **Date Started**: January 12, 2026
-**Last Updated**: January 13, 2026 (Phase 2 Complete)
+**Last Updated**: January 13, 2026
 **Environment**: Docker (Python 3.12, Django 6.0.1, Wagtail 7.2.x, PostgreSQL 15)
 
 ## Testing Progress
@@ -62,8 +62,8 @@ This document tracks the testing and status of all data import commands.
 ---
 
 #### 4. import_appc
-**Purpose**: Import APPC lobbying register (web scraping)
-**Status**: ⛔ BROKEN
+**Purpose**: Import PRCA lobbying register (web scraping)
+**Status**: ✅ Working
 **Command**: `docker compose exec web python manage.py import_appc`
 
 **Expected data**:
@@ -72,7 +72,7 @@ This document tracks the testing and status of all data import commands.
 - Lobbyist organizations
 
 **Notes**:
-- **BROKEN (Jan 12, 2026)**: The website `appc.org.uk` is defunct. The APPC merged with the PRCA in 2018. The new data source is the PRCA Public Affairs Register (e.g., `https://prca.org.uk/register/prca-public-affairs-and-lobbying-register/`). The importer needs to be rewritten to scrape this new source.
+- **FIXED (Jan 13, 2026)**: The importer has been rewritten to scrape the new PRCA professional lobbying register at `https://www.prca.global/professional-lobbying-register`, as the old APPC website is defunct.
 
 ---
 
@@ -173,7 +173,7 @@ This document tracks the testing and status of all data import commands.
 1. `import_parlparse --since 2010` (✅ foundation data - MPs/Lords)
 2. `import_ministers --since 2010` (✅ adds ministerial roles)
 3. `import_ec` (✅ donations data - slow but working!)
-4. ~~`import_appc`~~ (⛔ lobbying data - BROKEN, APPC defunct)
+4. `import_appc` (✅ lobbying data - working)
 5. Verify data in admin and web interface
 6. `import_everypolitician` (❓ if needed for photos - likely broken)
 7. Test remaining commands as needed
@@ -228,12 +228,13 @@ After imports:
 **Status**: Fixed
 **Resolution**: Added try-except block around `Organization.objects.get(identifiers=reg_num_identifier)` on line 55-63 to handle case where identifier exists but isn't attached. Full import now completes successfully with 91,281+ donations.
 
-### `import_appc` - Connection Refused
-**Date**: 2026-01-12
-**Error**: `requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`
+### `import_appc` - Importer Rewritten
+**Date**: 2026-01-13
+**Error**: `requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))` on old URL.
 **Cause**: The target website `http://www.appc.org.uk/` is defunct. The APPC merged with the PRCA in 2018.
-**Status**: Open
-**Resolution**: The `import_appc` command needs to be rewritten to scrape the new PRCA Public Affairs Register. This is a significant task and is deferred for now.
+**Status**: Fixed
+**Resolution**: The `import_appc` command has been completely rewritten to scrape the new PRCA Professional Lobbying Register at `https://www.prca.global/professional-lobbying-register`. It now fetches all data from a single page.
+**Note**: The Docker build environment has an issue where it does not automatically install new packages from `requirements.txt`. `lxml` was added as a dependency and had to be installed manually in the container for the command to work. This underlying build issue needs to be resolved for the fix to be permanent.
 
 ---
 
@@ -245,7 +246,7 @@ Track which external data sources are still available:
 |--------|-----|--------|-------|
 | ParlParse | https://raw.githubusercontent.com/mysociety/parlparse/master/members/people.json | ✅ Working | Popolo JSON endpoint. URL was updated from `cdn.rawgit.com`. |
 | Electoral Commission | http://search.electoralcommission.org.uk/api/csv/Donations | ✅ Working | CSV API endpoint works! Returns 91,281+ donation records. Fixed DoesNotExist bug. |
-| APPC | https://prca.org.uk/register/prca-public-affairs-and-lobbying-register/ | ⛔ Broken | The original `appc.org.uk` is defunct; merged with PRCA. Needs new scraper. |
+| PRCA Register | https://www.prca.global/professional-lobbying-register | ✅ Working | The `import_appc` command was rewritten to scrape this new source. |
 | EveryPolitician | https://everypolitician.org/ | ❓ Unknown | May be archived. Uses `cdn.rawgit.com` and is likely broken. |
 | TheyWorkForYou | https://www.theyworkforyou.com/api/ | ❓ Unknown | Requires API key |
 | Companies House | https://developer.company-information.service.gov.uk/ | ❓ Unknown | API v3+ |

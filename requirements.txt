@@ -5,7 +5,8 @@ django-modelcluster>=6.0,<7.0
 django-treebeard>=4.5,<5.0
 
 # Web scraping & HTTP
-# beautifulsoup4 version controlled by wagtail dependency
+beautifulsoup4==4.12.3
+lxml==5.2.2
 requests==2.31.0
 
 # Database

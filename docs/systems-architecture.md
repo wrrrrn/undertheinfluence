@@ -32,21 +32,22 @@ The application serves three primary purposes:
 
 ### Technology Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | Django 1.11 LTS (upgrading from 1.8) |
-| CMS | Wagtail 2.0 (upgrading from 1.1) |
-| API | Django REST Framework 3.7.7 |
-| Database | PostgreSQL 15 (Docker) / SQLite (legacy) |
-| Cache | Redis 7 (Docker) |
-| Search | Elasticsearch 7.17 (optional, Docker profile) |
-| Python | 3.7 (will upgrade to 3.11+ in Phase 2.5) |
-| Deployment | Docker + Docker Compose |
-| Configuration | python-decouple (environment variables) |
-| Frontend | Bootstrap, jQuery, Bootstrap Material Design |
-| Asset Management | django-bower, django-compressor |
+| Layer | Technology | Status |
+|-------|------------|--------|
+| Framework | Django 6.0.1 | ✅ Phase 2 Complete |
+| CMS | Wagtail 7.2.x | ✅ Phase 2 Complete |
+| API | Django REST Framework 3.15.x | ✅ Phase 2 Complete |
+| Database | PostgreSQL 15 (Docker) / SQLite (legacy) | ✅ Stable |
+| Cache | Redis 7 (Docker) | ✅ Stable |
+| Search | Elasticsearch 7.17 (optional, Docker profile) | ⚠️ Optional |
+| Python | 3.12 | ✅ Phase 2 Complete |
+| Polymorphic Models | django-polymorphic 4.2.x | ✅ Phase 2 Complete |
+| Deployment | Docker + Docker Compose | ✅ Stable |
+| Configuration | python-decouple (environment variables) | ✅ Stable |
+| Frontend | Bootstrap, jQuery, Bootstrap Material Design | ⚠️ Needs modernization |
+| Asset Management | ~~django-bower~~ (removed), django-compressor | ⚠️ Phase 2.5 Pending |
 
-**Note**: See `docs/MODERNIZATION_PROGRESS.md` for upgrade roadmap. The project is in Phase 2 of modernization.
+**Note**: See `docs/MODERNIZATION_PROGRESS.md` for upgrade roadmap. Phase 2 (Django/Wagtail/Python upgrade) is COMPLETE. Phase 2.5 (Frontend Modernization) is next.
 
 ---
 
@@ -549,23 +550,23 @@ class DateframeableQuerySet(QuerySet):
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Django | >=1.11,<1.12 | Web framework (Django 1.11 LTS) |
-| wagtail | >=2.0,<2.1 | Content management system |
-| djangorestframework | 3.7.7 | REST API framework |
-| django-polymorphic | >=1.2,<2.0 | Polymorphic model inheritance |
+| Django | >=6.0,<6.1 | Web framework (Django 6.0.1) |
+| wagtail | >=7.2,<7.3 | Content management system (Wagtail 7.2.x) |
+| djangorestframework | >=3.15 | REST API framework |
+| django-polymorphic | >=4.2 | Polymorphic model inheritance |
 | django-model-utils | 2.3.1 | Model utilities (Choices, managers) |
 | beautifulsoup4 | 4.12.0 | HTML parsing for web scraping |
 | requests | 2.31.0 | HTTP client for API calls |
 | psycopg2-binary | 2.9.9 | PostgreSQL adapter |
 | python-decouple | 3.8 | Environment variable configuration |
-| PyYAML | 6.0.1 | YAML parsing (legacy, being phased out) |
+| PyYAML | 6.0.1 | YAML parsing (legacy configuration support) |
 | gunicorn | latest | WSGI HTTP server |
-| django-modelcluster | >=4.0,<5.0 | Wagtail model clusters |
+| django-modelcluster | >=6.0 | Wagtail model clusters |
 | django-treebeard | >=4.0,<5.0 | Tree structures for Wagtail |
-| django-bower | 5.0.4 | Bower integration |
-| bootstrap-admin | 0.3.6 | Admin theme |
+| ~~django-bower~~ | ~~removed~~ | ~~Bower integration~~ (incompatible with Django 2.0+) |
+| ~~bootstrap-admin~~ | ~~removed~~ | ~~Admin theme~~ (incompatible with Django 2.0+) |
 
-**Note**: Versions updated for Django 1.11 / Wagtail 2.0 compatibility. See `requirements.txt` for full list.
+**Note**: Versions updated for Django 6.0.1 / Wagtail 7.2.x / Python 3.12 compatibility. See `requirements.txt` for full list.
 
 ### Frontend Libraries (via Bower)
 
@@ -681,7 +682,7 @@ List donations received by an actor.
                 v                        v                        v
       +---------+---------+    +---------+---------+    +---------+---------+
       |    PostgreSQL 15  |    |     Redis 7       |    |  Django Web App   |
-      |    (database)     |    |     (cache)       |    |   (Python 3.7)    |
+      |    (database)     |    |     (cache)       |    |   (Python 3.12)   |
       +---------+---------+    +---------+---------+    +---------+---------+
                 |                        |                        |
                 +------------------------+------------------------+
@@ -980,17 +981,18 @@ docker compose build web && docker compose restart web
 1. ✅ **Docker Infrastructure**: Fully Dockerized development environment
 2. ✅ **Configuration Security**: Migrated from unsafe YAML to environment variables
 3. ✅ **API Security**: Added sort field whitelist
-4. ✅ **Django 1.11 Upgrade**: Migrated from Django 1.8 to 1.11 LTS
-5. ✅ **Wagtail 2.0 Upgrade**: Migrated from Wagtail 1.1 to 2.0
+4. ✅ **Django 6.0.1 Upgrade**: Migrated from Django 1.8 → 1.11 → 2.2 → 3.2 → 4.2 → 5.1 → 6.0.1
+5. ✅ **Wagtail 7.2.x Upgrade**: Migrated from Wagtail 1.1 → 2.0 → ... → 7.2.x
+6. ✅ **Python 3.12 Upgrade**: Migrated from Python 3.7 → 3.12
+7. ✅ **django-polymorphic 4.2.x**: Updated for Django 6.0+ compatibility
 
 **Remaining**:
-1. **Django Version**: Continue upgrade Django 1.11 → 2.2 → 3.2 → 4.2 → 5.1 (Phase 2)
-2. **Python Version**: Upgrade from Python 3.7 to 3.11+ (Phase 2.5)
-3. **Test Coverage**: Implement comprehensive test suite (Phase 3)
-4. **Documentation**: API documentation (OpenAPI/Swagger) (Phase 3)
-5. **CI/CD**: Automated testing and deployment pipeline (Phase 3)
-6. **Data Import Fixes**: Rewrite broken importers (import_ec, import_appc) (Phase 3)
-7. **Frontend Modernization**: Replace django-bower with modern tools (Phase 2.5)
+1. **Frontend Modernization**: Replace django-bower with modern tools (Phase 2.5)
+2. **Test Coverage**: Implement comprehensive test suite (Phase 3)
+3. **Documentation**: API documentation (OpenAPI/Swagger) (Phase 3)
+4. **CI/CD**: Automated testing and deployment pipeline (Phase 3)
+5. **Data Import Fixes**: Rewrite broken importers (import_ec, import_appc) (Phase 3)
+6. **Code Modernization**: Clean up deprecated patterns, leverage modern Django features (Phase 3)
 
 See `docs/MODERNIZATION_PROGRESS.md` for detailed roadmap.
 
@@ -1080,6 +1082,6 @@ See `docs/MODERNIZATION_PROGRESS.md` for detailed roadmap.
 
 ---
 
-*Document Version: 2.0*
+*Document Version: 3.0*
 *Last Updated: January 13, 2026*
-*Updated for Django 1.11, Wagtail 2.0, Docker infrastructure, and Phase 2 modernization*
+*Updated for Django 6.0.1, Wagtail 7.2.x, Python 3.12, and Phase 2 completion*
