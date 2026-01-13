@@ -6,8 +6,8 @@ from django.urls import reverse
 from django.db import models
 from model_utils import Choices
 # PassThroughManager removed in django-model-utils 3.x - use QuerySet.as_manager() instead
-from django.utils.encoding import python_2_unicode_compatible
-from django.utils.translation import ugettext_lazy as _
+# python_2_unicode_compatible removed in Django 3.0 - Python 2 no longer supported
+from django.utils.translation import gettext_lazy as _
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from polymorphic.models import PolymorphicModel

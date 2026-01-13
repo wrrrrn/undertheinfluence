@@ -22,6 +22,10 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv(
 
 BASE_URL = config('BASE_URL', default='http://localhost:8000')
 
+# Django 3.2+ requires DEFAULT_AUTO_FIELD setting
+# Using AutoField to maintain compatibility with existing migrations
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
@@ -69,7 +73,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'wagtail.core.middleware.SiteMiddleware',
+    'wagtail.contrib.legacy.sitemiddleware.SiteMiddleware',  # Moved to legacy in Wagtail 2.15
     'wagtail.contrib.redirects.middleware.RedirectMiddleware',
 ]
 
@@ -129,22 +133,7 @@ if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
             'PORT':     config('UTI_DB_PORT', default='5432'),
         }
     }
-
-    # Workaround for Django 1.11 PostgreSQL timezone check bug
-    # The database IS set to UTC, but Django's check is overly strict
-    # Replace the problematic utc_tzinfo_factory function with one that works
-    from django.db.backends.postgresql import utils
-    from psycopg2.tz import FixedOffsetTimezone
-
-    def utc_tzinfo_factory(offset):
-        """Fixed version that doesn't assert on timezone"""
-        if offset != 0:
-            # If not UTC, use the default behavior
-            return FixedOffsetTimezone(offset=offset, name=None)
-        # For UTC (offset 0), return None (Django's expected behavior)
-        return None
-
-    utils.utc_tzinfo_factory = utc_tzinfo_factory
+    # PostgreSQL timezone workaround removed - no longer needed in Django 3.2+
 else:
     DATABASES = {
         'default': {

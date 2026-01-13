@@ -1,8 +1,8 @@
-# Django & Wagtail (Phase 2 Stage 2: Django 2.2 LTS + Wagtail 2.8)
-Django>=2.2,<2.3
-wagtail>=2.8,<2.9
-django-modelcluster>=5.0,<6.0
-django-treebeard>=4.3,<5.0
+# Django & Wagtail (Phase 2 Stage 3: Django 3.2 LTS + Wagtail 2.15)
+Django>=3.2,<3.3
+wagtail>=2.15,<2.16
+django-modelcluster>=5.2,<6.0
+django-treebeard>=4.5,<5.0
 
 # Web scraping & HTTP
 # beautifulsoup4 version controlled by wagtail dependency
@@ -16,15 +16,15 @@ python-decouple==3.8
 PyYAML==6.0.1
 
 # Django utilities
-django-model-utils>=3.2,<4.0
-django-polymorphic>=2.0,<3.0
-django-compressor>=4.1,<5.0
+django-model-utils>=4.1,<5.0
+django-polymorphic>=3.0,<4.0
+django-compressor>=4.3,<5.0
 # bootstrap-admin removed - not compatible with Django 2.0+ (uses django.core.urlresolvers)
 
-# REST API (DRF 3.9+ compatible with Django 2.2)
-djangorestframework>=3.9,<3.10
-django-filter>=2.0,<3.0
-markdown==3.3.7
+# REST API (DRF 3.12+ compatible with Django 3.2)
+djangorestframework>=3.12,<3.13
+django-filter>=2.4,<3.0
+markdown>=3.3,<4.0
 
 # Production server
 gunicorn==21.2.0
