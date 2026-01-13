@@ -1,5 +1,5 @@
 # Django & Wagtail (Phase 2 Stage 3: Django 3.2 LTS + Wagtail 2.15)
-Django>=5.1,<5.2
+Django>=6.0,<6.1
 wagtail>=7.2,<7.3
 django-modelcluster>=6.0,<7.0
 django-treebeard>=4.5,<5.0
@@ -17,7 +17,7 @@ PyYAML==6.0.1
 
 # Django utilities
 django-model-utils>=4.1,<5.0
-django-polymorphic>=3.0,<4.0
+django-polymorphic>=4.2.0
 django-compressor>=4.3,<5.0
 # bootstrap-admin removed - not compatible with Django 2.0+ (uses django.core.urlresolvers)
 

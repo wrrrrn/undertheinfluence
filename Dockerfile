@@ -1,8 +1,7 @@
 # Multi-stage Dockerfile for UnderTheInfluence Django application
-FROM python:3.10-slim as base
+FROM python:3.12-slim as base
 
-# Using Python 3.10 for compatibility with current Django 5.0+ stack
-# Will upgrade to Python 3.11+ in Phase 2.5 after Django 5.1 upgrade
+# Using Python 3.12 for compatibility with Django 6.0+ stack
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
