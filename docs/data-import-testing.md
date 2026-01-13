@@ -3,7 +3,8 @@
 This document tracks the testing and status of all data import commands.
 
 **Date Started**: January 12, 2026
-**Environment**: Docker (Python 3.7, Django 1.11.29, PostgreSQL 15)
+**Last Updated**: January 13, 2026 (Phase 2 Complete)
+**Environment**: Docker (Python 3.12, Django 6.0.1, Wagtail 7.2.x, PostgreSQL 15)
 
 ## Testing Progress
 
@@ -45,7 +46,7 @@ This document tracks the testing and status of all data import commands.
 
 #### 3. import_ec
 **Purpose**: Import Electoral Commission donations (CSV API)
-**Status**: ⛔ BROKEN
+**Status**: ✅ Working
 **Command**: `docker compose exec web python manage.py import_ec`
 
 **Expected data**:
@@ -54,7 +55,9 @@ This document tracks the testing and status of all data import commands.
 - Donation amounts and dates
 
 **Notes**:
-- **BROKEN (Jan 12, 2026)**: The old CSV API endpoint `http://search.electoralcommission.org.uk/api/csv/Donations` is defunct and returns only headers. The Electoral Commission now uses an interactive search portal at `https://search.electoralcommission.org.uk/Search/Donations?...`. A complete rewrite of the importer is necessary to adapt to this new data retrieval method.
+- **FIXED (Jan 13, 2026)**: Fixed `DoesNotExist` exception when company registration number identifier exists but isn't attached to any organization yet. The EC CSV API is actually working and returns 91,281+ donation records.
+- Full import takes significant time (processes donations one by one)
+- Creates both Person and Organization actors as donors/recipients
 
 ---
 
@@ -167,12 +170,12 @@ This document tracks the testing and status of all data import commands.
 
 **Recommended order**:
 
-1. `import_parlparse --since 2010` (foundation data - MPs/Lords)
-2. `import_ministers --since 2010` (adds ministerial roles)
-3. `import_ec` (donations data)
-4. `import_appc` (lobbying data)
+1. `import_parlparse --since 2010` (✅ foundation data - MPs/Lords)
+2. `import_ministers --since 2010` (✅ adds ministerial roles)
+3. `import_ec` (✅ donations data - slow but working!)
+4. ~~`import_appc`~~ (⛔ lobbying data - BROKEN, APPC defunct)
 5. Verify data in admin and web interface
-6. `import_everypolitician` (if needed for photos)
+6. `import_everypolitician` (❓ if needed for photos - likely broken)
 7. Test remaining commands as needed
 
 ### Validation Queries
@@ -218,12 +221,12 @@ After imports:
 **Status**: Fixed
 **Resolution**: Added `'name'` and `'source'` to the `ignore_fields` tuple in the `_process_memberships` function of the `import_parlparse` command.
 
-### `import_ec` - Empty CSV
-**Date**: 2026-01-12
-**Error**: The command runs without error, but no donations are imported.
-**Cause**: The API at `http://search.electoralcommission.org.uk/api/csv/Donations` now returns a CSV file with only a header row and no data. The Electoral Commission website has a new "Political Finance Online" portal, and the old API endpoint appears to be defunct.
-**Status**: Open
-**Resolution**: The `import_ec` command needs to be completely rewritten to work with the new data portal. This is a significant task and is deferred for now.
+### `import_ec` - DoesNotExist Exception
+**Date**: 2026-01-13
+**Error**: `datafetch.models.models.Organization.DoesNotExist: Organization matching query does not exist.` raised during import at record ~12,121 of 91,281.
+**Cause**: The code assumed if a company registration number identifier exists, it must be attached to an organization. However, identifiers can exist without being attached to any entity yet.
+**Status**: Fixed
+**Resolution**: Added try-except block around `Organization.objects.get(identifiers=reg_num_identifier)` on line 55-63 to handle case where identifier exists but isn't attached. Full import now completes successfully with 91,281+ donations.
 
 ### `import_appc` - Connection Refused
 **Date**: 2026-01-12
@@ -241,7 +244,7 @@ Track which external data sources are still available:
 | Source | URL | Status | Notes |
 |--------|-----|--------|-------|
 | ParlParse | https://raw.githubusercontent.com/mysociety/parlparse/master/members/people.json | ✅ Working | Popolo JSON endpoint. URL was updated from `cdn.rawgit.com`. |
-| Electoral Commission | https://www.electoralcommission.org.uk/ | ⛔ Broken | The old CSV API endpoint is defunct. New portal requires a new scraper. |
+| Electoral Commission | http://search.electoralcommission.org.uk/api/csv/Donations | ✅ Working | CSV API endpoint works! Returns 91,281+ donation records. Fixed DoesNotExist bug. |
 | APPC | https://prca.org.uk/register/prca-public-affairs-and-lobbying-register/ | ⛔ Broken | The original `appc.org.uk` is defunct; merged with PRCA. Needs new scraper. |
 | EveryPolitician | https://everypolitician.org/ | ❓ Unknown | May be archived. Uses `cdn.rawgit.com` and is likely broken. |
 | TheyWorkForYou | https://www.theyworkforyou.com/api/ | ❓ Unknown | Requires API key |
