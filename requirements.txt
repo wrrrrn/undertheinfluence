@@ -1,17 +1,37 @@
-Django>=1.8,<1.9
-wagtail==1.1
+# Django & Wagtail (Phase 2: upgraded to Django 1.11 LTS + Wagtail 2.0)
+Django>=1.11,<1.12
+wagtail>=2.0,<2.1
+django-modelcluster>=4.0,<5.0
+django-treebeard>=4.0,<5.0
 
-beautifulsoup4==4.4.0
-requests==2.7.0
-bootstrap-admin==0.3.6
-psycopg2==2.6.1
-PyYAML==3.11
+# Web scraping & HTTP
+beautifulsoup4==4.12.0
+requests==2.31.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Configuration
+python-decouple==3.8
+PyYAML==6.0.1
+
+# Django utilities
 django-model-utils==2.3.1
-gunicorn==19.3.0
-django-polymorphic==0.7.2
+django-polymorphic>=1.2,<2.0
+django-compressor>=4.1,<5.0
+bootstrap-admin==0.3.6
 
+# REST API (DRF 3.7.7 compatible with Django 1.11)
+djangorestframework==3.7.7
+django-filter>=1.0,<2.0
 markdown==2.6.2
-djangorestframework
-django-filter==0.11.0
 
+# Production server
+gunicorn==21.2.0
+
+# Frontend (will be replaced in Phase 2.5)
 django-bower==5.0.4
+
+# Testing (compatible with Python 3.7)
+pytest==7.4.3
+pytest-django==4.5.2

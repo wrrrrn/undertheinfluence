@@ -37,7 +37,7 @@ class Command(BaseCommand):
         self.refresh = options.get('refresh')
 
         for filename in ["ministers.json", "ministers-2010.json"]:
-            url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/{}".format(filename)
+            url = "https://raw.githubusercontent.com/mysociety/parlparse/master/members/{}".format(filename)
             j = helpers.fetch_json(url, filename, refresh=self.refresh)
 
             since = options.get('since')

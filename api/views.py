@@ -17,6 +17,13 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
 class InfluenceListViewSet(generics.ListAPIView):
     # permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
 
+    # Whitelist of allowed sort fields to prevent SQL injection
+    ALLOWED_SORT_FIELDS = [
+        'name', 'received_date', 'accepted_date', 'reported_date', 'value',
+        'role', 'start_date', 'end_date', 'donor__name', 'recipient__name',
+        'agency__name', 'client__name'
+    ]
+
     def apply_filters(self, fk, search_field):
         actor = get_object_or_404(models.Actor, pk=self.kwargs['pk'])
         queryset = getattr(actor, fk)
@@ -26,9 +33,7 @@ class InfluenceListViewSet(generics.ListAPIView):
             query = {'{}__icontains'.format(search_field): search}
             queryset = queryset.filter(**query)
         sort = self.request.query_params.get('sort')
-        if sort:
-            # if sort == 'donor':
-            #     sort = 'donor__name'
+        if sort and sort in self.ALLOWED_SORT_FIELDS:
             order = '-' if self.request.query_params.get('order') == 'desc' else ''
             queryset = queryset.order_by(order + sort)
         return queryset.all()

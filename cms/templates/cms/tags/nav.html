@@ -6,7 +6,7 @@
             <a data-toggle="dropdown" class="dropdown-toggle" href="#">{{ menuitem.specific.menu_title }} <b class="caret"></b></a>
             {% top_menu_children parent=menuitem %}
         {% else %}
-            <a href="{% pageurl menuitem %}">{{ menuitem.specific.menu_title }}</a>
+            <a href="{{ menuitem.url }}">{{ menuitem.specific.menu_title }}</a>
         {% endif %}
     </li>
 {% endfor %}

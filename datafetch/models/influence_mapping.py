@@ -37,8 +37,8 @@ class Relationship(Dateframeable, Timestampable, models.Model):
 
 
 class Consultancy(Relationship):
-    client = models.ForeignKey(popolo_models.Actor, related_name='consulting_agencies', null=True)
-    agency = models.ForeignKey(popolo_models.Actor, related_name='consulting_clients', null=True)
+    client = models.ForeignKey(popolo_models.Actor, related_name='consulting_agencies', null=True, on_delete=models.SET_NULL)
+    agency = models.ForeignKey(popolo_models.Actor, related_name='consulting_clients', null=True, on_delete=models.SET_NULL)
 
 
 class Donation(Relationship):
@@ -74,8 +74,8 @@ class Donation(Relationship):
         "Start Up Grant (Discontinued)",
     )
 
-    donor = models.ForeignKey(popolo_models.Actor, related_name='donated_to', null=True)
-    recipient = models.ForeignKey(popolo_models.Actor, related_name='received_donations_from', null=True)
+    donor = models.ForeignKey(popolo_models.Actor, related_name='donated_to', null=True, on_delete=models.SET_NULL)
+    recipient = models.ForeignKey(popolo_models.Actor, related_name='received_donations_from', null=True, on_delete=models.SET_NULL)
 
     value = models.DecimalField(_("value"), blank=True, max_digits=12, decimal_places=2, help_text=_("The monetary value of the donation"))
     donation_type = models.CharField(_("donation type"), max_length=128, help_text=_("The type of donation e.g. cash"))
