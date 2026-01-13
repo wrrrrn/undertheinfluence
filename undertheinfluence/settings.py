@@ -40,7 +40,6 @@ INSTALLED_APPS = [
 
     # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
     'rest_framework',
-    'djangobower',
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
@@ -51,7 +50,7 @@ INSTALLED_APPS = [
     'wagtail.documents',
     'wagtail.images',
     'wagtail.admin',
-    'wagtail.core',
+    'wagtail',
 
     'modelcluster',
     'compressor',
@@ -126,7 +125,7 @@ if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
     DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.postgresql',
-            'NAME':     config('UTI_DB_NAME', default='undertheinfluence'),
+            'NAME':     'undertheinfluence', # Explicitly set to match the created database
             'USER':     config('UTI_DB_USER', default='uti'),
             'PASSWORD': config('UTI_DB_PASS', default=''),
             'HOST':     config('UTI_DB_HOST', default='localhost'),
@@ -163,7 +162,6 @@ STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
     'compressor.finders.CompressorFinder',
-    'djangobower.finders.BowerFinder',
 )
 
 STATICFILES_DIRS = (
@@ -176,16 +174,7 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
-# Django-bower settings
-BOWER_COMPONENTS_ROOT = BASE_DIR
 
-BOWER_INSTALLED_APPS = (
-    'jquery#2.1.1',
-    'bootstrap',
-    'bootstrap-material-design',
-    'bootstrap-table',
-    'moment',
-)
 
 # Wagtail settings
 

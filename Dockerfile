@@ -1,7 +1,8 @@
 # Multi-stage Dockerfile for UnderTheInfluence Django application
-# Using Python 3.7 for compatibility with current Django 1.11 + Wagtail 2.0 stack
+FROM python:3.9-slim as base
+
+# Using Python 3.9 for compatibility with current Django 4.0+ stack
 # Will upgrade to Python 3.11+ in Phase 2.5 after Django 5.1 upgrade
-FROM python:3.7-slim as base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \

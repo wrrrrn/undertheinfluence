@@ -1,7 +1,7 @@
 # Django & Wagtail (Phase 2 Stage 3: Django 3.2 LTS + Wagtail 2.15)
-Django>=3.2,<3.3
-wagtail>=2.15,<2.16
-django-modelcluster>=5.2,<6.0
+Django>=4.2,<4.3
+wagtail
+django-modelcluster>=6.0,<7.0
 django-treebeard>=4.5,<5.0
 
 # Web scraping & HTTP
@@ -22,7 +22,7 @@ django-compressor>=4.3,<5.0
 # bootstrap-admin removed - not compatible with Django 2.0+ (uses django.core.urlresolvers)
 
 # REST API (DRF 3.12+ compatible with Django 3.2)
-djangorestframework>=3.12,<3.13
+djangorestframework>=3.15,<3.16
 django-filter>=2.4,<3.0
 markdown>=3.3,<4.0
 
@@ -30,7 +30,6 @@ markdown>=3.3,<4.0
 gunicorn==21.2.0
 
 # Frontend (will be replaced in Phase 2.5)
-django-bower==5.0.4
 
 # Testing (compatible with Python 3.7)
 pytest==7.4.3
