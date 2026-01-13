@@ -81,8 +81,7 @@ class Command(BaseCommand):
                 # TODO
                 continue
 
-            identifier = dict(zip(('scheme', 'identifier'), id_.split('/', 1)))
-            identifier, created = models.Identifier.objects.get_or_create(**identifier)
+            identifier_dict = dict(zip(('scheme', 'identifier'), id_.split('/', 1)))
 
             other_names = []
             for n in person.get('other_names', []):
@@ -98,88 +97,79 @@ class Command(BaseCommand):
             person['name'] = name_dict.get('name')
             # TODO: sort_name
 
-            if not created:
-                p = models.Person.objects.get(identifiers=identifier)
-            else:
-                p = models.Person.objects.create(**{k: v for k, v in person.items() if k not in person_rels.keys()})
-                p.identifiers.add(identifier)
+            person_data = {k: v for k, v in person.items() if k not in person_rels.keys()}
+
+            try:
+                identifier = models.Identifier.objects.get(**identifier_dict)
+                p = models.Person.objects.get(pk=identifier.object_id)
+                for k, v in person_data.items():
+                    setattr(p, k, v)
+                p.save()
+            except (models.Identifier.DoesNotExist, models.Person.DoesNotExist):
+                p = models.Person.objects.create(**person_data)
+                p.identifiers.create(**identifier_dict)
+
             for rel_id, rel_model in person_rels.items():
-                if not rel_model:
+                if not rel_model or rel_id == 'identifiers':
                     continue
                 for rel_dict in person.get(rel_id, []):
-                    if rel_id == 'identifiers' and rel_dict.get('scheme').endswith('_id'):
-                        # strip _id off the end of historichansard and datadotparl
-                        rel_dict['scheme'] = rel_dict['scheme'][:-3]
-                    rel, _ = rel_model.objects.get_or_create(**rel_dict)
-                    getattr(p, rel_id).add(rel)
+                    getattr(p, rel_id).get_or_create(**rel_dict)
+
             people_dict[id_] = p.id
         return people_dict
 
     def _process_organizations(self, organizations):
-        # parlparse doesn't have nice party IDs, so we hardcode
-        # a lookup to Electoral Commission IDs here.
-        party_lookup = {
-          "alliance": ("PP103", "Alliance - Alliance Party of Northern Ireland",),
-          "conservative": ("PP52", "Conservative Party",),
-          "dup": ("PP70", "Democratic Unionist Party - D.U.P.",),
-          "green": ("PP63", "Green Party",),
-          "labour": ("PP53", "Labour Party",),
-          "liberal-democrat": ("PP90", "Liberal Democrats",),
-          "niup": ("PP3", "Northern Ireland Unionist Party",),
-          "niwc": ("PP91", "Northern Ireland Women's Coalition",),
-          "plaid-cymru": ("PP77", "Plaid Cymru - The Party of Wales",),
-          "pup": ("PP101", "Progressive Unionist Party of Northern Ireland",),
-          "respect": ("PP362", "The Respect Party",),
-          "scottish-national-party": ("PP102", "Scottish National Party (SNP)",),
-          "sinn-fein": ("PP39", "Sinn Féin",),
-          "social-democratic-and-labour-party": ("PP55", "SDLP (Social Democratic & Labour Party)",),
-          "ssp": ("PP46", "Scottish Socialist Party",),
-          "traditional-unionist-voice": ("PP680", "Traditional Unionist Voice - TUV",),
-          "ukip": ("PP85", "UK Independence Party (UKIP)",),
-          "ukup": ("PP107", "United Kingdom Unionist Party U.K.U.P.",),
-          "uup": ("PP83", "Ulster Unionist Party",),
+        org_rels = {
+            'identifiers': models.Identifier,
+            'other_names': models.OtherName,
         }
 
         organizations_dict = {}
-        organizations += [{
-            'id': 'house-of-commons',
-            'name': 'House of Commons',
-            'classification': 'Legislature',
-        }, {
-            'id': 'house-of-lords',
-            'name': 'House of Lords',
-            'classification': 'Legislature',
-        }, {
-            'id': 'scottish-parliament',
-            'name': 'Scottish Parliament',
-            'classification': 'Legislature',
-        }, {
-            'id': 'northern-ireland-assembly',
-            'name': 'Northern Ireland Assembly',
-            'classification': 'Legislature',
-        }]
         for organization in organizations:
-            if organization['classification'] == 'party':
+            if organization.get('classification') == 'party':
                 organization['classification'] = 'Political Party'
-            id_ = organization['id']
-            del organization['id']
-            if id_ in party_lookup:
-                ec_identifier, organization["name"] = party_lookup[id_]
-                identifier, created = models.Identifier.objects.get_or_create(
-                    identifier=ec_identifier,
-                    scheme="electoralcommission")
-                if created:
-                    o = models.Organization.objects.create(**organization)
-                    o.identifiers.add(identifier)
-                else:
-                    o = models.Organization.objects.get(identifiers=identifier)
-            else:
-                # TODO: The default here isn't quite right. We should
-                # check a bit more thoroughly that the org doesn't already
-                # exist.
-                o, created = models.Organization.objects.get_or_create(**organization)
+            id_ = organization.pop('id')
+
+            org_data = {k: v for k, v in organization.items() if k not in org_rels.keys()}
+            
+            o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
+
+            for rel_id, rel_model in org_rels.items():
+                if not rel_model:
+                    continue
+                for rel_dict in organization.get(rel_id, []):
+                    rel, _ = getattr(o, rel_id).get_or_create(**rel_dict)
+
             organizations_dict[id_] = o.id
-        return organizations_dict
+        return organizations_dict 
+    
+        # for organization in organizations:
+        #     if organization.get('classification') == 'party':
+        #         organization['classification'] = 'Political Party'
+        #     id_ = organization.pop('id')
+
+        #     org_data = {k: v for k, v in organization.items() if k not in org_rels.keys()}
+
+        #     if id_ in party_lookup:
+        #         ec_identifier, org_data["name"] = party_lookup[id_]
+        #         identifier_dict = {'identifier': ec_identifier, 'scheme': 'electoralcommission'}
+        #         try:
+        #             identifier = models.Identifier.objects.get(**identifier_dict)
+        #             o = models.Organization.objects.get(pk=identifier.object_id)
+        #         except (models.Identifier.DoesNotExist, models.Organization.DoesNotExist):
+        #             o = models.Organization.objects.create(**org_data)
+        #             o.identifiers.create(**identifier_dict)
+        #     else:
+        #         o, _ = models.Organization.objects.get_or_create(name=org_data.get('name'), defaults=org_data)
+
+        #     for rel_id, rel_model in org_rels.items():
+        #         if not rel_model or rel_id == 'identifiers':
+        #             continue
+        #         for rel_dict in organization.get(rel_id, []):
+        #             rel, _ = getattr(o, rel_id).get_or_create(**rel_dict)
+
+        #     organizations_dict[id_] = o.id
+        # return organizations_dict
 
     def _process_posts(self, posts, j):
         ignore_fields = ('id', 'area', 'identifiers',)
@@ -196,7 +186,7 @@ class Command(BaseCommand):
         return posts_dict
 
     def _process_memberships(self, memberships, j):
-        ignore_fields = ('id', 'identifiers', 'start_reason', 'end_reason', 'redirect',)
+        ignore_fields = ('id', 'identifiers', 'start_reason', 'end_reason', 'redirect', 'name', 'source',)
         unique_fields = ('person_id', 'post_id', 'organization_id', 'on_behalf_of_id', 'start_date',)
 
         for membership in memberships:

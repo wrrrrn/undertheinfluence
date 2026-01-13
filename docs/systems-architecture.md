@@ -34,13 +34,19 @@ The application serves three primary purposes:
 
 | Layer | Technology |
 |-------|------------|
-| Framework | Django 1.8 |
-| CMS | Wagtail 1.1 |
-| API | Django REST Framework |
-| Database | PostgreSQL (production) / SQLite (development) |
-| Search | Elasticsearch |
+| Framework | Django 1.11 LTS (upgrading from 1.8) |
+| CMS | Wagtail 2.0 (upgrading from 1.1) |
+| API | Django REST Framework 3.7.7 |
+| Database | PostgreSQL 15 (Docker) / SQLite (legacy) |
+| Cache | Redis 7 (Docker) |
+| Search | Elasticsearch 7.17 (optional, Docker profile) |
+| Python | 3.7 (will upgrade to 3.11+ in Phase 2.5) |
+| Deployment | Docker + Docker Compose |
+| Configuration | python-decouple (environment variables) |
 | Frontend | Bootstrap, jQuery, Bootstrap Material Design |
 | Asset Management | django-bower, django-compressor |
+
+**Note**: See `docs/MODERNIZATION_PROGRESS.md` for upgrade roadmap. The project is in Phase 2 of modernization.
 
 ---
 
@@ -196,16 +202,18 @@ datafetch/
 
 | Command | Data Source | Status |
 |---------|-------------|--------|
-| `import_parlparse` | MySociety ParlParse | Complete |
-| `import_ministers` | MySociety ParlParse | Complete |
-| `import_ec` | Electoral Commission | Complete |
-| `import_appc` | APPC Register | Complete |
-| `import_everypolitician` | EveryPolitician | Complete |
-| `import_companieshouse` | Companies House | Partial |
-| `import_twfy` | TheyWorkForYou | Partial |
-| `import_mpsinterests` | Register of MPs' Interests | Partial |
-| `import_lordsinterests` | Register of Lords' Interests | Partial |
-| `import_powerbase` | Powerbase Wiki | Partial |
+| `import_parlparse` | MySociety ParlParse | ✅ Working (URLs updated) |
+| `import_ministers` | MySociety ParlParse | ✅ Working (URLs updated) |
+| `import_ec` | Electoral Commission | ⛔ Broken (API defunct) |
+| `import_appc` | APPC Register | ⛔ Broken (site defunct) |
+| `import_everypolitician` | EveryPolitician | ⏸️ Likely Broken (cdn.rawgit.com) |
+| `import_companieshouse` | Companies House | ⏸️ Partial (untested) |
+| `import_twfy` | TheyWorkForYou | ⏸️ Partial (untested) |
+| `import_mpsinterests` | Register of MPs' Interests | ⏸️ Partial (untested) |
+| `import_lordsinterests` | Register of Lords' Interests | ⏸️ Partial (untested) |
+| `import_powerbase` | Powerbase Wiki | ⏸️ Partial (untested) |
+
+See `docs/data-import-testing.md` for detailed testing results.
 
 ---
 
@@ -541,20 +549,23 @@ class DateframeableQuerySet(QuerySet):
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Django | >=1.8,<1.9 | Web framework |
-| wagtail | 1.1 | Content management system |
-| djangorestframework | latest | REST API framework |
-| django-polymorphic | 0.7.2 | Polymorphic model inheritance |
+| Django | >=1.11,<1.12 | Web framework (Django 1.11 LTS) |
+| wagtail | >=2.0,<2.1 | Content management system |
+| djangorestframework | 3.7.7 | REST API framework |
+| django-polymorphic | >=1.2,<2.0 | Polymorphic model inheritance |
 | django-model-utils | 2.3.1 | Model utilities (Choices, managers) |
-| beautifulsoup4 | 4.4.0 | HTML parsing for web scraping |
-| requests | 2.7.0 | HTTP client for API calls |
-| psycopg2 | 2.6.1 | PostgreSQL adapter |
-| PyYAML | 3.11 | YAML configuration parsing |
-| gunicorn | 19.3.0 | WSGI HTTP server |
-| markdown | 2.6.2 | Markdown processing |
-| django-filter | 0.11.0 | Filtering for DRF |
+| beautifulsoup4 | 4.12.0 | HTML parsing for web scraping |
+| requests | 2.31.0 | HTTP client for API calls |
+| psycopg2-binary | 2.9.9 | PostgreSQL adapter |
+| python-decouple | 3.8 | Environment variable configuration |
+| PyYAML | 6.0.1 | YAML parsing (legacy, being phased out) |
+| gunicorn | latest | WSGI HTTP server |
+| django-modelcluster | >=4.0,<5.0 | Wagtail model clusters |
+| django-treebeard | >=4.0,<5.0 | Tree structures for Wagtail |
 | django-bower | 5.0.4 | Bower integration |
 | bootstrap-admin | 0.3.6 | Admin theme |
+
+**Note**: Versions updated for Django 1.11 / Wagtail 2.0 compatibility. See `requirements.txt` for full list.
 
 ### Frontend Libraries (via Bower)
 
@@ -568,15 +579,18 @@ class DateframeableQuerySet(QuerySet):
 
 ### External Data Sources
 
-| Source | URL | Data Type |
-|--------|-----|-----------|
-| ParlParse | cdn.rawgit.com/mysociety/parlparse | JSON (Popolo) |
-| Electoral Commission | search.electoralcommission.org.uk/api | CSV |
-| APPC Register | www.appc.org.uk/members/register | HTML (scrape) |
-| EveryPolitician | cdn.rawgit.com/everypolitician/everypolitician-data | JSON (Popolo) |
-| TheyWorkForYou API | www.theyworkforyou.com/api | JSON |
-| data.parliament.uk | data.parliament.uk | XML |
-| Open Corporates | api.opencorporates.com | JSON |
+| Source | URL | Status | Data Type |
+|--------|-----|--------|-----------|
+| ParlParse | raw.githubusercontent.com/mysociety/parlparse | ✅ Working | JSON (Popolo) |
+| Ministers Data | raw.githubusercontent.com/mysociety/parlparse | ✅ Working | JSON |
+| Electoral Commission | search.electoralcommission.org.uk | ⛔ Broken | CSV (API defunct) |
+| PRCA Register | prca.org.uk/register/ | ⛔ Needs Rewrite | HTML (APPC merged) |
+| EveryPolitician | cdn.rawgit.com/everypolitician | ⏸️ Likely Broken | JSON (Popolo) |
+| TheyWorkForYou API | www.theyworkforyou.com/api | ⏸️ Untested | JSON |
+| data.parliament.uk | data.parliament.uk | ⏸️ Untested | XML |
+| Open Corporates | api.opencorporates.com | ⏸️ Untested | JSON |
+
+**Note**: URLs updated from `cdn.rawgit.com` to `raw.githubusercontent.com` for ParlParse. See `docs/data-import-testing.md`.
 
 ### External Services
 
@@ -655,7 +669,33 @@ List donations received by an actor.
 
 ## Deployment Architecture
 
-### Production Environment
+### Docker-Based Development Environment (Current)
+
+```
+                              +---------------------+
+                              |   Docker Compose    |
+                              +----------+----------+
+                                         |
+                +------------------------+------------------------+
+                |                        |                        |
+                v                        v                        v
+      +---------+---------+    +---------+---------+    +---------+---------+
+      |    PostgreSQL 15  |    |     Redis 7       |    |  Django Web App   |
+      |    (database)     |    |     (cache)       |    |   (Python 3.7)    |
+      +---------+---------+    +---------+---------+    +---------+---------+
+                |                        |                        |
+                +------------------------+------------------------+
+                                         |
+                                         v
+                              +----------+----------+
+                              | Elasticsearch 7.17  |
+                              |   (optional)        |
+                              +---------------------+
+```
+
+All services orchestrated via `docker-compose.yml` with health checks and persistent volumes.
+
+### Future Production Environment
 
 ```
                                     +------------------+
@@ -667,8 +707,8 @@ List donations received by an actor.
                               |                             |
                               v                             v
                     +---------+---------+         +---------+---------+
+                    |   Docker Container|         |   Docker Container|
                     |   Gunicorn WSGI   |         |   Gunicorn WSGI   |
-                    |   (app server)    |         |   (app server)    |
                     +---------+---------+         +---------+---------+
                               |                             |
                               +--------------+--------------+
@@ -677,29 +717,36 @@ List donations received by an actor.
                     |                        |                        |
                     v                        v                        v
           +---------+---------+    +---------+---------+    +---------+---------+
-          |    PostgreSQL     |    |   Elasticsearch   |    |   Static Files    |
+          |    PostgreSQL 15  |    |   Elasticsearch   |    |   Static Files    |
           |    (database)     |    |    (search)       |    |   (nginx/CDN)     |
           +-------------------+    +-------------------+    +-------------------+
 ```
 
 ### Configuration
 
-Configuration is managed via YAML file (`conf/general.yml`):
+Configuration is managed via environment variables (`.env` file with python-decouple):
 
-```yaml
-STAGING: '0'                    # 0 for production
-DATABASE_SYSTEM: 'postgresql'   # Use PostgreSQL in production
-UTI_DB_USER: 'db_user'
-UTI_DB_NAME: 'undertheinfluence'
-UTI_DB_PASS: '***'
-UTI_DB_HOST: 'localhost'
-UTI_DB_PORT: '5432'
-SECRET_KEY: '***'               # Cryptographic key
-TWFY_API_KEY: '***'             # TheyWorkForYou API
-ALLOWED_HOSTS:
-  - 'undertheinfluence.org.uk'
-BASE_URL: 'https://www.undertheinfluence.org.uk'
+```bash
+# .env file
+DEBUG=False
+SECRET_KEY='***'
+ALLOWED_HOSTS='undertheinfluence.org.uk,www.undertheinfluence.org.uk'
+BASE_URL='https://www.undertheinfluence.org.uk'
+
+# Database (Docker Compose auto-configures these in development)
+DATABASE_SYSTEM='postgresql'
+UTI_DB_NAME='undertheinfluence'
+UTI_DB_USER='uti'
+UTI_DB_PASS='***'
+UTI_DB_HOST='db'
+UTI_DB_PORT='5432'
+
+# Optional
+TWFY_API_KEY='***'
+SUPPORT_EMAIL='support@example.com'
 ```
+
+**Security Improvement**: Migrated from unsafe `yaml.load()` to python-decouple in Phase 1.
 
 ### Security Settings
 
@@ -713,16 +760,35 @@ CSRF_COOKIE_HTTPONLY = True
 
 ### Deployment Process
 
-Deployment is managed via a separate repository: `github.com/spudmind/uti-deploy`
+**Development (Docker)**:
+```bash
+# Start all services
+docker compose up -d
 
-Typical deployment steps:
+# Run migrations
+docker compose exec web python manage.py migrate
+
+# View logs
+docker compose logs -f web
+
+# Rebuild after changes
+docker compose build web && docker compose restart web
+```
+
+**Production** (managed via separate repository: `github.com/spudmind/uti-deploy`):
 
 1. Pull latest code from repository
-2. Install/update Python dependencies: `pip install -r requirements.txt`
-3. Install/update frontend dependencies: `python manage.py bower_install`
-4. Run database migrations: `python manage.py migrate`
-5. Collect static files: `python manage.py collectstatic`
-6. Restart Gunicorn workers
+2. Build Docker image: `docker compose build`
+3. Run database migrations: `docker compose exec web python manage.py migrate`
+4. Collect static files: `docker compose exec web python manage.py collectstatic`
+5. Restart containers: `docker compose restart web`
+
+**Legacy (Non-Docker)**:
+1. Pull latest code
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run migrations: `python manage.py migrate`
+4. Collect static: `python manage.py collectstatic`
+5. Restart Gunicorn workers
 
 ---
 
@@ -910,12 +976,23 @@ Typical deployment steps:
 
 ### Technical Debt
 
-1. **Django Version**: Upgrade from Django 1.8 (EOL) to current LTS
-2. **Wagtail Version**: Upgrade from Wagtail 1.1 to current version
-3. **Python Version**: Ensure Python 3.10+ compatibility
-4. **Test Coverage**: Implement comprehensive test suite
-5. **Documentation**: API documentation (OpenAPI/Swagger)
-6. **CI/CD**: Automated testing and deployment pipeline
+**Addressed in Phase 1-2**:
+1. ✅ **Docker Infrastructure**: Fully Dockerized development environment
+2. ✅ **Configuration Security**: Migrated from unsafe YAML to environment variables
+3. ✅ **API Security**: Added sort field whitelist
+4. ✅ **Django 1.11 Upgrade**: Migrated from Django 1.8 to 1.11 LTS
+5. ✅ **Wagtail 2.0 Upgrade**: Migrated from Wagtail 1.1 to 2.0
+
+**Remaining**:
+1. **Django Version**: Continue upgrade Django 1.11 → 2.2 → 3.2 → 4.2 → 5.1 (Phase 2)
+2. **Python Version**: Upgrade from Python 3.7 to 3.11+ (Phase 2.5)
+3. **Test Coverage**: Implement comprehensive test suite (Phase 3)
+4. **Documentation**: API documentation (OpenAPI/Swagger) (Phase 3)
+5. **CI/CD**: Automated testing and deployment pipeline (Phase 3)
+6. **Data Import Fixes**: Rewrite broken importers (import_ec, import_appc) (Phase 3)
+7. **Frontend Modernization**: Replace django-bower with modern tools (Phase 2.5)
+
+See `docs/MODERNIZATION_PROGRESS.md` for detailed roadmap.
 
 ### Scalability Considerations
 
@@ -978,28 +1055,31 @@ Typical deployment steps:
 
 ## Appendix B: Configuration Reference
 
-### Environment Variables (via conf/general.yml)
+### Environment Variables (via .env file)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `STAGING` | Yes | '0' for production, '1' for development |
-| `DATABASE_SYSTEM` | Yes | 'postgresql' or 'sqlite' |
-| `UTI_DB_USER` | If PostgreSQL | Database username |
-| `UTI_DB_NAME` | If PostgreSQL | Database name |
-| `UTI_DB_PASS` | If PostgreSQL | Database password |
-| `UTI_DB_HOST` | If PostgreSQL | Database host |
-| `UTI_DB_PORT` | If PostgreSQL | Database port |
-| `SECRET_KEY` | Yes | Django secret key |
-| `TWFY_API_KEY` | Optional | TheyWorkForYou API key |
-| `ADMINS` | Optional | Admin email addresses |
-| `ALLOWED_HOSTS` | Yes | Permitted hostnames |
-| `BASE_URL` | Yes | Public base URL |
-| `SUPPORT_EMAIL` | Optional | Support contact email |
-| `SERVER_EMAIL` | Optional | Error email from address |
-| `DEFAULT_FROM_EMAIL` | Optional | General email from address |
+**Migration Note**: Configuration migrated from `conf/general.yml` (unsafe YAML) to `.env` file (python-decouple) in Phase 1.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DEBUG` | Yes | True | Django debug mode ('True' or 'False') |
+| `SECRET_KEY` | Yes | - | Django secret key (change in production!) |
+| `DATABASE_SYSTEM` | Yes | 'sqlite' | 'postgresql' or 'sqlite' |
+| `UTI_DB_USER` | If PostgreSQL | 'uti' | Database username |
+| `UTI_DB_NAME` | If PostgreSQL | 'undertheinfluence' | Database name |
+| `UTI_DB_PASS` | If PostgreSQL | - | Database password |
+| `UTI_DB_HOST` | If PostgreSQL | 'localhost' | Database host ('db' in Docker) |
+| `UTI_DB_PORT` | If PostgreSQL | '5432' | Database port |
+| `ALLOWED_HOSTS` | Yes | 'localhost,127.0.0.1' | Comma-separated permitted hostnames |
+| `BASE_URL` | Yes | 'http://localhost:8000' | Public base URL |
+| `TWFY_API_KEY` | Optional | - | TheyWorkForYou API key |
+| `SUPPORT_EMAIL` | Optional | - | Support contact email |
+| `SERVER_EMAIL` | Optional | - | Error email from address |
+| `DEFAULT_FROM_EMAIL` | Optional | - | General email from address |
+
+**Docker**: In Docker Compose, database settings are automatically configured in the service environment.
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: January 2026*
-*Generated from codebase analysis*
+*Document Version: 2.0*
+*Last Updated: January 13, 2026*
+*Updated for Django 1.11, Wagtail 2.0, Docker infrastructure, and Phase 2 modernization*

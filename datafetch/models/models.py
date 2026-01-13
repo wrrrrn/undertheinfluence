@@ -2,7 +2,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import RegexValidator
 from django.template.defaultfilters import slugify
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.db import models
 from model_utils import Choices
 from model_utils.managers import PassThroughManager
@@ -10,7 +10,7 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
-from polymorphic import PolymorphicModel
+from polymorphic.models import PolymorphicModel
 
 from undertheinfluence.settings import BASE_URL
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
@@ -111,11 +111,11 @@ class Organization(Actor):
     classification = models.CharField(_("classification"), max_length=512, blank=True, help_text=_("An organization category, e.g. committee"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
-    parent = models.ForeignKey('Organization', blank=True, null=True, related_name='children',
+    parent = models.ForeignKey('Organization', blank=True, null=True, related_name='children', on_delete=models.SET_NULL,
                                help_text=_("The organization that contains this organization"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='organizations',
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='organizations', on_delete=models.SET_NULL,
                                help_text=_("The geographic area to which this organization is related"))
 
     founding_date = models.CharField(_("founding date"), max_length=10, null=True, blank=True, validators=[
@@ -164,11 +164,11 @@ class Post(Dateframeable, Timestampable, models.Model):
     role = models.CharField(_("role"), max_length=512, blank=True, help_text=_("The function that the holder of the post fulfills"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
-    organization = models.ForeignKey('Organization', related_name='posts',
+    organization = models.ForeignKey('Organization', related_name='posts', on_delete=models.CASCADE,
                                      help_text=_("The organization in which the post is held"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='posts',
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='posts', on_delete=models.SET_NULL,
                                help_text=_("The geographic area to which the post is related"))
 
     # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
@@ -198,23 +198,23 @@ class Membership(Dateframeable, Timestampable, models.Model):
     role = models.CharField(_("role"), max_length=512, blank=True, help_text=_("The role that the person fulfills in the organization"))
 
     # reference to "http://popoloproject.com/schemas/person.json#"
-    person = models.ForeignKey('Person', related_name='memberships',
+    person = models.ForeignKey('Person', related_name='memberships', on_delete=models.CASCADE,
                                help_text=_("The person who is a party to the relationship"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
     organization = models.ForeignKey('Organization', blank=True, null=True,
-                                     related_name='memberships',
+                                     related_name='memberships', on_delete=models.CASCADE,
                                      help_text=_("The organization that is a party to the relationship"))
     on_behalf_of = models.ForeignKey('Organization', blank=True, null=True,
-                                     related_name='memberships_on_behalf_of',
+                                     related_name='memberships_on_behalf_of', on_delete=models.SET_NULL,
                                      help_text=_("The organization on whose behalf the person is a party to the relationship"))
 
     # reference to "http://popoloproject.com/schemas/post.json#"
-    post = models.ForeignKey('Post', blank=True, null=True, related_name='memberships',
+    post = models.ForeignKey('Post', blank=True, null=True, related_name='memberships', on_delete=models.CASCADE,
                              help_text=_("The post held by the person in the organization through this membership"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='memberships',
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='memberships', on_delete=models.SET_NULL,
                                help_text=_("The geographic area to which the post is related"))
 
     # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
@@ -347,7 +347,7 @@ class Area(GenericRelatable, Dateframeable, Timestampable, models.Model):
     other_identifiers = GenericRelation('Identifier', blank=True, null=True, help_text="Other issued identifiers (zip code, other useful codes, ...)")
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    parent = models.ForeignKey('Area', blank=True, null=True, related_name='children',
+    parent = models.ForeignKey('Area', blank=True, null=True, related_name='children', on_delete=models.SET_NULL,
                                help_text=_("The area that contains this area"))
 
     # geom property, as text (GeoJson, KML, GML)
@@ -367,8 +367,8 @@ class AreaI18Name(models.Model):
     Internationalized name for an Area.
     Contains references to language and area.
     """
-    area = models.ForeignKey('Area', related_name='i18n_names')
-    language = models.ForeignKey('Language')
+    area = models.ForeignKey('Area', related_name='i18n_names', on_delete=models.CASCADE)
+    language = models.ForeignKey('Language', on_delete=models.CASCADE)
     name = models.CharField(_("name"), max_length=255)
 
     def __str__(self):

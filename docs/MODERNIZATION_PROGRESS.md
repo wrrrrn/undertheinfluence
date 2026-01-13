@@ -5,11 +5,11 @@ This document tracks the progress of modernizing the UnderTheInfluence Django ap
 ## Overview
 
 - **Start Date**: January 12, 2026
-- **Current Phase**: Ready for Phase 2 ⚠️
+- **Current Phase**: Phase 2 IN PROGRESS 🚀
 - **Current Branch**: review-status
 - **Phase 1 (Docker Foundation)**: COMPLETED ✅
-- **Phase 1.5 (Data Ingestion)**: BLOCKED ⛔ (see findings below)
-- **Recommendation**: Skip to Phase 2 (Django Upgrade)
+- **Phase 1.5 (Data Ingestion)**: UNBLOCKED ✅
+- **Phase 2 (Django/Wagtail Upgrade)**: IN PROGRESS 🚀
 
 ## Phase 1: Docker Foundation - COMPLETED ✅
 
@@ -91,9 +91,9 @@ This document tracks the progress of modernizing the UnderTheInfluence Django ap
 - **Database**: PostgreSQL 15 (all migrations applied)
 - **Cache**: Redis 7
 - **Python**: 3.7
-- **Django**: 1.8.19
-- **Wagtail**: 1.1
-- **Test Status**: Manual test passed - default Wagtail page displays
+- **Django**: 1.11.29
+- **Wagtail**: 2.0
+- **Test Status**: Application starts successfully.
 
 ### Commands Reference
 
@@ -124,13 +124,11 @@ docker compose build web
 docker compose restart web
 ```
 
-## Phase 1.5: Data Ingestion & Testing - BLOCKED ⛔
+## Phase 1.5: Data Ingestion & Testing - UNBLOCKED ✅
 
 **Objective**: Populate the database with real data and verify data import functionality
 
-**Status**: ⛔ BLOCKED by critical Python 3.7 + Django 1.8 incompatibility
-
-**See**: `docs/phase-1-5-findings.md` for detailed analysis
+**Status**: ✅ UNBLOCKED. The upgrade to Django 1.11 has resolved the `RuntimeError: generator raised StopIteration` issue. Data import commands can now be tested.
 
 **Rationale**:
 - The application currently has an empty database showing Wagtail welcome page
@@ -180,8 +178,8 @@ docker compose restart web
    - [ ] Configure site settings
 
 5. **Verify Application Functionality**
-   - [ ] Test actor detail pages (/person/, /organization/)
-   - [ ] Test search functionality (/search/)
+   - ✅ Test actor detail pages (/person/, /organization/)
+   - ✅ Test search functionality (/search/)
    - [ ] Test API endpoints (/api/)
    - [ ] Verify data relationships (donations, memberships, consultancies)
 
@@ -204,45 +202,55 @@ docker compose exec db psql -U uti -d undertheinfluence -c "SELECT COUNT(*) FROM
 # Visit http://localhost:8000/api/
 ```
 
-### Critical Blocker Discovered
-
-**Python 3.7 + Django 1.8 ORM Incompatibility**:
-- Python 3.7 implemented PEP 479 (StopIteration handling in generators)
-- Django 1.8's ORM predates this change and breaks with `RuntimeError: generator raised StopIteration`
-- Affects ALL database queries using `.get()`, `.get_or_create()`, etc.
-- Cannot be easily patched without modifying Django core
-- **Resolution**: Must upgrade to Django 1.11+ which supports Python 3.7
-
-### Issues Fixed
-
-✅ **RawGit CDN Shutdown**: Updated `import_parlparse` to use `raw.githubusercontent.com`
-✅ **Name Field Length**: Increased Person name fields from 128 to 512 characters
-✅ **PostgreSQL Timezone**: Monkey-patched Django 1.8's timezone check
-
-### Issues Discovered (Not Yet Testable)
-
-- External API availability and rate limits - ❓ Unknown (blocked by ORM issue)
-- Data format changes since 2015 - ❓ Unknown (blocked by ORM issue)
-- Missing or deprecated data sources - ❓ Unknown (blocked by ORM issue)
-
 ### Recommendation
 
-**Skip Phase 1.5 and proceed to Phase 2 immediately**. Data imports can be tested after Django 1.11 upgrade when Python 3.7 compatibility is restored.
+**Proceed with testing data import commands as originally planned** before moving to the next Django upgrade.
 
-## Phase 2: Django & Wagtail Upgrade - PENDING
+## Phase 2: Django & Wagtail Upgrade - IN PROGRESS 🚀
 
 **Objective**: Upgrade from Django 1.8 → 5.1 and Wagtail 1.1 → 7.2
 
-**Status**: Not started
+**Status**: Stage 1 (Django 1.11 / Wagtail 2.0) is complete and stable.
 
-**Planned Tasks**:
-- Incremental Django upgrades (1.8 → 1.11 → 2.2 → 3.2 → 4.2 → 5.1)
-- Wagtail upgrade to match Django versions
-- Fix deprecated API usage
-- Update URL patterns
-- Migrate middleware configuration
-- Update template tags
-- Fix model changes
+### Investigation & Recovery (January 12, 2026)
+
+Upon review, it was discovered that an upgrade to Django 1.11 and Wagtail 2.0 had been started but was left incomplete, causing the application to fail at startup. The following fixes were implemented to stabilize the environment:
+
+1.  **Dependency Analysis**:
+    - `requirements.txt` showed `Django>=1.11` and `wagtail>=2.0`, but contained an incompatible `djangorestframework==3.6.4`.
+    - ✅ **Action**: Upgraded `djangorestframework` to `3.7.7` for Django 1.11 compatibility.
+
+2.  **Settings Configuration**:
+    - `undertheinfluence/settings.py` was still using the deprecated `MIDDLEWARE_CLASSES` setting from Django 1.8.
+    - ✅ **Action**: Migrated to the new `MIDDLEWARE` setting, which is required for Django 1.10+.
+
+3.  **Verification**:
+    - ✅ Rebuilt the Docker container to install the corrected dependencies.
+    - ✅ Ran `docker compose exec web python manage.py migrate` successfully.
+    - ✅ Restarted the web container and confirmed that the application starts without any system check errors.
+
+**Conclusion**: The application is now stable on Django 1.11.29 and Wagtail 2.0. The original blocker for Phase 1.5 is resolved.
+
+### Frontend Rendering Findings (January 12, 2026)
+
+-   **ActorView Functionality**: The `datafetch.views.ActorView` dynamically renders templates (`person.html` for `Person` objects and `organization.html` for `Organization` objects) based on the specific subclass of the `Actor` being displayed. This ensures appropriate UI presentation for different types of entities.
+-   **URL Pattern Clarification**: The correct URL pattern for accessing individual person or organization detail pages is `/person/<pk>/` or `/organization/<pk>/`, respectively, where `<pk>` is the primary key of the `Actor` object. This avoids issues where Wagtail might incorrectly intercept requests due to malformed URLs.
+
+### Frontend Rendering Fixes and Verification (January 12, 2026)
+
+-   **Template Tag Issues**: Resolved `TemplateSyntaxError: 'wagtail_tags' is not a registered tag library` by replacing `wagtail_tags` with `wagtailcore_tags` or `wagtailimages_tags` in all affected templates (`cms/templates/cms/data_page.html`, `cms/templates/cms/my_page.html`, `cms/templates/cms/tags/nav.html`, `cms/templates/cms/tags/top_menu_children.html`, `cms/templates/cms/tags/top_menu.html`, `cms/templates/cms/snippets/quote.html`, `cms/templates/cms/snippets/analysis.html`, `cms/templates/cms/snippets/profile.html`). A full container rebuild was necessary to clear template caches.
+-   **Date Field `TypeError`**: Resolved `TypeError: object of type 'NoneType' has no len()` in `datafetch/models/popolo/behaviors.py` by adding explicit `None` checks before calling `len()` on `self.start_date` and `self.end_date` in the `start_datetime` and `end_datetime` properties.
+-   **Verification**:
+    -   ✅ Person detail pages (`/person/<pk>/`) are rendering correctly.
+    -   ✅ Organization detail pages (`/organization/<pk>/`) are rendering correctly.
+    -   ✅ Search functionality (`/search/?q=...`) is working and displaying results.
+    -   ✅ Wagtail admin (`/admin/`) is accessible and redirecting to the login page as expected.
+
+### Next Steps in Phase 2
+
+- [ ] **Next Target**: Upgrade Django 1.11 → 2.2.
+- [ ] Plan incremental Wagtail upgrades to maintain compatibility.
+- [ ] Continue fixing deprecated API usage and other breaking changes in subsequent upgrades.
 
 ## Phase 2.5: Frontend Modernization - PENDING
 
@@ -307,14 +315,12 @@ docker compose exec db psql -U uti -d undertheinfluence -c "SELECT COUNT(*) FROM
 
 ## Next Steps
 
-1. **Phase 1.5: Data Ingestion** (Current)
-   - Test all data import commands to determine functionality
-   - Create Wagtail homepage via admin interface
-   - Populate database with real UK political data
-   - Document which data sources still work
-   - Fix broken import commands
+1.  **Phase 1.5: Data Ingestion**
+    - [ ] Test all data import commands to determine functionality.
+    - [ ] Create Wagtail homepage via admin interface.
+    - [ ] Populate database with real UK political data.
+    - [ ] Document which data sources still work.
+    - [ ] Fix any broken import commands.
 
-2. **Phase 2: Django/Wagtail Upgrade** (After data validation)
-   - Plan incremental upgrade strategy
-   - Set up automated testing with populated database
-   - Begin Django 1.8 → 1.11 upgrade
+2.  **Phase 2: Django/Wagtail Upgrade (Continued)**
+    - [ ] Once data ingestion is validated, proceed with the upgrade from Django 1.11 to 2.2.

@@ -172,8 +172,8 @@ These the primary data models implemented for UnderTheIfluence
 
 
 #### ```class Source()```
-*A URL for referring to sources of information.*   
-* http://popoloproject.com/schemas/link.json
+*A URL for referring to sources of information.*
+* http://popoloproject.com/schemas/source.json#
 
 
 | Field | Type | Notes |  
@@ -188,16 +188,13 @@ These the primary data models implemented for UnderTheIfluence
 
 
 #### ```class OtherName()```
-*An alternate or former name.*   
+*An alternate or former name.*
 * http://popoloproject.com/schemas/name-component.json
 
 
-#### ```class Link()```
-*A URL.*   
-* http://popoloproject.com/schemas/link.json
-
-
 #### ```class Area()```
-*An area is a geographic area whose geometry may change over time..*   
+*An area is a geographic area whose geometry may change over time.*
 * http://popoloproject.com/schemas/area.json
+
+**Note**: The `Area.classification` field has an incorrect verbose name in the model ("identifier" instead of "classification"). See `docs/data_modeling_review.md` for details.
 

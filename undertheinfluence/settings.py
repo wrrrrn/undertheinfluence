@@ -38,16 +38,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'djangobower',
 
-    'wagtail.wagtailforms',
-    'wagtail.wagtailredirects',
-    'wagtail.wagtailembeds',
-    'wagtail.wagtailsites',
-    'wagtail.wagtailusers',
-    'wagtail.wagtailsnippets',
-    'wagtail.wagtaildocs',
-    'wagtail.wagtailimages',
-    'wagtail.wagtailadmin',
-    'wagtail.wagtailcore',
+    'wagtail.contrib.forms',
+    'wagtail.contrib.redirects',
+    'wagtail.embeds',
+    'wagtail.sites',
+    'wagtail.users',
+    'wagtail.snippets',
+    'wagtail.documents',
+    'wagtail.images',
+    'wagtail.admin',
+    'wagtail.core',
 
     'modelcluster',
     'compressor',
@@ -61,19 +61,17 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
-MIDDLEWARE_CLASSES = (
+MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-
-    'wagtail.wagtailcore.middleware.SiteMiddleware',
-    'wagtail.wagtailredirects.middleware.RedirectMiddleware',
-)
+    'wagtail.core.middleware.SiteMiddleware',
+    'wagtail.contrib.redirects.middleware.RedirectMiddleware',
+]
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='change-me-in-production')
@@ -123,7 +121,7 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
 if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
     DATABASES = {
         'default': {
-            'ENGINE':   'django.db.backends.postgresql_psycopg2',
+            'ENGINE':   'django.db.backends.postgresql',
             'NAME':     config('UTI_DB_NAME', default='undertheinfluence'),
             'USER':     config('UTI_DB_USER', default='uti'),
             'PASSWORD': config('UTI_DB_PASS', default=''),
@@ -132,10 +130,10 @@ if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
         }
     }
 
-    # Workaround for Django 1.8 PostgreSQL timezone check bug
+    # Workaround for Django 1.11 PostgreSQL timezone check bug
     # The database IS set to UTC, but Django's check is overly strict
     # Replace the problematic utc_tzinfo_factory function with one that works
-    from django.db.backends.postgresql_psycopg2 import utils
+    from django.db.backends.postgresql import utils
     from psycopg2.tz import FixedOffsetTimezone
 
     def utc_tzinfo_factory(offset):

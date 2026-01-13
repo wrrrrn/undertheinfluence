@@ -1,5 +1,6 @@
 # Multi-stage Dockerfile for UnderTheInfluence Django application
-# Using Python 3.7 for compatibility with Django 1.8 + Wagtail 1.1 + old modelcluster (will upgrade to 3.11+ in Phase 2)
+# Using Python 3.7 for compatibility with current Django 1.11 + Wagtail 2.0 stack
+# Will upgrade to Python 3.11+ in Phase 2.5 after Django 5.1 upgrade
 FROM python:3.7-slim as base
 
 # Set environment variables
@@ -14,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     libpq-dev \
     gettext \
+    zlib1g-dev \
+    libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory

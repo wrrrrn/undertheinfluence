@@ -3,7 +3,7 @@
 This document tracks the testing and status of all data import commands.
 
 **Date Started**: January 12, 2026
-**Environment**: Docker (Python 3.7, Django 1.8, PostgreSQL 15)
+**Environment**: Docker (Python 3.7, Django 1.11.29, PostgreSQL 15)
 
 ## Testing Progress
 
@@ -11,7 +11,7 @@ This document tracks the testing and status of all data import commands.
 
 #### 1. import_parlparse
 **Purpose**: Import MPs and Lords from ParlParse (Popolo format JSON)
-**Status**: ⏸️ Not tested yet
+**Status**: ✅ Working
 **Command**: `docker compose exec web python manage.py import_parlparse --since 2010`
 
 **Expected data**:
@@ -22,13 +22,13 @@ This document tracks the testing and status of all data import commands.
 **Notes**:
 - Primary data source for politicians
 - Uses Popolo standard format
-- Caches to `data/` directory
+- **FIXED (Jan 12, 2026)**: Added `name` and `source` to `ignore_fields` in `_process_memberships` to handle unexpected fields in the JSON source.
 
 ---
 
 #### 2. import_ministers
 **Purpose**: Import ministerial appointments
-**Status**: ⏸️ Not tested yet
+**Status**: ✅ Working
 **Command**: `docker compose exec web python manage.py import_ministers --since 2010`
 
 **Expected data**:
@@ -39,12 +39,13 @@ This document tracks the testing and status of all data import commands.
 **Notes**:
 - Complements parlparse data
 - Links ministers to their roles
+- **FIXED (Jan 12, 2026)**: Updated defunct `cdn.rawgit.com` URL to `raw.githubusercontent.com`.
 
 ---
 
 #### 3. import_ec
 **Purpose**: Import Electoral Commission donations (CSV API)
-**Status**: ⏸️ Not tested yet
+**Status**: ⛔ BROKEN
 **Command**: `docker compose exec web python manage.py import_ec`
 
 **Expected data**:
@@ -53,15 +54,13 @@ This document tracks the testing and status of all data import commands.
 - Donation amounts and dates
 
 **Notes**:
-- Large dataset, may be slow
-- CSV format from EC API
-- Core feature for tracking political influence
+- **BROKEN (Jan 12, 2026)**: The old CSV API endpoint `http://search.electoralcommission.org.uk/api/csv/Donations` is defunct and returns only headers. The Electoral Commission now uses an interactive search portal at `https://search.electoralcommission.org.uk/Search/Donations?...`. A complete rewrite of the importer is necessary to adapt to this new data retrieval method.
 
 ---
 
 #### 4. import_appc
 **Purpose**: Import APPC lobbying register (web scraping)
-**Status**: ⏸️ Not tested yet
+**Status**: ⛔ BROKEN
 **Command**: `docker compose exec web python manage.py import_appc`
 
 **Expected data**:
@@ -70,9 +69,7 @@ This document tracks the testing and status of all data import commands.
 - Lobbyist organizations
 
 **Notes**:
-- Web scraping based (may break if site structure changed)
-- APPC website structure may have changed since 2015
-- Core feature for lobbying transparency
+- **BROKEN (Jan 12, 2026)**: The website `appc.org.uk` is defunct. The APPC merged with the PRCA in 2018. The new data source is the PRCA Public Affairs Register (e.g., `https://prca.org.uk/register/prca-public-affairs-and-lobbying-register/`). The importer needs to be rewritten to scrape this new source.
 
 ---
 
@@ -91,6 +88,7 @@ This document tracks the testing and status of all data import commands.
 - **WARNING**: Very slow (downloads many large images)
 - Should run after import_parlparse
 - May want to skip for initial testing
+- **LIKELY BROKEN**: Uses `cdn.rawgit.com` URL.
 
 ---
 
@@ -163,7 +161,7 @@ This document tracks the testing and status of all data import commands.
 - [x] Admin user created (username: admin)
 - [x] Migrations applied
 - [ ] Check environment variables needed (TWFY_API_KEY, etc.)
-- [ ] Verify `data/` directory is writable
+- [x] Verify `data/` directory is writable
 
 ### Test Sequence
 
@@ -213,15 +211,26 @@ After imports:
 
 *Document any errors, API changes, or broken functionality here as testing progresses*
 
-### Issue Template
-```
-### [Command Name] - [Issue Summary]
-**Date**: YYYY-MM-DD
-**Error**: [Error message or description]
-**Cause**: [Root cause if identified]
-**Status**: [Open/Fixed/Workaround]
-**Resolution**: [How it was fixed or worked around]
-```
+### `import_parlparse` - FieldError on Membership
+**Date**: 2026-01-12
+**Error**: `django.core.exceptions.FieldError: Invalid field name(s) for model Membership: 'name'` and `'source'`
+**Cause**: The source Popolo JSON contains `name` and `source` fields on membership objects, which are not present on the `Membership` model.
+**Status**: Fixed
+**Resolution**: Added `'name'` and `'source'` to the `ignore_fields` tuple in the `_process_memberships` function of the `import_parlparse` command.
+
+### `import_ec` - Empty CSV
+**Date**: 2026-01-12
+**Error**: The command runs without error, but no donations are imported.
+**Cause**: The API at `http://search.electoralcommission.org.uk/api/csv/Donations` now returns a CSV file with only a header row and no data. The Electoral Commission website has a new "Political Finance Online" portal, and the old API endpoint appears to be defunct.
+**Status**: Open
+**Resolution**: The `import_ec` command needs to be completely rewritten to work with the new data portal. This is a significant task and is deferred for now.
+
+### `import_appc` - Connection Refused
+**Date**: 2026-01-12
+**Error**: `requests.exceptions.ConnectionError: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))`
+**Cause**: The target website `http://www.appc.org.uk/` is defunct. The APPC merged with the PRCA in 2018.
+**Status**: Open
+**Resolution**: The `import_appc` command needs to be rewritten to scrape the new PRCA Public Affairs Register. This is a significant task and is deferred for now.
 
 ---
 
@@ -231,10 +240,10 @@ Track which external data sources are still available:
 
 | Source | URL | Status | Notes |
 |--------|-----|--------|-------|
-| ParlParse | https://www.theyworkforyou.com/ | ❓ Unknown | Popolo JSON endpoint |
-| Electoral Commission | https://www.electoralcommission.org.uk/ | ❓ Unknown | CSV API |
-| APPC | http://www.appc.org.uk/ | ❓ Unknown | Web scraping |
-| EveryPolitician | https://everypolitician.org/ | ❓ Unknown | May be archived |
+| ParlParse | https://raw.githubusercontent.com/mysociety/parlparse/master/members/people.json | ✅ Working | Popolo JSON endpoint. URL was updated from `cdn.rawgit.com`. |
+| Electoral Commission | https://www.electoralcommission.org.uk/ | ⛔ Broken | The old CSV API endpoint is defunct. New portal requires a new scraper. |
+| APPC | https://prca.org.uk/register/prca-public-affairs-and-lobbying-register/ | ⛔ Broken | The original `appc.org.uk` is defunct; merged with PRCA. Needs new scraper. |
+| EveryPolitician | https://everypolitician.org/ | ❓ Unknown | May be archived. Uses `cdn.rawgit.com` and is likely broken. |
 | TheyWorkForYou | https://www.theyworkforyou.com/api/ | ❓ Unknown | Requires API key |
 | Companies House | https://developer.company-information.service.gov.uk/ | ❓ Unknown | API v3+ |
 | Powerbase | http://powerbase.info/ | ❓ Unknown | Wiki-based |
@@ -245,11 +254,11 @@ Track which external data sources are still available:
 
 Phase 1.5 will be considered complete when:
 
-- [ ] All Priority 1 import commands tested
-- [ ] At least 2 Priority 1 commands working with data imported
+- [x] All Priority 1 import commands tested
+- [x] At least 2 Priority 1 commands working with data imported
 - [ ] Wagtail homepage created and accessible
 - [ ] Person and organization detail pages rendering with real data
 - [ ] Search functionality working
 - [ ] API endpoints returning real data
-- [ ] Documentation updated with working vs. broken imports
-- [ ] Known issues documented with workarounds or fixes
+- [x] Documentation updated with working vs. broken imports
+- [x] Known issues documented with workarounds or fixes
