@@ -152,10 +152,11 @@ docker compose restart web
 ### Planned Tasks
 
 1. **Test Core Data Imports** (Priority: High)
-   - [ ] Test `import_parlparse --since 2010` (primary politician data)
-   - [ ] Test `import_ministers --since 2010` (ministerial appointments)
-   - [ ] Test `import_ec` (Electoral Commission donations)
-   - [ ] Test `import_appc` (lobbying register)
+   - [x] Test `import_parlparse --since 2010` (primary politician data)
+   - [x] Test `import_ministers --since 2010` (ministerial appointments)
+   - [x] Test `import_ec` (Electoral Commission donations) - ✅ Working
+   - [x] Test `import_appc` (lobbying register) - ✅ Working
+   - [x] Develop `import_appc_archive` (historical PDFs) - ✅ Parsing Working
    - [ ] Document which commands work vs. fail
    - [ ] Document any API changes or broken endpoints
 

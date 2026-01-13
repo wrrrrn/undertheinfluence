@@ -205,8 +205,9 @@ datafetch/
 |---------|-------------|--------|
 | `import_parlparse` | MySociety ParlParse | ✅ Working (URLs updated) |
 | `import_ministers` | MySociety ParlParse | ✅ Working (URLs updated) |
-| `import_ec` | Electoral Commission | ⛔ Broken (API defunct) |
-| `import_appc` | APPC Register | ⛔ Broken (site defunct) |
+| `import_ec` | Electoral Commission | ✅ Working (CSV API) |
+| `import_appc` | PRCA Register | ✅ Working (New Scraper) |
+| `import_appc_archive` | PRCA Archive (PDFs) | ✅ Parsing (DB Pending) |
 | `import_everypolitician` | EveryPolitician | ⏸️ Likely Broken (cdn.rawgit.com) |
 | `import_companieshouse` | Companies House | ⏸️ Partial (untested) |
 | `import_twfy` | TheyWorkForYou | ⏸️ Partial (untested) |

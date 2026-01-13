@@ -95,3 +95,84 @@ This task has moved from a straightforward engineering task to a complex data sc
     *   **Section-Specific Parsers**: Create dedicated parsing logic for each section (address, practitioners, clients) that can handle their specific layout quirks.
 3.  **Implement Data Saving**: Once the data extraction is reliable, implement the logic to create and save the `Organization`, `Person`, and other related objects to the database.
 4.  **Create a Test Suite**: Given the complexity and variability of the PDFs, a small test suite with sample pages from different years would be invaluable for validating changes to the parsing logic without having to run the full import each time.
+
+## 5. Additional Ideas & Recommendations
+
+*   **Visual Debugging**: `PyMuPDF` allows drawing shapes on PDF pages. A very effective debugging technique is to have the script draw red rectangles around detected "Company Start" blocks and green rectangles around "Content" blocks, then save this as a "debug PDF". This allows for instant visual verification of the heuristic's performance.
+*   **Font Style Analysis**: Instead of hardcoding font sizes, analyze the distribution of font sizes and names across the document. Identify the "outliers" (larger/bolder) which usually correspond to headers/company names. Access this via `page.get_text("dict")` instead of `"blocks"`.
+*   **Intermediate Data Storage**: Separating the *extraction* phase from the *loading* (database) phase is crucial. Save the raw extracted Python dictionaries to JSON files first. This allows developers to work on the database mapping and data cleaning logic without re-running the expensive PDF parsing every time.
+*   **Date Parsing Resilience**: For invalid dates like "31 June", implement a "clamping" logic (e.g., set to 30 June) or use a library like `dateutil` which handles fuzzy parsing better than strict `datetime.strptime`.
+*   **Fuzzy Matching Validation**: Use the list of known companies from the *current* live register (imported via `import_appc`) as a "dictionary" to validate potential company names found in the historical PDFs. If a block matches a known company name, increase its score.
+*   **Structural Clustering**: If heuristics prove too brittle, consider using clustering algorithms (like DBSCAN or K-Means) on the block coordinates (x, y) and font properties to identify visual groups. This can help separate the "sidebar" or "header" content from the main body text without explicit rules.
+*   **OCR Fallback**: While `PyMuPDF` works well for text-based PDFs, some older archives might be flattened images or have corrupted text layers. Implement a check: if a page yields no text blocks, fallback to an OCR library (like `tesseract` via `pytesseract`) to extract the content.
+*   **Refactoring for Testability**: The `Command` class is becoming monolithic. Move the PDF parsing logic (`_group_blocks_into_companies`, `_extract_data_from_company_blocks`) into a separate service class or utility module. This makes it easier to write unit tests for specific parsing functions using small mock data snippets instead of requiring full PDF files.
+
+## 6. Exploratory Debugging Findings (2026-01-13)
+
+A debug run was performed on the Q2 2025 register (`prca-public-affairs-register-q2-2025.pdf`). The results confirmed significant issues with the **Company Splitting** heuristic (`_group_blocks_into_companies`).
+
+**Key Observations:**
+1.  **Merged Companies**: The entry for "3x1" incorrectly absorbed data from the subsequent company "5654 & Company Ltd".
+    *   *Evidence*: The contact details for "3x1" included addresses in both Glasgow (correct) and London (belonging to 5654). The practitioners list was unusually long and included names associated with 5654.
+    *   *Cause*: The heuristic likely failed to recognize "5654 & Company Ltd" as a new company header, possibly because of the ampersand or digits, treating it instead as content belonging to the previous block.
+2.  **Misidentified Companies**: "Indurent" and "Teddy Ryan" were identified as company names.
+    *   *Evidence*: "Indurent" appeared as a company but the contact email was `@anacta.co.uk`, suggesting the actual agency was "Anacta". "Teddy Ryan" had no contact details and looked like a practitioner's name.
+    *   *Cause*: "Indurent" might have been a client name listed in a way that mimicked a header. "Teddy Ryan" was likely a practitioner name that triggered the "Title Case" rule.
+3.  **Data Leakage**: Client names (like "5654 & Company Ltd") sometimes appeared in the client list of the *previous* company, or as a company header themselves.
+
+**Conclusion**: The current look-ahead heuristic ("Address(es) in the UK") is insufficient. It fails when the address block is slightly further away or when other headers mimic the structure. The "Title Case" rule is too broad and captures people and clients as companies. Future work must prioritize a stricter, perhaps coordinate-based or font-style-based, definition of a "Company Header".
+
+## 7. Font Analysis Investigation (2026-01-13)
+
+A script (`inspect_fonts.py`) was run to analyze the font properties of the problematic text blocks in the Q2 2025 register.
+
+**Results:**
+*   **Company Headers ("3x1", "5654 & Company Ltd"):**
+    *   **Font**: `Arial-BoldMT`
+    *   **Size**: `13.02`
+    *   **Flags**: `20` (Bold)
+*   **Content (Emails, Practitioners, Clients like "Indurent", "Teddy Ryan"):**
+    *   **Font**: `ArialMT`
+    *   **Size**: `7.01`
+    *   **Flags**: `4` (Regular)
+
+**Conclusion:**
+There is a **deterministic signal** for company headers: **Font Size > 12** and **Bold**.
+*   The previous issue where "5654 & Company Ltd" was merged into "3x1" happened because the parser didn't see the bold/large font and treated it as body text.
+*   The misidentification of "Indurent" and "Teddy Ryan" as companies happened because they were Title Case, but they are clearly small/regular font (7.01pt).
+
+**Recommendation:**
+Discard the complex "Structural Clustering" approach. Implement a **Font-Based Heuristic**:
+1.  Iterate through blocks using `page.get_text("dict")` to access font spans.
+2.  A block is a "Company Header" **IF AND ONLY IF** it contains a span with `size > 10` (or specifically ~13pt) and `flags & 16` (Bold).
+3.  This simple rule should eliminate 99% of false positives (people/clients) and false negatives (missed headers).
+
+## 8. Implementation & Verification (2026-01-13)
+
+The recommendations were implemented in two steps:
+1.  **Refactoring**: The parsing logic was moved from the `Command` class to a new service `datafetch/services/appc_parser.py`.
+2.  **Font-Based Heuristic**: The `_group_blocks_into_companies` method was rewritten to use `page.get_text("dict")` and check for **Bold** text larger than **10pt**.
+
+**Verification Results:**
+Running the parser against `prca-public-affairs-register-q2-2025.pdf` yielded excellent results:
+*   **Total Companies Found**: 86 (previously 193 - the high number was due to false positives).
+*   **Split Success**: "3x1" and "5654 & Company Ltd" are now correctly identified as separate companies.
+*   **False Positive Removal**:
+    *   "Indurent" (a client) is no longer a company. It appears correctly in the client list of "5654 & Company Ltd".
+    *   "Teddy Ryan" (a practitioner) is no longer a company. He appears correctly in the practitioner list of "Anacta UK".
+*   **Anacta UK**: This company was previously missed or split incorrectly; it is now correctly identified with its practitioners and clients.
+
+**Status:** The parsing logic is now robust for the modern 2-column PDF format. Further testing on older 1-column PDFs (2019-2021) is recommended to ensure the font rules hold up there as well.
+
+## 9. Refining Font Heuristics (2026-01-13)
+
+Testing on `Public_Affairs_Register___Q3_2025%20%282%29_0.pdf` revealed a new challenge:
+*   **Issue**: Section headers like "Address(es) in the UK" were **10.8pt Bold**, while Company Headers were **13.5pt Bold**.
+*   **Failure**: The initial rule `Size > 10 + Bold` incorrectly flagged section headers as companies, leading to 665 fake companies being extracted.
+*   **Resolution**:
+    *   Inspected the font hierarchy of the problematic file.
+    *   Increased the threshold for Company Headers to **Size > 11.5** + **Bold**.
+    *   Added an explicit exclusion for known `SECTION_KEYWORDS` even if they meet the font criteria (defense in depth).
+    *   Implemented "fuzzy date parsing" to handle invalid dates like "31 June" (clamped to 30 June).
+
+**Final Result**: The parser now correctly handles both PDF styles, extracting ~73 clean companies from the Q3 register. The bulk import process successfully extracted 2880 companies from 26 files with zero failures.

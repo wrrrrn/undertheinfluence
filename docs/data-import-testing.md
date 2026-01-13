@@ -76,9 +76,24 @@ This document tracks the testing and status of all data import commands.
 
 ---
 
+#### 5. import_appc_archive
+**Purpose**: Parse historical PRCA lobbying registers (PDFs 2019-2025)
+**Status**: ✅ Parsing Working (Database save pending)
+**Command**: `docker compose exec web python manage.py import_appc_archive`
+
+**Expected data**:
+- Historical lobbying data extracted from PDF archives
+
+**Notes**:
+- **FIXED (Jan 13, 2026)**: Parsing logic fully implemented using PyMuPDF and font-based heuristics.
+- Successfully processes all 26 archive files.
+- Currently extracts data to console/memory; database saving is next step.
+
+---
+
 ### Priority 2: Enrichment Data
 
-#### 5. import_everypolitician
+#### 6. import_everypolitician
 **Purpose**: Import MP photos and metadata from EveryPolitician
 **Status**: ⏸️ Not tested yet
 **Command**: `docker compose exec web python manage.py import_everypolitician`

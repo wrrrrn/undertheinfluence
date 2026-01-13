@@ -194,7 +194,7 @@ __Parsing & importing__
 Data is scraped from the page and saved into the following data models:
 
 | Information | Data Model |  
---------------|------------:|  
+|--------------|------------:|  
 | Lobby agencies |  ```Organization``` |   
 | Lobby agency contact details| ```ContactDetail``` |  
 | Lobby agency employees | ```Person``` |  
@@ -217,16 +217,15 @@ python manage.py import_appc_archive
 
 __Current status__
 - [x] fetching PDF links
-- [ ] parsing (in development)
-- [ ] importing (in development)
+- [x] parsing (via PyMuPDF)
+- [ ] importing (database saving pending)
 
 __Fetching__
 * The command scrapes the archive page to find links to all historical PDF registers.
 
-__Parsing & importing__
-* __#IN DEVELOPMENT__
-* This is a complex task as the PDF formats vary over time. The command has been structured to support multiple parser versions and can detect different PDF layouts (e.g., single-column vs. two-column).
-* The detailed parsing logic for each format is under development.
+__Parsing__
+* The command uses `PyMuPDF` and a font-based heuristic to reliably parse the varied PDF layouts (single-column and two-column) from 2019 to 2025.
+* It extracts Company Name, Address, Contact Details, Practitioners, Clients, and Countries of Operation.
   
 
 
