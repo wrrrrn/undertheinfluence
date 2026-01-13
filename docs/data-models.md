@@ -1,23 +1,62 @@
-# Data Models  
+# Data Models
 
-The UnderTheInfluence data model is mostly based on Popolo's open government data specifications. They offer rich, expressive data interchange formats and data models so that we can spend less time transforming and modeling data.   
+The UnderTheInfluence data model is based on Popolo's open government data specifications. They offer rich, expressive data interchange formats and data models so that we can spend less time transforming and modeling data.
 
-There are currently two data sources, __EveryPolitician__ and __ParlParse__, that provide data based the Popolo specifications.  
+## Primary Data Sources
 
-## EveryPolitician
-[Popolo JSON data:](http://docs.everypolitician.org/use_the_data.html#json-data)
+The application integrates data from multiple sources:
 
-> Popolo is an open standard for expressing political data — exactly for the kind of thing we’re doing here. So we provide our data in JSON format too, complying with Popolo standard. 
+### Popolo-Based Sources
 
-> A note about the Popolo standard: it’s a rich, expressive format that, like a language, is used in many different ways by different authors. However, when we add data to EveryPolitician we always use Popolo according to the same, defined principles. It’s because of this consistency that the tools you build will work with EveryPolitician data from any country, for any country.
+**ParlParse** (Primary parliamentary data)
+- [people.json:](http://parser.theyworkforyou.com/members.html)
+- Data of all MPs, Lords, MSPs and MLAs in Popolo format
+- Includes names, party affiliations, constituencies, and peerage information
+- Each membership represents a continuous period of holding office
+- Imported via `import_parlparse` and `import_ministers`
 
+**TheyWorkForYou** (Enrichment data)
+- [API documentation](http://www.theyworkforyou.com/api/)
+- Biographical data and external links (Wikipedia, BBC, MP websites)
+- Enriches existing Person records with dates of birth and profile images
+- Imported via `import_twfy`
 
-## ParlParse
-[people.json:](http://parser.theyworkforyou.com/members.html)
-> Data of all MPs, Lords, MSPs and MLAs covered by the project, in Popolo format, including names (and alternate names such as misspellings or name changes), party, constituency (non-Lords), and peerage information (Lords). There is a unique identifier for each element. Each membership is a continuous period of holding office, loyal to the same party.
+### Influence Mapping Sources
+
+**Electoral Commission** (Political donations)
+- Donation data from parties, candidates, and third parties
+- Creates Donation records linking donors to recipients
+- Imported via `import_ec`
+
+**PRCA Professional Lobbying Register** (Current lobbying data)
+- Active lobbying agencies and their clients
+- Creates Consultancy relationships between agencies and clients
+- Imported via `import_appc`
+
+**PRCA Historical Archive** (Historical lobbying data 2019-2025)
+- 26 historical PDF registers
+- Creates Organization, Consultancy, and Membership records
+- Imported via `import_appc_archive`
+
+**MPs' Register of Interests** (MPs' declared interests)
+- Categories 2 (Donations) and 3 (Gifts/Hospitality)
+- Creates Donation records with donor organizations/persons
+- Imported via `import_mpsinterests`
+
+**Lords' Register of Interests** (Lords' declared interests)
+- Sponsorships, visits, and gifts
+- Creates Donation records (donor=null for unstructured text)
+- Imported via `import_lordsinterests`
 
 ---
-These the primary data models implemented for UnderTheIfluence
+
+For detailed import documentation, see `docs/importing-data.md` and `docs/data-import-testing.md`.
+
+---
+
+## Data Model Reference
+
+These are the primary data models implemented for UnderTheInfluence, based on the Popolo specification.
 
 
 
@@ -36,21 +75,25 @@ These the primary data models implemented for UnderTheIfluence
 
 
 #### ```class Consultancy()```
+*A lobbying relationship between a client organization and a lobbying agency.*
 
-| Field | Type | Notes |  
-|-------|-----:|:------|  
-|```client``` | ```ForeignKey(Actor)``` |  |  
-|```agency``` | ```ForeignKey(Actor)``` |  |  
+| Field | Type | Notes |
+|-------|-----:|:------|
+|```client``` | ```ForeignKey(Actor)``` | The organization being represented |
+|```agency``` | ```ForeignKey(Actor)``` | The lobbying agency |
+
+**Data Sources**: PRCA Professional Lobbying Register (current and historical 2019-2025)  
 
 
-#### ```class Donation()``` 
+#### ```class Donation()```
+*A political donation or declared interest.*
 
-| Field | Type | Notes |  
-|-------|-----:|:------|  
-|```donor``` | ```ForeignKey(Actor)``` |  |  
-|```recipient ``` | ```ForeignKey(Actor)``` |  |  
-|```value ``` | ```DecimalField``` | The monetary value of the donation |   
-|```donation_type``` | ```CharField``` | The type of donation e.g. cash |
+| Field | Type | Notes |
+|-------|-----:|:------|
+|```donor``` | ```ForeignKey(Actor)``` | The donor (may be null for Lords' interests) |
+|```recipient ``` | ```ForeignKey(Actor)``` | The recipient (MP, Lord, or party) |
+|```value ``` | ```DecimalField``` | The monetary value of the donation (0 for Lords) |
+|```donation_type``` | ```CharField``` | The type of donation e.g. Cash, Visit, Gift, Sponsorship |
 |```nature_of_donation``` | ```CharField``` | The nature of the donation e.g. hospitality |
 |```received_date``` | ```DateField``` |  |
 |```accepted_date``` | ```DateField``` |  |
@@ -58,9 +101,14 @@ These the primary data models implemented for UnderTheIfluence
 |```accounting_unit_name``` | ```CharField``` |  |
 |```accounting_units_as_central_party``` | ```BooleanField``` |  |
 |```purpose_of_visit``` | ```CharField``` |  |
-|```is_bequest``` | ```BooleanField``` |  |  
-|```is_aggregation``` | ```BooleanField``` |  |  
-|```is_sponsorship``` | ```BooleanField``` |  |  
+|```is_bequest``` | ```BooleanField``` |  |
+|```is_aggregation``` | ```BooleanField``` |  |
+|```is_sponsorship``` | ```BooleanField``` |  |
+
+**Data Sources**:
+- Electoral Commission (91,281+ donation records)
+- MPs' Register of Interests (Categories 2 & 3)
+- Lords' Register of Interests (Sponsorship, Visits, Gifts)  
 
 
 ## ```datafetch/models.py```
