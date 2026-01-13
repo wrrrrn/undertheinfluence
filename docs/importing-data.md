@@ -101,25 +101,43 @@ The csv parsed and saved into the following data models:
 
 ## TheyWorkForYou
 
-> TheyWorkForYou lets you find out what your MP, MSP or MLA is doing in your name, read debates, written answers   
+> TheyWorkForYou lets you find out what your MP, MSP or MLA is doing in your name, read debates, written answers
 
-__Data sources__  
-* [TheyWorkForYou](http://www.theyworkforyou.com/api/)  
+We use the TheyWorkForYou API to enrich existing MP records with biographical data and external links.
 
-__Usage__  
+__Data sources__
+* [TheyWorkForYou](http://www.theyworkforyou.com/api/)
+
+__Usage__
 ```
-python manage.py import_twfy
+python manage.py import_twfy --since 2010
 ```
-__Current status__  
+
+__Current status__
 - [x] fetching
-- [ ] parsing
-- [ ] importing
+- [x] parsing
+- [x] importing
 
 __Fetching__
-* Current data is fetched / saved in json format from [theyworkforyou.com/api](http://www.theyworkforyou.com/api/)
+* Uses the TheyWorkForYou API to fetch MP enrichment data. Requires `TWFY_API_KEY` in `.env` file.
 
-__Parsing & importing__  
-* __\#TODO__
+__Parsing & importing__
+This command enriches existing Person records (imported via parlparse) with additional data:
+
+| Information | Data Model |
+|--------------|------------:|
+| Wikipedia URL | ```Link``` |
+| BBC Profile URL | ```Link``` |
+| MP Website URL | ```Link``` |
+| Guardian Profile URL | ```Link``` |
+| Date of birth | ```Person.birth_date``` |
+| Profile image | ```Person.image``` |
+
+**Notes**:
+- Only enriches MPs already in the database (matched by uk.org.publicwhip identifier)
+- Does not duplicate core parliamentary data (that comes from parlparse)
+- May experience SSL/network errors with TheyWorkForYou API on large imports
+- Progress indicator shows every 50 MPs processed
 
 
 ## Register of Members’ Financial Interests

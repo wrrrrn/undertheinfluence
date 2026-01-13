@@ -115,18 +115,23 @@ This document tracks the testing and status of all data import commands.
 ---
 
 #### 6. import_twfy
-**Purpose**: Import data from TheyWorkForYou API
-**Status**: ⏸️ Partial Implementation (fetch only)
+**Purpose**: Enrich existing MP records with TheyWorkForYou data
+**Status**: ✅ Working (with reliability limitations)
 **Command**: `docker compose exec web python manage.py import_twfy --since 2024`
 
 **Expected data**:
-- MP information and metadata (if import logic were implemented)
+- Enriches existing Person records with:
+  - External URLs (Wikipedia, BBC, MP website, Guardian) as Link records
+  - Date of birth (Person.birth_date)
+  - Profile images (Person.image)
 
 **Notes**:
+- **IMPLEMENTED (Jan 13, 2026)**: Complete enrichment logic for Option 1 (minimal enrichment)
 - Requires TWFY_API_KEY in .env file
-- **PARTIAL**: API fetching works, but all database import logic is commented out
-- Currently only downloads MP data to `data/twfy/` directory
-- Would need completion of import logic (lines 71-80 are commented out)
+- Complements parlparse data - only adds biographical/URL enrichment
+- **LIMITATION**: May fail on large imports due to SSL/network errors with TWFY API
+- Uses existing Person records matched by uk.org.publicwhip identifier
+- Skips MPs not yet imported via parlparse
 
 ---
 
@@ -205,9 +210,10 @@ This document tracks the testing and status of all data import commands.
 4. `import_appc` (✅ lobbying data - working)
 5. `import_mpsinterests` (✅ MPs' interests - working)
 6. `import_lordsinterests` (✅ Lords' interests - working)
-7. Verify data in admin and web interface
-8. `import_everypolitician` (❓ if needed for photos - likely broken)
-9. Test remaining commands as needed
+7. `import_appc_archive` (✅ historical lobbying data 2019-2025)
+8. `import_twfy --since 2010` (✅ optional enrichment - URLs, DOB, images)
+9. Verify data in admin and web interface
+10. Test remaining commands as needed
 
 ### Validation Queries
 
@@ -299,3 +305,13 @@ Phase 1.5 will be considered complete when:
 - [x] Known issues documented with workarounds or fixes
 
 **STATUS**: ✅ **Phase 1.5 COMPLETE** - All core imports working, exceeding success criteria!
+
+**Working Imports Summary** (8 total):
+1. ✅ import_parlparse - MPs/Lords foundation data
+2. ✅ import_ministers - Ministerial appointments
+3. ✅ import_ec - Electoral Commission donations (91,281+)
+4. ✅ import_appc - Current PRCA lobbying register
+5. ✅ import_appc_archive - Historical PRCA registers (2019-2025, 26 PDFs)
+6. ✅ import_mpsinterests - MPs' Register of Interests
+7. ✅ import_lordsinterests - Lords' Register of Interests
+8. ✅ import_twfy - MP enrichment data (URLs, DOB, images)
