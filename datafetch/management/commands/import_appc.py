@@ -25,17 +25,17 @@ class Command(BaseCommand):
             quarter = int(match.group(2))
 
             if quarter == 1:
-                start_date = datetime(year, 3, 1).date()
-                end_date = datetime(year, 5, 31).date()
+                start_date = datetime(year, 1, 1).date()
+                end_date = datetime(year, 3, 31).date()
             elif quarter == 2:
-                start_date = datetime(year, 6, 1).date()
-                end_date = datetime(year, 8, 31).date()
+                start_date = datetime(year, 4, 1).date()
+                end_date = datetime(year, 6, 30).date()
             elif quarter == 3:
-                start_date = datetime(year, 9, 1).date()
-                end_date = datetime(year, 11, 30).date()
+                start_date = datetime(year, 7, 1).date()
+                end_date = datetime(year, 9, 30).date()
             else:  # quarter == 4
-                start_date = datetime(year, 12, 1).date()
-                end_date = datetime(year, 2, 28).date()
+                start_date = datetime(year, 10, 1).date()
+                end_date = datetime(year, 12, 31).date()
             return str(start_date), str(end_date)
 
         # fallback to old format, e.g. "1st June 2022 to 31st August 2022"
@@ -129,45 +129,65 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.refresh = options.get('refresh', False)
-
         helpers.create_data_folder("appc")
 
-        self.stdout.write(f"Fetching {self.register_url}...")
-        t = helpers.fetch_text(self.register_url, "prca_register.html", path="appc", refresh=self.refresh)
-        soup = BeautifulSoup(t, "lxml")
+        page_num = 0
+        date_range = None
+        total_companies = 0
+        next_url = self.register_url
 
-        date_range_text_element = soup.find(string=re.compile("Register for", re.IGNORECASE)) or soup.find(string=re.compile("last updated", re.IGNORECASE))
-        if not date_range_text_element:
-            raise CommandError("Could not find date range on page.")
+        while next_url:
+            self.stdout.write(f"Fetching {next_url}...")
+            page_filename = f"prca_register_page_{page_num}.html"
+            t = helpers.fetch_text(next_url, page_filename, path="appc", refresh=self.refresh)
+            soup = BeautifulSoup(t, "lxml")
 
-        date_range_text = date_range_text_element.parent.parent.get_text()
-        date_range = self.get_dates(date_range_text)
-        if not date_range or not date_range[0]:
-            raise CommandError(f"Could not parse date range from '{date_range_text}'")
+            if page_num == 0:
+                date_range_text_element = soup.find(string=re.compile("Register for", re.IGNORECASE)) or soup.find(string=re.compile("last updated", re.IGNORECASE))
+                if not date_range_text_element:
+                    raise CommandError("Could not find date range on page.")
 
-        self.stdout.write(f"Processing register for date range: {date_range[0]} to {date_range[1]}")
+                date_range_text = date_range_text_element.parent.parent.get_text()
+                date_range = self.get_dates(date_range_text)
+                if not date_range or not date_range[0]:
+                    raise CommandError(f"Could not parse date range from '{date_range_text}'")
 
-        path = join("appc", date_range[1])
-        helpers.create_data_folder(path)
+                self.stdout.write(f"Processing register for date range: {date_range[0]} to {date_range[1]}")
+                path = join("appc", date_range[1])
+                helpers.create_data_folder(path)
 
-        # The companies are in <h3> tags.
-        company_headings = soup.find_all('h3')
-        self.stdout.write(f"Found {len(company_headings)} companies in the register.")
+            company_headings = soup.find_all('h3')
+            page_companies = len(company_headings)
+            if page_companies == 0 and page_num > 0:
+                # Sometimes the last page link exists but the page is empty
+                self.stdout.write("Found an empty page, stopping.")
+                break
+                
+            total_companies += page_companies
+            self.stdout.write(f"Found {page_companies} companies on page {page_num + 1}.")
 
-        for heading in company_headings:
-            agency_name = heading.text.strip()
-            if not agency_name:
-                continue
+            for heading in company_headings:
+                agency_name = heading.text.strip()
+                if not agency_name:
+                    continue
 
-            # The content for this company is in the elements between this h3 and the next h3
-            section_elements = []
-            for sibling in heading.find_next_siblings():
-                if sibling.name == 'h3':
-                    break
-                section_elements.append(str(sibling))
+                section_elements = []
+                for sibling in heading.find_next_siblings():
+                    if sibling.name == 'h3':
+                        break
+                    section_elements.append(str(sibling))
 
-            if not section_elements:
-                continue
+                if not section_elements:
+                    continue
 
-            company_soup_section = BeautifulSoup("".join(section_elements), "html5lib")
-            self._scrape_company_section(agency_name, company_soup_section, date_range)
+                company_soup_section = BeautifulSoup("".join(section_elements), "html5lib")
+                self._scrape_company_section(agency_name, company_soup_section, date_range)
+
+            next_page_link = soup.select_one('li.next a')
+            if next_page_link and next_page_link.has_attr('href'):
+                next_url = self.base_url + next_page_link['href']
+                page_num += 1
+            else:
+                next_url = None
+
+        self.stdout.write(self.style.SUCCESS(f"Finished importing. Found {total_companies} companies in total."))
