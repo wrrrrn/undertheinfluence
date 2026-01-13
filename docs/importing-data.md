@@ -169,13 +169,13 @@ __Parsing & importing__
 * __\#TODO__
 
 
-## Association of Professional Political Consultants
-> The Association of Professional Political Consultants is the self-regulatory and representative body for professional political practitioners
+## PRCA Public Affairs Register (Current)
+> The Public Relations and Communications Association (PRCA) is the representative body for PR and communications practitioners, formed after merging with the APPC.
 
-We mine this data to build a list of __lobbying agencies__, their __employees__ and their __clients__. 
+We mine this data to build a list of __lobbying agencies__, their __employees__ and their __clients__ from the current register.
 
 __Data sources__  
-* [Association of Professional Political Consultants](http://www.appc.org.uk)
+* [PRCA Professional Lobbying Register](https://www.prca.global/professional-lobbying-register)
 
 __Usage__  
 ```
@@ -188,19 +188,46 @@ __Current status__
 - [x] importing
 
 __Fetching__
-* The list of agencies is scraped from [appc.org.uk/members/register](http://www.appc.org.uk/members/register/)
-* Each individual agency profile is saved to the `data/appc` folder
+* The list of agencies and their clients is scraped from the current live register page. The command handles pagination to fetch all entries.
 
 __Parsing & importing__  
-Data is scraped from the saved pages and saved into the following data models:
+Data is scraped from the page and saved into the following data models:
 
 | Information | Data Model |  
 --------------|------------:|  
 | Lobby agencies |  ```Organization``` |   
 | Lobby agency contact details| ```ContactDetail``` |  
 | Lobby agency employees | ```Person``` |  
-| Clients |  ```Person```  |  
+| Clients |  ```Organization```  |  
 | Lobby agency / client relationships | ```Consultancy``` |  
+
+## PRCA Historical Register (PDF Archive)
+
+> The Public Relations and Communications Association (PRCA) provides an archive of historical lobbying registers in PDF format.
+
+This command provides a foundation for importing this historical data.
+
+__Data sources__
+* [PRCA Public Affairs Register - Previous Registers](https://www.prca.global/sspx/public-affairs-register-previous-registers)
+
+__Usage__
+```
+python manage.py import_appc_archive
+```
+
+__Current status__
+- [x] fetching PDF links
+- [ ] parsing (in development)
+- [ ] importing (in development)
+
+__Fetching__
+* The command scrapes the archive page to find links to all historical PDF registers.
+
+__Parsing & importing__
+* __#IN DEVELOPMENT__
+* This is a complex task as the PDF formats vary over time. The command has been structured to support multiple parser versions and can detect different PDF layouts (e.g., single-column vs. two-column).
+* The detailed parsing logic for each format is under development.
+  
 
 
 ## EveryPolitician
