@@ -4,6 +4,7 @@ from os.path import join
 import re
 from urllib.parse import urlencode
 
+from django.core.urlresolvers import reverse
 from django.core.management.base import BaseCommand, CommandError
 from django.template.defaultfilters import slugify
 from bs4 import BeautifulSoup
@@ -13,29 +14,28 @@ from datafetch import models, helpers
 
 class Command(BaseCommand):
     help = 'Import APPC register'
-    base_url = "http://www.appc.org.uk"
-    source_url_tmpl = "http://www.undertheinfluence.org.uk/appc-redirect/?{}"
+    base_url = "https://www.appc.org.uk"
 
     def add_arguments(self, parser):
         parser.add_argument('--refresh', action='store_true')
 
     def _fetch_company(self, company, path):
-        # print("Fetching HTML for '{}' ...".format(company))
-        url = "{}/members/register/register-profile/".format(self.base_url)
-        filename = "{}.html".format(slugify(company))
+        # print("Fetching HTML for '{}' ...".format(company["name"]))
+        url = "{}/register/profile/".format(self.base_url)
+        filename = "{}.html".format(slugify(company["name"]))
         headers = {'User-Agent': 'Mozilla/5.0'}
-        data = {"company": company}
+        data = {"companyid": company["id"]}
         t = helpers.fetch_text(url, filename, path=path, headers=headers, data=data, method="post", refresh=self.refresh)
         return t
 
-    def _scrape_company_html(self, html, date_range):
+    def _scrape_company_html(self, company, html, date_range):
         soup = BeautifulSoup(html, "html5lib").find(class_="member-profile")
         agency_name = [x for x in soup.find("h1").stripped_strings][0]
 
-        source_url = self.source_url_tmpl.format(urlencode({"company": agency_name}))
+        source_url = '{}?{}'.format(reverse('appc_redirect'), urlencode({"company": company['name'], "companyid": company['id']}))
 
         agency_dict = {
-            "name": agency_name,
+            "name": company['name'],
             "classification": "Lobbying agency"
         }
         agency_obj = models.Organization.objects.get_or_create(
@@ -76,6 +76,7 @@ class Command(BaseCommand):
         staff_soup = soup.find(class_="profile-staff")
         all_staff = [x.text.strip() for x in staff_soup.find_all("li")] if staff_soup else []
         for staff_name in all_staff:
+            staff_name = re.sub('  +', ' ', staff_name)
             if staff_name.endswith(" *"):
                 staff_name = staff_name[:-2].strip()
                 # TODO: Somehow flag that these staff members have parliamentary passes
@@ -125,7 +126,7 @@ class Command(BaseCommand):
 
         helpers.create_data_folder("appc")
 
-        index_url = "{}/members/register/".format(self.base_url)
+        index_url = "{}/register/current-register/".format(self.base_url)
         t = helpers.fetch_text(index_url, "index.html", path="appc", refresh=True)
         soup = BeautifulSoup(t, "html5lib")
 
@@ -134,7 +135,10 @@ class Command(BaseCommand):
         path = join("appc", date_range[1])
         helpers.create_data_folder(path)
 
-        companies = [x["value"] for x in soup.find_all("input", {"name": "company"})]
+        companies = [{
+            "id": x.find("input", {"name": "companyid"})["value"],
+            "name": x.find("input", {"name": "company"})["value"],
+        } for x in soup.find_all(class_="member-list-profile")]
         for company in companies:
             html = self._fetch_company(company, path)
-            self._scrape_company_html(html, date_range)
+            self._scrape_company_html(company, html, date_range)
