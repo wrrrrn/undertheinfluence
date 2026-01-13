@@ -211,7 +211,7 @@ datafetch/
 | `import_everypolitician` | EveryPolitician | ⏸️ Likely Broken (cdn.rawgit.com) |
 | `import_companieshouse` | Companies House | ⏸️ Partial (untested) |
 | `import_twfy` | TheyWorkForYou | ⏸️ Partial (untested) |
-| `import_mpsinterests` | Register of MPs' Interests | ⏸️ Partial (untested) |
+| `import_mpsinterests` | Register of MPs' Interests | ✅ Working (TWFY XML) |
 | `import_lordsinterests` | Register of Lords' Interests | ⏸️ Partial (untested) |
 | `import_powerbase` | Powerbase Wiki | ⏸️ Partial (untested) |
 

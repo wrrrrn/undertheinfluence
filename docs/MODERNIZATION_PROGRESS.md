@@ -157,6 +157,7 @@ docker compose restart web
    - [x] Test `import_ec` (Electoral Commission donations) - ✅ Working
    - [x] Test `import_appc` (lobbying register) - ✅ Working
    - [x] Develop `import_appc_archive` (historical PDFs) - ✅ Parsing Working
+   - [x] Test `import_mpsinterests` (MPs' interests) - ✅ Working
    - [ ] Document which commands work vs. fail
    - [ ] Document any API changes or broken endpoints
 

@@ -127,7 +127,7 @@ __Parsing & importing__
 We mine MP's declared interests outside to record the monetary value of declared interests and well as the individuals / organisations with whom they have these interests.
  
 __Data sources__  
-* [theyworkforyou](http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
+* [theyworkforyou](https://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
 
 __Usage__  
 ```
@@ -135,16 +135,16 @@ python manage.py import_mpsinterests
 ```
 __Current status__  
 - [x] fetching
-- [ ] parsing
-- [ ] importing
+- [x] parsing
+- [x] importing
 
 
 __Fetching__
-* Historical records should be fetched with `git submodule update`
-* Current data is fetched / saved in xml format from [theyworkforyou.com/pwdata/scrapedxml/regmem](http://www.theyworkforyou.com/pwdata/scrapedxml/regmem/)
+* Current data is fetched / saved in xml format from [theyworkforyou.com/pwdata/scrapedxml/regmem](https://www.theyworkforyou.com/pwdata/scrapedxml/regmem/) using `curl`.
+* The command no longer requires a git submodule and handles historical downloads directly.
 
 __Parsing & importing__  
-* __\#TODO__
+XML files are parsed using BeautifulSoup. Data from Category 2 (Donations) and Category 3 (Gifts/Hospitality) are imported as `Donation` records, linked to the respective MPs. New donors (People or Organizations) are created automatically.
 
 
 ## Register of Lords’ Financial Interests

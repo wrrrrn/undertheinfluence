@@ -130,12 +130,14 @@ This document tracks the testing and status of all data import commands.
 
 #### 7. import_mpsinterests
 **Purpose**: Import MPs' Register of Interests
-**Status**: ⏸️ Not tested yet (partial implementation)
+**Status**: ✅ Working
 **Command**: `docker compose exec web python manage.py import_mpsinterests`
 
 **Notes**:
-- May only fetch data, not parse/import
-- Check implementation status
+- **FIXED (Jan 13, 2026)**: Parser implemented using BeautifulSoup.
+- Maps Category 2 and 3 interests to `Donation` models.
+- Handles automated donor creation and deduplication via `theyworkforyou_regmem` identifier scheme.
+- No longer requires git submodules; downloads directly via HTTPS.
 
 ---
 
