@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     'appc_redirect',
     'api',
 
-    'bootstrap_admin',
+    # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
     'rest_framework',
     'djangobower',
 
@@ -99,7 +99,7 @@ TEMPLATES = [
     },
 ]
 
-BOOTSTRAP_ADMIN_SIDEBAR_MENU = True
+# BOOTSTRAP_ADMIN_SIDEBAR_MENU = True  # Removed - bootstrap-admin not compatible with Django 2.0+
 
 WSGI_APPLICATION = 'undertheinfluence.wsgi.application'
 
