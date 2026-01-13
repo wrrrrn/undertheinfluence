@@ -1,7 +1,7 @@
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
-from model_utils.managers import PassThroughManager
-from django.utils.translation import ugettext_lazy as _
+# PassThroughManager removed in django-model-utils 3.x - use QuerySet.as_manager() instead
+from django.utils.translation import gettext_lazy as _
 
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
 # from .popolo.querysets import DateframeableQuerySet

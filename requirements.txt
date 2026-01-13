@@ -1,11 +1,11 @@
-# Django & Wagtail (Phase 2: upgraded to Django 1.11 LTS + Wagtail 2.0)
-Django>=1.11,<1.12
-wagtail>=2.0,<2.1
-django-modelcluster>=4.0,<5.0
-django-treebeard>=4.0,<5.0
+# Django & Wagtail (Phase 2 Stage 3: Django 3.2 LTS + Wagtail 2.15)
+Django>=6.0,<6.1
+wagtail>=7.2,<7.3
+django-modelcluster>=6.0,<7.0
+django-treebeard>=4.5,<5.0
 
 # Web scraping & HTTP
-beautifulsoup4==4.12.0
+# beautifulsoup4 version controlled by wagtail dependency
 requests==2.31.0
 
 # Database
@@ -16,21 +16,20 @@ python-decouple==3.8
 PyYAML==6.0.1
 
 # Django utilities
-django-model-utils==2.3.1
-django-polymorphic>=1.2,<2.0
-django-compressor>=4.1,<5.0
-bootstrap-admin==0.3.6
+django-model-utils>=4.1,<5.0
+django-polymorphic>=4.2.0
+django-compressor>=4.3,<5.0
+# bootstrap-admin removed - not compatible with Django 2.0+ (uses django.core.urlresolvers)
 
-# REST API (DRF 3.7.7 compatible with Django 1.11)
-djangorestframework==3.7.7
-django-filter>=1.0,<2.0
-markdown==2.6.2
+# REST API (DRF 3.12+ compatible with Django 3.2)
+djangorestframework>=3.15,<3.16
+django-filter>=23.3
+markdown>=3.3,<4.0
 
 # Production server
 gunicorn==21.2.0
 
 # Frontend (will be replaced in Phase 2.5)
-django-bower==5.0.4
 
 # Testing (compatible with Python 3.7)
 pytest==7.4.3

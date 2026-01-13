@@ -5,9 +5,9 @@ from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.db import models
 from model_utils import Choices
-from model_utils.managers import PassThroughManager
-from django.utils.encoding import python_2_unicode_compatible
-from django.utils.translation import ugettext_lazy as _
+# PassThroughManager removed in django-model-utils 3.x - use QuerySet.as_manager() instead
+# python_2_unicode_compatible removed in Django 3.0 - Python 2 no longer supported
+from django.utils.translation import gettext_lazy as _
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from polymorphic.models import PolymorphicModel
@@ -180,7 +180,7 @@ class Post(Dateframeable, Timestampable, models.Model):
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the post")
 
-    objects = PassThroughManager.for_queryset_class(PostQuerySet)()
+    objects = PostQuerySet.as_manager()
 
     def add_person(self, person):
         m = Membership(post=self, person=person, organization=self.organization)
@@ -226,7 +226,7 @@ class Membership(Dateframeable, Timestampable, models.Model):
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the membership")
 
-    objects = PassThroughManager.for_queryset_class(MembershipQuerySet)()
+    objects = MembershipQuerySet.as_manager()
 
     def __str__(self):
         return self.role
@@ -263,7 +263,7 @@ class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Mode
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the contact detail")
 
-    objects = PassThroughManager.for_queryset_class(ContactDetailQuerySet)()
+    objects = ContactDetailQuerySet.as_manager()
 
     def __str__(self):
         return u"{0} - {1}".format(self.value, self.contact_type)
@@ -277,7 +277,7 @@ class OtherName(Dateframeable, GenericRelatable, models.Model):
     name = models.CharField(_("name"), max_length=512, help_text=_("An alternate or former name"))
     note = models.CharField(_("note"), max_length=1024, blank=True, help_text=_("A note, e.g. 'Birth name'"))
 
-    objects = PassThroughManager.for_queryset_class(OtherNameQuerySet)()
+    objects = OtherNameQuerySet.as_manager()
 
     def __str__(self):
         return self.name

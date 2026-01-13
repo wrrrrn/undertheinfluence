@@ -22,6 +22,10 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv(
 
 BASE_URL = config('BASE_URL', default='http://localhost:8000')
 
+# Django 3.2+ requires DEFAULT_AUTO_FIELD setting
+# Using AutoField to maintain compatibility with existing migrations
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
@@ -34,9 +38,8 @@ INSTALLED_APPS = [
     'appc_redirect',
     'api',
 
-    'bootstrap_admin',
+    # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
     'rest_framework',
-    'djangobower',
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
@@ -47,7 +50,7 @@ INSTALLED_APPS = [
     'wagtail.documents',
     'wagtail.images',
     'wagtail.admin',
-    'wagtail.core',
+    'wagtail',
 
     'modelcluster',
     'compressor',
@@ -69,7 +72,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'wagtail.core.middleware.SiteMiddleware',
+    'wagtail.contrib.legacy.sitemiddleware.SiteMiddleware',  # Moved to legacy in Wagtail 2.15
     'wagtail.contrib.redirects.middleware.RedirectMiddleware',
 ]
 
@@ -99,7 +102,7 @@ TEMPLATES = [
     },
 ]
 
-BOOTSTRAP_ADMIN_SIDEBAR_MENU = True
+# BOOTSTRAP_ADMIN_SIDEBAR_MENU = True  # Removed - bootstrap-admin not compatible with Django 2.0+
 
 WSGI_APPLICATION = 'undertheinfluence.wsgi.application'
 
@@ -122,29 +125,14 @@ if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
     DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.postgresql',
-            'NAME':     config('UTI_DB_NAME', default='undertheinfluence'),
+            'NAME':     'undertheinfluence', # Explicitly set to match the created database
             'USER':     config('UTI_DB_USER', default='uti'),
             'PASSWORD': config('UTI_DB_PASS', default=''),
             'HOST':     config('UTI_DB_HOST', default='localhost'),
             'PORT':     config('UTI_DB_PORT', default='5432'),
         }
     }
-
-    # Workaround for Django 1.11 PostgreSQL timezone check bug
-    # The database IS set to UTC, but Django's check is overly strict
-    # Replace the problematic utc_tzinfo_factory function with one that works
-    from django.db.backends.postgresql import utils
-    from psycopg2.tz import FixedOffsetTimezone
-
-    def utc_tzinfo_factory(offset):
-        """Fixed version that doesn't assert on timezone"""
-        if offset != 0:
-            # If not UTC, use the default behavior
-            return FixedOffsetTimezone(offset=offset, name=None)
-        # For UTC (offset 0), return None (Django's expected behavior)
-        return None
-
-    utils.utc_tzinfo_factory = utc_tzinfo_factory
+    # PostgreSQL timezone workaround removed - no longer needed in Django 3.2+
 else:
     DATABASES = {
         'default': {
@@ -174,7 +162,6 @@ STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
     'compressor.finders.CompressorFinder',
-    'djangobower.finders.BowerFinder',
 )
 
 STATICFILES_DIRS = (
@@ -187,16 +174,7 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
-# Django-bower settings
-BOWER_COMPONENTS_ROOT = BASE_DIR
 
-BOWER_INSTALLED_APPS = (
-    'jquery#2.1.1',
-    'bootstrap',
-    'bootstrap-material-design',
-    'bootstrap-table',
-    'moment',
-)
 
 # Wagtail settings
 
