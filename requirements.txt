@@ -1,6 +1,6 @@
 # Django & Wagtail (Phase 2 Stage 3: Django 3.2 LTS + Wagtail 2.15)
-Django>=4.2,<4.3
-wagtail
+Django>=5.1,<5.2
+wagtail>=7.2,<7.3
 django-modelcluster>=6.0,<7.0
 django-treebeard>=4.5,<5.0
 
@@ -23,7 +23,7 @@ django-compressor>=4.3,<5.0
 
 # REST API (DRF 3.12+ compatible with Django 3.2)
 djangorestframework>=3.15,<3.16
-django-filter>=2.4,<3.0
+django-filter>=23.3
 markdown>=3.3,<4.0
 
 # Production server
