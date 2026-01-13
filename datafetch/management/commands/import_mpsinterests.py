@@ -40,8 +40,8 @@ class Command(BaseCommand):
             
             date = filename[6:16]
             
-            # Fetch recent files (late 2024)
-            if date < "2024-10-01":
+            # Fetch recent files (late 2020)
+            if date < "2020-9-01":
                 continue
 
             filepath = join(self.mps_datadir, filename)

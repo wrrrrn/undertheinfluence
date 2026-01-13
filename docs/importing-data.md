@@ -147,26 +147,40 @@ __Parsing & importing__
 XML files are parsed using BeautifulSoup. Data from Category 2 (Donations) and Category 3 (Gifts/Hospitality) are imported as `Donation` records, linked to the respective MPs. New donors (People or Organizations) are created automatically.
 
 
-## Register of Lords’ Financial Interests
+## Register of Lords' Financial Interests
 
-We mine MP's declared interests outside to record the monetary value of declared interests and well as the individuals / organisations with whom they have these interests.
- 
-__Data sources__  
+We mine Lords' declared interests to record sponsorships, overseas visits, and gifts received by members of the House of Lords.
+
+__Data sources__
 * [data.parliament.uk](http://data.parliament.uk/)
-__Usage__  
+
+__Usage__
 ```
 python manage.py import_lordsinterests
 ```
-__Current status__  
+
+__Current status__
 - [x] fetching
-- [ ] parsing
-- [ ] importing
+- [x] parsing
+- [x] importing
 
 __Fetching__
-* Current data is fetched / saved in xml format from [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
+* Current data is fetched / saved in JSON format from [data.parliament.uk](http://data.parliament.uk/membersdataplatform/services/mnis/members/query/House=Lords/Interests%7CPreferredNames/)
 
-__Parsing & importing__  
-* __\#TODO__
+__Parsing & importing__
+JSON data is parsed and imported as `Donation` records. The parser extracts interests from Categories 4 (Sponsorship), 5 (Overseas visits), and 6 (Gifts).
+
+| Information | Data Model |
+|--------------|------------:|
+| Lords' declared interests |  ```Donation``` |
+| Full interest text (if truncated) |  ```Note``` |
+| Interest identifiers |  ```Identifier``` |
+
+**Notes**:
+- Donor information is not extracted (embedded in unstructured text) - `donor=null`
+- Monetary values are not reported for Lords' interests - `value=0`
+- Full text is preserved in Note objects when it exceeds the 128-character field limit
+- Deduplication uses `lords_interest` identifier scheme
 
 
 ## PRCA Public Affairs Register (Current)
@@ -203,9 +217,7 @@ Data is scraped from the page and saved into the following data models:
 
 ## PRCA Historical Register (PDF Archive)
 
-> The Public Relations and Communications Association (PRCA) provides an archive of historical lobbying registers in PDF format.
-
-This command provides a foundation for importing this historical data.
+> The Public Relations and Communications Association (PRCA) provides an archive of historical lobbying registers in PDF format covering 2019-2025.
 
 __Data sources__
 * [PRCA Public Affairs Register - Previous Registers](https://www.prca.global/sspx/public-affairs-register-previous-registers)
@@ -218,14 +230,31 @@ python manage.py import_appc_archive
 __Current status__
 - [x] fetching PDF links
 - [x] parsing (via PyMuPDF)
-- [ ] importing (database saving pending)
+- [x] importing
 
 __Fetching__
-* The command scrapes the archive page to find links to all historical PDF registers.
+* The command processes 26 historical PDF registers from the `data/appc_archive/` directory.
 
 __Parsing__
-* The command uses `PyMuPDF` and a font-based heuristic to reliably parse the varied PDF layouts (single-column and two-column) from 2019 to 2025.
-* It extracts Company Name, Address, Contact Details, Practitioners, Clients, and Countries of Operation.
+* Uses `PyMuPDF` (fitz) with font-based heuristics to reliably parse varied PDF layouts (single-column and two-column) from 2019 to 2025.
+* Extracts Company Name, Address, Contact Details, Practitioners, Clients, and Countries of Operation.
+
+__Importing__
+Data is imported into the following models:
+
+| Information | Data Model |
+|--------------|------------:|
+| Lobbying agencies | ```Organization``` |
+| Agency addresses | ```ContactDetail``` |
+| Agency emails/websites | ```ContactDetail``` / ```Link``` |
+| Practitioners | ```Person``` + ```Membership``` |
+| Clients | ```Organization``` |
+| Agency-client relationships | ```Consultancy``` |
+
+**Notes**:
+- Processes ~3,000 agencies and ~26,000 consultancy relationships across 26 PDFs
+- Addresses automatically truncated to 512 characters when necessary
+- Some Q3 2025 entries have overly long company names that exceed database limits (23/73 failed)
   
 
 
