@@ -658,3 +658,178 @@ class ActorConsultanciesView(generics.ListAPIView):
             )
 
         return queryset.select_related('client', 'agency').order_by('-start_date')
+
+
+class ActorMembershipsView(generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/memberships/
+
+    Returns membership relationships for this actor (organizations they belong to).
+
+    **Temporal Querying:**
+    Use ?at_date=YYYY-MM-DD to see memberships active at a specific date.
+
+    Query Parameters:
+    - at_date: Show memberships active at this date (YYYY-MM-DD)
+    - role: Filter by role/position
+    - organization_name: Filter by organization name
+    - limit, offset: Pagination
+
+    Example:
+        GET /api/v2/actors/123/memberships/?at_date=2020-01-01
+        Returns: Memberships active on January 1st, 2020
+    """
+    serializer_class = serializers.MembershipDetailSerializer
+    pagination_class = pagination.DetailPagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Get memberships for this actor with temporal filtering."""
+        actor_id = self.kwargs['pk']
+
+        # Base queryset - find memberships for this person
+        queryset = models.Membership.objects.filter(
+            person_id=actor_id
+        ).select_related('person', 'organization', 'post')
+
+        # Apply temporal and other filters
+        filterset = filters.MembershipFilterSet(
+            self.request.query_params,
+            queryset=queryset
+        )
+
+        return filterset.qs.order_by('-start_date')
+
+
+class DonorConcentrationView(views.APIView):
+    """
+    GET /api/v2/aggregates/donor-concentration/
+
+    Returns donor concentration metrics to identify monopolistic vs. dispersed donor bases.
+
+    **Metrics:**
+    - Herfindahl-Hirschman Index (HHI): 0-1, higher = more concentrated
+    - Top 10% share: % of total donated by top 10% of donors
+    - Top donor share: % of total donated by single largest donor
+    - Gini coefficient: 0-1, higher = more unequal distribution
+    - Concentration category: Classification (highly/moderately/dispersed)
+
+    **Interpretation:**
+    - HHI > 0.25: Highly concentrated (monopolistic)
+    - HHI 0.15-0.25: Moderately concentrated
+    - HHI < 0.15: Dispersed (competitive)
+
+    Query Parameters:
+    - received_after: Filter donations from this date
+    - received_before: Filter donations up to this date
+    - recipient: Filter by specific recipient ID
+
+    Example:
+        GET /api/v2/aggregates/donor-concentration/?received_after=2020-01-01
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Calculate donor concentration metrics."""
+        # Get query parameters
+        recipient_id = request.query_params.get('recipient')
+
+        # Base queryset
+        queryset = models.Donation.objects.exclude(donor__isnull=True)
+
+        # Apply filters
+        filterset = filters.DonationFilterSet(request.query_params, queryset=queryset)
+        queryset = filterset.qs
+
+        # Filter by specific recipient if provided
+        if recipient_id:
+            queryset = queryset.filter(recipient_id=recipient_id)
+
+        # Aggregate by donor
+        donor_totals = queryset.values('donor_id').annotate(
+            total=Sum('value')
+        ).order_by('-total')
+
+        # Convert to list of amounts (sorted descending) - convert Decimal to float
+        amounts = [float(item['total']) for item in donor_totals if item['total']]
+
+        if not amounts:
+            # No data - return zeros
+            return Response({
+                'total_donors': 0,
+                'total_donated': 0,
+                'herfindahl_index': 0,
+                'top_10_percent_share': 0,
+                'top_donor_share': 0,
+                'gini_coefficient': 0,
+                'concentration_category': 'no_data',
+            })
+
+        # Calculate metrics
+        total_donors = len(amounts)
+        total_donated = sum(amounts)
+
+        # Herfindahl-Hirschman Index (HHI)
+        # Sum of squared market shares
+        market_shares = [amount / total_donated for amount in amounts]
+        hhi = sum(share ** 2 for share in market_shares)
+
+        # Top 10% share
+        top_10_count = max(1, int(total_donors * 0.1))
+        top_10_total = sum(amounts[:top_10_count])
+        top_10_share = (top_10_total / total_donated * 100) if total_donated else 0
+
+        # Top donor share
+        top_donor_share = (amounts[0] / total_donated * 100) if total_donated else 0
+
+        # Gini coefficient
+        # Measures inequality: 0 = perfect equality, 1 = perfect inequality
+        gini = self._calculate_gini(amounts)
+
+        # Concentration category
+        if hhi > 0.25:
+            category = 'highly_concentrated'
+        elif hhi > 0.15:
+            category = 'moderately_concentrated'
+        else:
+            category = 'dispersed'
+
+        data = {
+            'total_donors': total_donors,
+            'total_donated': total_donated,
+            'herfindahl_index': round(hhi, 4),
+            'top_10_percent_share': round(top_10_share, 2),
+            'top_donor_share': round(top_donor_share, 2),
+            'gini_coefficient': round(gini, 4),
+            'concentration_category': category,
+        }
+
+        serializer = serializers.DonorConcentrationSerializer(data)
+        return Response(serializer.data)
+
+    def _calculate_gini(self, amounts):
+        """
+        Calculate Gini coefficient for income inequality.
+
+        Args:
+            amounts: List of donation amounts (sorted descending)
+
+        Returns:
+            float: Gini coefficient (0-1)
+        """
+        if not amounts or sum(amounts) == 0:
+            return 0
+
+        # Sort ascending for Gini calculation
+        sorted_amounts = sorted(amounts)
+        n = len(sorted_amounts)
+        cumsum = 0
+        total = sum(sorted_amounts)
+
+        # Calculate Gini using the formula:
+        # G = (2 * sum(i * x_i)) / (n * sum(x_i)) - (n + 1) / n
+        for i, amount in enumerate(sorted_amounts, 1):
+            cumsum += i * amount
+
+        gini = (2 * cumsum) / (n * total) - (n + 1) / n
+        return max(0, min(1, gini))  # Clamp to [0, 1]

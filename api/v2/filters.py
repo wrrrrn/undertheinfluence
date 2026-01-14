@@ -187,3 +187,58 @@ class DateRangeFilter(django_filters.Filter):
             Q(start_date__lte=value) &
             (Q(end_date__gte=value) | Q(end_date__isnull=True))
         )
+
+
+class MembershipFilterSet(django_filters.FilterSet):
+    """
+    Filter memberships with temporal support.
+
+    Supports ?at_date= for showing memberships active at a specific date.
+    """
+    # Temporal filter
+    at_date = DateRangeFilter(
+        help_text='Show memberships active at this date (YYYY-MM-DD)'
+    )
+
+    # Date range filters
+    start_after = django_filters.DateFilter(
+        field_name='start_date',
+        lookup_expr='gte',
+        help_text='Filter memberships starting on or after this date'
+    )
+    start_before = django_filters.DateFilter(
+        field_name='start_date',
+        lookup_expr='lte',
+        help_text='Filter memberships starting on or before this date'
+    )
+    end_after = django_filters.DateFilter(
+        field_name='end_date',
+        lookup_expr='gte',
+        help_text='Filter memberships ending on or after this date'
+    )
+    end_before = django_filters.DateFilter(
+        field_name='end_date',
+        lookup_expr='lte',
+        help_text='Filter memberships ending on or before this date'
+    )
+
+    # Role/organization filters
+    role = django_filters.CharFilter(
+        field_name='role',
+        lookup_expr='icontains',
+        help_text='Filter by role'
+    )
+    organization_name = django_filters.CharFilter(
+        field_name='organization__name',
+        lookup_expr='icontains',
+        help_text='Filter by organization name'
+    )
+
+    class Meta:
+        model = models.Membership
+        fields = [
+            'at_date',
+            'start_after', 'start_before',
+            'end_after', 'end_before',
+            'role', 'organization_name',
+        ]

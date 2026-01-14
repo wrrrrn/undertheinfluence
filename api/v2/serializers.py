@@ -247,3 +247,25 @@ class MembershipDetailSerializer(serializers.ModelSerializer):
             'id', 'person', 'organization',
             'label', 'role', 'start_date', 'end_date',
         ]
+
+
+class DonorConcentrationSerializer(serializers.Serializer):
+    """
+    Serializer for donor concentration analysis.
+
+    Returns:
+    - total_donors: Total number of donors
+    - total_donated: Total amount donated
+    - herfindahl_index: Concentration metric (0-1, higher = more concentrated)
+    - top_10_percent_share: % of total donated by top 10% of donors
+    - top_donor_share: % of total donated by single largest donor
+    - gini_coefficient: Income inequality metric (0-1, higher = more unequal)
+    - concentration_category: 'highly_concentrated', 'moderately_concentrated', or 'dispersed'
+    """
+    total_donors = serializers.IntegerField()
+    total_donated = serializers.DecimalField(max_digits=15, decimal_places=2)
+    herfindahl_index = serializers.FloatField()
+    top_10_percent_share = serializers.FloatField()
+    top_donor_share = serializers.FloatField()
+    gini_coefficient = serializers.FloatField()
+    concentration_category = serializers.CharField()
