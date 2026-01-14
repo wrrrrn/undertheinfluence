@@ -5,7 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from model_utils.fields import AutoCreatedField, AutoLastModifiedField
 
 __author__ = 'guglielmo'
@@ -15,7 +15,7 @@ class GenericRelatable(models.Model):
     """
     An abstract class that provides the possibility of generic relations
     """
-    content_type = models.ForeignKey(ContentType, blank=True, null=True)
+    content_type = models.ForeignKey(ContentType, blank=True, null=True, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField(blank=True, null=True)
     content_object = GenericForeignKey('content_type', 'object_id')
 
@@ -61,14 +61,18 @@ class Dateframeable(models.Model):
 
     @property
     def start_datetime(self):
+        if self.start_date is None:
+            return None
         if len(self.start_date) < 7:
             return self.start_date
         return datetime.strptime(self.start_date[:7], '%Y-%m').strftime("%b %Y")
 
     @property
     def end_datetime(self):
+        if self.end_date is None:
+            return None
         if len(self.end_date) < 7:
-            return end_date
+            return self.end_date
         return datetime.strptime(self.end_date[:7], '%Y-%m').strftime("%b %Y")
 
     class Meta:

@@ -1,14 +1,12 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-from wagtail.wagtailcore.models import Page
-from wagtail.wagtailcore.fields import RichTextField, StreamField
-from wagtail.wagtailadmin.edit_handlers import FieldPanel, StreamFieldPanel
-from wagtail.wagtailcore import blocks
-from wagtail.wagtailsnippets.models import register_snippet
-from wagtail.wagtailsnippets.edit_handlers import SnippetChooserPanel
-from wagtail.wagtailimages.edit_handlers import ImageChooserPanel
-from wagtail.wagtailimages.blocks import ImageChooserBlock
+from wagtail.models import Page
+from wagtail.fields import RichTextField, StreamField
+from wagtail import blocks
+from wagtail.admin.panels import FieldPanel
+from wagtail.snippets.models import register_snippet
+from wagtail.images.blocks import ImageChooserBlock
 
 
 class MyPage(Page):
@@ -42,9 +40,9 @@ class MyPage(Page):
 
     content_panels = Page.content_panels + [
         FieldPanel('body'),
-        SnippetChooserPanel('quote'),
-        SnippetChooserPanel('analysis'),
-        SnippetChooserPanel('profile'),
+        FieldPanel('quote'),
+        FieldPanel('analysis'),
+        FieldPanel('profile'),
     ]
 
     @property
@@ -66,7 +64,7 @@ class DataPage(Page):
 
     content_panels = Page.content_panels + [
         FieldPanel('body'),
-        SnippetChooserPanel('analysis'),
+        FieldPanel('analysis'),
     ]
 
     @property
@@ -90,7 +88,7 @@ class Profile(models.Model):
 
     panels = [
         FieldPanel('name'),
-        ImageChooserPanel('image'),
+        FieldPanel('image'),
         FieldPanel('body'),
     ]
 
@@ -115,13 +113,13 @@ class Analysis(models.Model):
         ('heading', blocks.CharBlock(classname="full title")),
         ('paragraph', blocks.RichTextBlock()),
         ('image', ImageChooserBlock()),
-    ])
+    ], use_json_field=True)
 
     panels = [
         FieldPanel('title'),
         FieldPanel('date'),
         FieldPanel('owner'),
-        StreamFieldPanel('body'),
+        FieldPanel('body'),
     ]
 
     def __str__(self):
