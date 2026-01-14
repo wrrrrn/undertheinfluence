@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_filters',  # Django Filter for API v2
     'drf_spectacular',  # OpenAPI schema generation
+    'django_vite',  # Vite integration for Islands Architecture frontend
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
@@ -172,6 +173,16 @@ STATICFILES_DIRS = (
 
 STATIC_ROOT = join(BASE_DIR, 'static')
 STATIC_URL = '/static/'
+
+# Vite integration for Islands Architecture frontend
+DJANGO_VITE = {
+    'default': {
+        'dev_mode': DEBUG,
+        'dev_server_host': config('DJANGO_VITE_DEV_SERVER_HOST', default='vite' if DEBUG else 'localhost'),
+        'dev_server_port': 5173,
+        'manifest_path': join(BASE_DIR, 'static', 'dist', 'manifest.json'),
+    }
+}
 
 MEDIA_ROOT = join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'

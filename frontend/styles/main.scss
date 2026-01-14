@@ -1,0 +1,28 @@
+// Main stylesheet - Imports Bootstrap 5 and custom global styles
+
+// Import Bootstrap 5
+@import "bootstrap/scss/bootstrap";
+
+// Global styles (minimal - use CSS Modules for component styles)
+body {
+  font-family: $font-family-sans-serif;
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+}
+
+// Utility classes for Islands
+.island-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--bs-secondary);
+}
+
+.island-error {
+  padding: 1rem;
+  border: 1px solid var(--bs-danger);
+  border-radius: var(--bs-border-radius);
+  background-color: rgba(var(--bs-danger-rgb), 0.1);
+  color: var(--bs-danger);
+}
