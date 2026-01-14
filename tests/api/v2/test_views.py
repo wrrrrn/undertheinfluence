@@ -180,6 +180,109 @@ def consultancy_dataset(db):
     }
 
 
+@pytest.fixture
+def dual_influence_dataset(db):
+    """
+    Create dataset for testing dual-influence detection.
+
+    Organizations that both donate AND lobby (use consultancy agencies).
+    """
+    # Create lobbying agencies
+    agency1 = Organization.objects.create(
+        name="Top Lobbying Firm",
+        classification="Consultancy",
+    )
+
+    # Create organizations that both donate and lobby
+    dual_org1 = Organization.objects.create(
+        name="Dual Corp",
+        classification="Company",
+    )
+    dual_org2 = Organization.objects.create(
+        name="Influential Ltd",
+        classification="Company",
+    )
+
+    # Create organization that only donates (no lobbying)
+    donor_only = Organization.objects.create(
+        name="Donor Only Inc",
+        classification="Company",
+    )
+
+    # Create organization that only lobbies (no donations)
+    lobby_only = Organization.objects.create(
+        name="Lobby Only Corp",
+        classification="Company",
+    )
+
+    # Create recipients
+    mp = Person.objects.create(
+        name="MP Person",
+        family_name="Person",
+        given_name="MP",
+    )
+    party = Organization.objects.create(
+        name="Major Party",
+        classification="Political Party",
+    )
+
+    # Dual org #1: Donates AND lobbies
+    Donation.objects.create(
+        donor=dual_org1, recipient=mp, value=25000.00,
+        received_date="2023-06-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=dual_org1, recipient=party, value=15000.00,
+        received_date="2024-01-15", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Consultancy.objects.create(
+        agency=agency1, client=dual_org1,
+        start_date="2023-01-01", end_date="2023-12-31",
+    )
+    Consultancy.objects.create(
+        agency=agency1, client=dual_org1,
+        start_date="2024-01-01",
+    )
+
+    # Dual org #2: Donates AND lobbies
+    Donation.objects.create(
+        donor=dual_org2, recipient=party, value=50000.00,
+        received_date="2023-03-10", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Consultancy.objects.create(
+        agency=agency1, client=dual_org2,
+        start_date="2023-02-01",
+    )
+
+    # Donor only: Donates but doesn't lobby
+    Donation.objects.create(
+        donor=donor_only, recipient=party, value=10000.00,
+        received_date="2024-02-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+
+    # Lobby only: Lobbies but doesn't donate
+    Consultancy.objects.create(
+        agency=agency1, client=lobby_only,
+        start_date="2024-03-01",
+    )
+
+    return {
+        'dual_orgs': [dual_org1, dual_org2],
+        'donor_only': donor_only,
+        'lobby_only': lobby_only,
+        'agency': agency1,
+        'recipients': [mp, party],
+    }
+
+
 # ===========================
 # TopDonorsView Tests
 # ===========================
@@ -508,6 +611,584 @@ class TestNetworkStatsView:
         assert Decimal(str(data['total_donation_value'])) == Decimal('0.00')
         assert data['unique_donors'] == 0
         assert data['unique_recipients'] == 0
+
+
+# ===========================
+# PartyDonationsView Tests
+# ===========================
+
+class TestPartyDonationsView:
+    """Tests for /api/v2/aggregates/party-donations/ endpoint."""
+
+    def test_basic_party_donations(self, api_client, rich_donation_dataset):
+        """Should return parties with their total donations."""
+        url = reverse('api_v2:party-donations')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+
+        results = response.data['results']
+        # Only one political party in dataset
+        assert len(results) == 1
+
+        # Test Party received 35,000 (25k from Acme + 10k from Alice)
+        party_result = results[0]
+        assert party_result['party']['name'] == "Test Party"
+        assert Decimal(str(party_result['total_received'])) == Decimal('35000.00')
+        assert party_result['donation_count'] == 2
+        assert party_result['donor_count'] == 2  # Acme and Alice
+
+    def test_party_donations_pagination(self, api_client, rich_donation_dataset):
+        """Should paginate party results."""
+        url = reverse('api_v2:party-donations')
+        response = api_client.get(url, {'limit': 1})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['count'] == 1
+
+    def test_party_donations_filter_by_date(self, api_client, rich_donation_dataset):
+        """Should filter party donations by date range."""
+        url = reverse('api_v2:party-donations')
+
+        # Only 2023 donations
+        response = api_client.get(url, {
+            'received_after': '2023-01-01',
+            'received_before': '2023-12-31',
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        # Test Party received 35,000 in 2023 (Acme 25k + Alice 10k)
+        # Both donations are in 2023: Acme on 2023-06-20, Alice on 2023-03-01
+        assert Decimal(str(results[0]['total_received'])) == Decimal('35000.00')
+        assert results[0]['donation_count'] == 2
+        assert results[0]['donor_count'] == 2  # Acme and Alice
+
+    def test_party_donations_filter_by_donor_type(self, api_client, rich_donation_dataset):
+        """Should filter by donor type."""
+        url = reverse('api_v2:party-donations')
+
+        # Only organization donors
+        response = api_client.get(url, {'donor_type': 'organization'})
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        # Only Acme's 25,000 donation
+        assert Decimal(str(results[0]['total_received'])) == Decimal('25000.00')
+        assert results[0]['donor_count'] == 1
+
+    def test_party_donations_response_structure(self, api_client, rich_donation_dataset):
+        """Should return properly structured response."""
+        url = reverse('api_v2:party-donations')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        result = response.data['results'][0]
+        assert 'party' in result
+        assert 'total_received' in result
+        assert 'donation_count' in result
+        assert 'donor_count' in result
+
+        # Check party actor structure
+        party = result['party']
+        assert 'id' in party
+        assert 'name' in party
+        assert 'actor_type' in party
+        assert party['actor_type'] == 'organization'
+        assert 'classification' in party
+        assert party['classification'] == 'Political Party'
+
+    def test_party_donations_empty_result(self, api_client, db):
+        """Should handle no political parties gracefully."""
+        # Create non-party organization
+        org = Organization.objects.create(
+            name="Company",
+            classification="Company",
+        )
+        donor = Person.objects.create(
+            name="Test Person",
+            family_name="Person",
+            given_name="Test",
+        )
+
+        # Donation to non-party
+        Donation.objects.create(
+            donor=donor, recipient=org, value=1000.00,
+            received_date="2024-01-01", donation_type="Cash",
+            accounting_units_as_central_party=False,
+            is_bequest=False, is_aggregation=False, is_sponsorship=False,
+        )
+
+        url = reverse('api_v2:party-donations')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
+
+# ===========================
+# DualInfluenceView Tests
+# ===========================
+
+class TestDualInfluenceView:
+    """Tests for /api/v2/aggregates/dual-influence/ endpoint."""
+
+    def test_basic_dual_influence(self, api_client, dual_influence_dataset):
+        """Should return only organizations that both donate AND lobby."""
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+
+        results = response.data['results']
+        # Should only return the 2 dual-influence orgs (not donor-only or lobby-only)
+        assert response.data['count'] == 2
+
+        # Check first result (highest donated)
+        # Influential Ltd: 50,000 donation
+        assert results[0]['organization']['name'] == "Influential Ltd"
+        assert Decimal(str(results[0]['total_donated'])) == Decimal('50000.00')
+        assert results[0]['donation_count'] == 1
+        assert results[0]['lobbying_count'] == 1
+
+        # Check second result
+        # Dual Corp: 40,000 total (25k + 15k)
+        assert results[1]['organization']['name'] == "Dual Corp"
+        assert Decimal(str(results[1]['total_donated'])) == Decimal('40000.00')
+        assert results[1]['donation_count'] == 2
+        assert results[1]['lobbying_count'] == 2
+
+    def test_dual_influence_excludes_single_activity(self, api_client, dual_influence_dataset):
+        """Should exclude orgs that only donate OR only lobby."""
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Extract all organization names from results
+        org_names = [r['organization']['name'] for r in response.data['results']]
+
+        # Should NOT include donor-only or lobby-only orgs
+        assert "Donor Only Inc" not in org_names
+        assert "Lobby Only Corp" not in org_names
+
+        # Should ONLY include dual-influence orgs
+        assert "Dual Corp" in org_names
+        assert "Influential Ltd" in org_names
+
+    def test_dual_influence_activity_dates(self, api_client, dual_influence_dataset):
+        """Should return correct first and last activity dates."""
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        # Check date fields are present
+        for result in results:
+            assert 'first_activity' in result
+            assert 'last_activity' in result
+
+        # Dual Corp: first donation 2023-06-01, last 2024-01-15
+        dual_corp = [r for r in results if r['organization']['name'] == "Dual Corp"][0]
+        assert dual_corp['first_activity'] == "2023-06-01"
+        assert dual_corp['last_activity'] == "2024-01-15"
+
+    def test_dual_influence_pagination(self, api_client, dual_influence_dataset):
+        """Should paginate dual-influence results."""
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url, {'limit': 1})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['count'] == 2
+        assert response.data['next'] is not None
+
+    def test_dual_influence_filter_by_date(self, api_client, dual_influence_dataset):
+        """Should filter by donation date range."""
+        url = reverse('api_v2:dual-influence')
+
+        # Only 2024 donations
+        response = api_client.get(url, {
+            'received_after': '2024-01-01',
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Only Dual Corp has 2024 donation (15,000)
+        results = response.data['results']
+        assert len(results) == 1
+        assert results[0]['organization']['name'] == "Dual Corp"
+        assert Decimal(str(results[0]['total_donated'])) == Decimal('15000.00')
+
+    def test_dual_influence_response_structure(self, api_client, dual_influence_dataset):
+        """Should return properly structured response."""
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        result = response.data['results'][0]
+        assert 'organization' in result
+        assert 'total_donated' in result
+        assert 'donation_count' in result
+        assert 'lobbying_count' in result
+        assert 'first_activity' in result
+        assert 'last_activity' in result
+
+        # Check organization structure
+        org = result['organization']
+        assert 'id' in org
+        assert 'name' in org
+        assert 'actor_type' in org
+        assert org['actor_type'] == 'organization'
+
+    def test_dual_influence_empty_result(self, api_client, db):
+        """Should handle no dual-influence orgs gracefully."""
+        # Create only donor-only org
+        donor = Organization.objects.create(
+            name="Simple Donor",
+            classification="Company",
+        )
+        recipient = Person.objects.create(
+            name="MP",
+            family_name="MP",
+            given_name="Test",
+        )
+        Donation.objects.create(
+            donor=donor, recipient=recipient, value=1000.00,
+            received_date="2024-01-01", donation_type="Cash",
+            accounting_units_as_central_party=False,
+            is_bequest=False, is_aggregation=False, is_sponsorship=False,
+        )
+
+        url = reverse('api_v2:dual-influence')
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
+
+# ===========================
+# ActorDetailView Tests
+# ===========================
+
+class TestActorDetailView:
+    """Tests for /api/v2/actors/{id}/ endpoint."""
+
+    def test_person_detail(self, api_client, rich_donation_dataset):
+        """Should return detailed person information with aggregates."""
+        donors = rich_donation_dataset['donors']
+        person = donors['person_donor1']  # Alice Johnson
+
+        url = reverse('api_v2:actor-detail', kwargs={'pk': person.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.data
+        assert data['id'] == person.pk
+        assert data['name'] == "Alice Johnson"
+        assert data['actor_type'] == 'person'
+        assert data['image'] is None  # No image set
+
+        # Alice made 2 donations totaling 15,000
+        assert data['donations_made_count'] == 2
+        assert Decimal(str(data['total_donated'])) == Decimal('15000.00')
+
+        # Alice received 0 donations
+        assert data['donations_received_count'] == 0
+        assert data['total_received'] is None or Decimal(str(data['total_received'])) == Decimal('0.00')
+
+    def test_organization_detail(self, api_client, rich_donation_dataset):
+        """Should return detailed organization information."""
+        donors = rich_donation_dataset['donors']
+        org = donors['org_donor1']  # Acme Corporation
+
+        url = reverse('api_v2:actor-detail', kwargs={'pk': org.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.data
+        assert data['id'] == org.pk
+        assert data['name'] == "Acme Corporation"
+        assert data['actor_type'] == 'organization'
+        assert data['classification'] == 'Company'
+
+        # Acme made 2 donations totaling 75,000
+        assert data['donations_made_count'] == 2
+        assert Decimal(str(data['total_donated'])) == Decimal('75000.00')
+
+    def test_actor_detail_not_found(self, api_client, db):
+        """Should return 404 for non-existent actor."""
+        url = reverse('api_v2:actor-detail', kwargs={'pk': 99999})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_actor_detail_response_structure(self, api_client, rich_donation_dataset):
+        """Should return properly structured actor detail."""
+        person = rich_donation_dataset['donors']['person_donor1']
+        url = reverse('api_v2:actor-detail', kwargs={'pk': person.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Check all expected fields
+        data = response.data
+        assert 'id' in data
+        assert 'name' in data
+        assert 'actor_type' in data
+        assert 'classification' in data
+        assert 'image' in data
+        assert 'donations_made_count' in data
+        assert 'donations_received_count' in data
+        assert 'total_donated' in data
+        assert 'total_received' in data
+        assert 'consultancies_as_client' in data
+        assert 'consultancies_as_agency' in data
+
+
+# ===========================
+# ActorDonationsMadeView Tests
+# ===========================
+
+class TestActorDonationsMadeView:
+    """Tests for /api/v2/actors/{id}/donations-made/ endpoint."""
+
+    def test_donations_made(self, api_client, rich_donation_dataset):
+        """Should return all donations made by an actor."""
+        donors = rich_donation_dataset['donors']
+        person = donors['person_donor1']  # Alice Johnson - made 2 donations
+
+        url = reverse('api_v2:actor-donations-made', kwargs={'pk': person.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 2
+
+        results = response.data['results']
+        # Should be ordered by received_date descending
+        assert len(results) == 2
+
+        # First result should be most recent (2024-02-15)
+        assert results[0]['donor']['name'] == "Alice Johnson"
+        assert Decimal(str(results[0]['value'])) == Decimal('5000.00')
+        assert results[0]['received_date'] == "2024-02-15"
+
+    def test_donations_made_pagination(self, api_client, rich_donation_dataset):
+        """Should paginate donations made."""
+        donors = rich_donation_dataset['donors']
+        org = donors['org_donor1']  # Acme Corporation - made 2 donations
+
+        url = reverse('api_v2:actor-donations-made', kwargs={'pk': org.pk})
+        response = api_client.get(url, {'limit': 1})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['count'] == 2
+        assert response.data['next'] is not None
+
+    def test_donations_made_filter_by_date(self, api_client, rich_donation_dataset):
+        """Should filter donations by date range."""
+        donors = rich_donation_dataset['donors']
+        org = donors['org_donor1']  # Acme - 2 donations (2023-01-15, 2023-06-20)
+
+        url = reverse('api_v2:actor-donations-made', kwargs={'pk': org.pk})
+        response = api_client.get(url, {
+            'received_after': '2023-06-01',
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+        # Only one donation on/after 2023-06-01
+        assert response.data['count'] == 1
+        assert response.data['results'][0]['received_date'] == "2023-06-20"
+
+    def test_donations_made_empty_result(self, api_client, rich_donation_dataset):
+        """Should handle actors with no donations made."""
+        recipients = rich_donation_dataset['recipients']
+        mp = recipients['mp1']  # Sarah Brown MP - received donations, made none
+
+        url = reverse('api_v2:actor-donations-made', kwargs={'pk': mp.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
+    def test_donations_made_response_structure(self, api_client, rich_donation_dataset):
+        """Should return properly structured donation details."""
+        person = rich_donation_dataset['donors']['person_donor1']
+        url = reverse('api_v2:actor-donations-made', kwargs={'pk': person.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        result = response.data['results'][0]
+        assert 'id' in result
+        assert 'donor' in result
+        assert 'recipient' in result
+        assert 'value' in result
+        assert 'received_date' in result
+        assert 'donation_type' in result
+
+        # Check nested actor structure
+        assert 'id' in result['donor']
+        assert 'name' in result['donor']
+
+
+# ===========================
+# ActorDonationsReceivedView Tests
+# ===========================
+
+class TestActorDonationsReceivedView:
+    """Tests for /api/v2/actors/{id}/donations-received/ endpoint."""
+
+    def test_donations_received(self, api_client, rich_donation_dataset):
+        """Should return all donations received by an actor."""
+        recipients = rich_donation_dataset['recipients']
+        mp = recipients['mp1']  # Sarah Brown MP - received 2 donations
+
+        url = reverse('api_v2:actor-donations-received', kwargs={'pk': mp.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 2
+
+        results = response.data['results']
+        # Most recent first (2024-02-15)
+        assert results[0]['received_date'] == "2024-02-15"
+        assert Decimal(str(results[0]['value'])) == Decimal('5000.00')
+        assert results[0]['recipient']['name'] == "Sarah Brown MP"
+
+    def test_donations_received_pagination(self, api_client, rich_donation_dataset):
+        """Should paginate donations received."""
+        recipients = rich_donation_dataset['recipients']
+        party = recipients['party']  # Test Party - received 2 donations
+
+        url = reverse('api_v2:actor-donations-received', kwargs={'pk': party.pk})
+        response = api_client.get(url, {'limit': 1})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['count'] == 2
+
+    def test_donations_received_filter_by_value(self, api_client, rich_donation_dataset):
+        """Should filter by minimum value."""
+        recipients = rich_donation_dataset['recipients']
+        mp = recipients['mp1']  # Received 50k and 5k
+
+        url = reverse('api_v2:actor-donations-received', kwargs={'pk': mp.pk})
+        response = api_client.get(url, {'value_min': 10000})
+
+        assert response.status_code == status.HTTP_200_OK
+        # Only the 50,000 donation
+        assert response.data['count'] == 1
+        assert Decimal(str(response.data['results'][0]['value'])) == Decimal('50000.00')
+
+    def test_donations_received_empty_result(self, api_client, rich_donation_dataset):
+        """Should handle actors with no donations received."""
+        donors = rich_donation_dataset['donors']
+        org = donors['org_donor1']  # Acme - made donations, received none
+
+        url = reverse('api_v2:actor-donations-received', kwargs={'pk': org.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
+
+# ===========================
+# ActorConsultanciesView Tests
+# ===========================
+
+class TestActorConsultanciesView:
+    """Tests for /api/v2/actors/{id}/consultancies/ endpoint."""
+
+    def test_consultancies_as_client(self, api_client, dual_influence_dataset):
+        """Should return consultancies where actor is the client."""
+        dual_orgs = dual_influence_dataset['dual_orgs']
+        dual_corp = dual_orgs[0]  # Dual Corp - client in 2 consultancies
+
+        url = reverse('api_v2:actor-consultancies', kwargs={'pk': dual_corp.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 2
+
+        results = response.data['results']
+        # All should have dual_corp as client
+        for result in results:
+            assert result['client']['name'] == "Dual Corp"
+            assert result['agency']['name'] == "Top Lobbying Firm"
+
+    def test_consultancies_as_agency(self, api_client, dual_influence_dataset):
+        """Should return consultancies where actor is the agency."""
+        agency = dual_influence_dataset['agency']  # Top Lobbying Firm
+
+        url = reverse('api_v2:actor-consultancies', kwargs={'pk': agency.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Agency for all 4 consultancies in dataset
+        assert response.data['count'] == 4
+
+        results = response.data['results']
+        for result in results:
+            assert result['agency']['name'] == "Top Lobbying Firm"
+
+    def test_consultancies_pagination(self, api_client, dual_influence_dataset):
+        """Should paginate consultancy results."""
+        agency = dual_influence_dataset['agency']
+
+        url = reverse('api_v2:actor-consultancies', kwargs={'pk': agency.pk})
+        response = api_client.get(url, {'limit': 2})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 2
+        assert response.data['count'] == 4
+
+    def test_consultancies_empty_result(self, api_client, rich_donation_dataset):
+        """Should handle actors with no consultancies."""
+        person = rich_donation_dataset['donors']['person_donor1']
+
+        url = reverse('api_v2:actor-consultancies', kwargs={'pk': person.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
+    def test_consultancies_response_structure(self, api_client, dual_influence_dataset):
+        """Should return properly structured consultancy details."""
+        dual_corp = dual_influence_dataset['dual_orgs'][0]
+        url = reverse('api_v2:actor-consultancies', kwargs={'pk': dual_corp.pk})
+        response = api_client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
+        result = response.data['results'][0]
+        assert 'id' in result
+        assert 'agency' in result
+        assert 'client' in result
+        assert 'label' in result
+        assert 'start_date' in result
+        assert 'source' in result
+
+        # Check nested actor structures
+        assert 'id' in result['agency']
+        assert 'name' in result['agency']
+        assert 'id' in result['client']
+        assert 'name' in result['client']
 
 
 # ===========================

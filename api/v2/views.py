@@ -427,10 +427,19 @@ class DualInfluenceView(generics.ListAPIView):
         # Now aggregate their activity
         actor_ids = list(dual_influence_actors.values_list('id', flat=True))
 
-        # Aggregate donations
-        donation_agg = models.Donation.objects.filter(
+        # Aggregate donations (apply date filters)
+        donation_queryset = models.Donation.objects.filter(
             donor_id__in=actor_ids
-        ).values('donor_id').annotate(
+        )
+
+        # Apply date filters from query parameters
+        filterset = filters.DonationFilterSet(
+            self.request.query_params,
+            queryset=donation_queryset
+        )
+        donation_queryset = filterset.qs
+
+        donation_agg = donation_queryset.values('donor_id').annotate(
             total_donated=Sum('value'),
             donation_count=Count('id'),
             first_donation=Min('received_date'),
