@@ -5,6 +5,14 @@ import { createRoot } from 'react-dom/client';
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { initializeFilterStore } from './store/filterStore';
 
+// TypeScript declarations for React Fast Refresh globals
+declare global {
+  interface Window {
+    $RefreshReg$?: any;
+    $RefreshSig$?: any;
+  }
+}
+
 /**
  * Error Boundary component for island hydration failures
  */
@@ -44,9 +52,28 @@ class IslandErrorBoundary extends Component<
  * Add new islands here as we build them
  */
 const islands: Record<string, () => Promise<{ default: React.ComponentType<any> }>> = {
-  // Example: 'SearchBar': () => import('./islands/SearchBar'),
-  // Example: 'FilterPanel': () => import('./islands/FilterPanel'),
+  'ActorCard': () => import('./components/ActorCard'),
+  // More islands will be added here:
+  // 'FilterPanel': () => import('./islands/FilterPanel'),
+  // 'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
 };
+
+/**
+ * Wait for React Fast Refresh runtime to be ready
+ * This is needed for Vite's HMR with React
+ */
+async function waitForReactRefresh(): Promise<void> {
+  const maxWait = 5000; // 5 seconds max
+  const startTime = Date.now();
+
+  while (!window.$RefreshReg$ || !window.$RefreshSig$) {
+    if (Date.now() - startTime > maxWait) {
+      console.warn('React Fast Refresh runtime not detected after 5s, proceeding anyway');
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+}
 
 /**
  * Initialize island hydration system
@@ -55,6 +82,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize global filter store from URL
   initializeFilterStore();
   console.log('✓ Filter store initialized from URL');
+
+  // Wait for React Fast Refresh runtime to be ready
+  await waitForReactRefresh();
+  console.log('✓ React Fast Refresh runtime ready');
 
   // Find and hydrate all islands
   const islandElements = document.querySelectorAll('[data-island]');
@@ -79,8 +110,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       const { default: Component } = await loader();
 
       // Extract data-* attributes as props
-      const props = { ...el.dataset };
-      delete props.island; // Remove the island name from props
+      const rawProps = { ...el.dataset };
+      delete rawProps.island; // Remove the island name from props
+
+      // Parse JSON values from data attributes
+      const props: Record<string, any> = {};
+      for (const [key, value] of Object.entries(rawProps)) {
+        // Try to parse as JSON first (for objects/arrays)
+        if (value.startsWith('{') || value.startsWith('[')) {
+          try {
+            props[key] = JSON.parse(value);
+          } catch {
+            props[key] = value; // Keep as string if JSON parse fails
+          }
+        }
+        // Parse boolean strings
+        else if (value === 'true') props[key] = true;
+        else if (value === 'false') props[key] = false;
+        // Parse numbers
+        else if (!isNaN(Number(value)) && value !== '') props[key] = Number(value);
+        // Keep as string
+        else props[key] = value;
+      }
 
       // Hydrate the island with error boundary
       const root = createRoot(el);

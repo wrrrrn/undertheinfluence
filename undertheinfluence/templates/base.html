@@ -11,6 +11,9 @@
 
         <title>{% block title %}Under The Influence{% endblock %}</title>
 
+        {# Load Vite HMR client in dev mode (required for React Fast Refresh) #}
+        {% vite_hmr_client %}
+
         {# Load Vite CSS (Bootstrap 5 + custom styles) #}
         {% vite_asset 'frontend/main.tsx' %}
 

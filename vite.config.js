@@ -2,7 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Only apply Fast Refresh to entry points, not lazy-loaded components
+      include: ['**/main.tsx', '**/islands.tsx'],
+    })
+  ],
   base: '/static/',
   build: {
     manifest: true,
@@ -26,11 +31,6 @@ export default defineConfig({
     modules: {
       localsConvention: 'camelCase',
       scopeBehaviour: 'local'
-    },
-    preprocessorOptions: {
-      scss: {
-        additionalData: `@import "./frontend/styles/_variables.scss";`
-      }
     }
   }
 });
