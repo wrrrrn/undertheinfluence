@@ -46,7 +46,7 @@ LIMIT 20;
 WITH safe_donations AS (
   SELECT
     d.*,
-    CASE WHEN d.received_date ~ '^\d{4}-\d{2}-\d{2}$' THEN d.received_date::date END AS received_dt
+    CASE WHEN d.received_date::text ~ '^\d{4}-\d{2}-\d{2}$' THEN d.received_date::date END AS received_dt
   FROM datafetch_donation d
 )
 SELECT
@@ -63,7 +63,7 @@ JOIN datafetch_actor party ON sd.recipient_id = party.id
 JOIN datafetch_organization party_org ON party_org.actor_ptr_id = party.id
 LEFT JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = donor.id
 WHERE sd.value > 0
-  AND LOWER(COALESCE(party_org.classification,'')) = 'party'
+  AND party_org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
   AND sd.received_dt >= DATE '2020-01-01'
 GROUP BY party.id, donor.id
 ORDER BY party_name, total_donated DESC;
@@ -75,22 +75,28 @@ WITH donor_totals AS (
   FROM datafetch_donation
   WHERE donor_id IS NOT NULL AND value > 0
   GROUP BY donor_id
+),
+donor_brackets AS (
+  SELECT
+    CASE
+      WHEN donor_total >= 1000000 THEN '£1M+'
+      WHEN donor_total >= 500000 THEN '£500K-£1M'
+      WHEN donor_total >= 100000 THEN '£100K-£500K'
+      WHEN donor_total >= 50000 THEN '£50K-£100K'
+      WHEN donor_total >= 10000 THEN '£10K-£50K'
+      ELSE 'Under £10K'
+    END AS donor_bracket,
+    donor_total
+  FROM donor_totals
 )
 SELECT
-  CASE
-    WHEN donor_total >= 1000000 THEN '£1M+'
-    WHEN donor_total >= 500000 THEN '£500K-£1M'
-    WHEN donor_total >= 100000 THEN '£100K-£500K'
-    WHEN donor_total >= 50000 THEN '£50K-£100K'
-    WHEN donor_total >= 10000 THEN '£10K-£50K'
-    ELSE 'Under £10K'
-  END AS donor_bracket,
+  donor_bracket,
   COUNT(*) AS donor_count,
   SUM(donor_total) AS total_value,
   ROUND(AVG(donor_total), 2) AS avg_per_donor,
   ROUND(100.0 * SUM(donor_total) / SUM(SUM(donor_total)) OVER (), 2) AS pct_of_total
-FROM donor_totals
-GROUP BY 1
+FROM donor_brackets
+GROUP BY donor_bracket
 ORDER BY
   CASE
     WHEN donor_bracket = '£1M+' THEN 1
@@ -143,6 +149,7 @@ FROM consultancy_summary cs
 JOIN donation_summary ds ON ds.donor_id = cs.client_id
 JOIN datafetch_actor client ON client.id = cs.client_id
 LEFT JOIN datafetch_organization org ON org.actor_ptr_id = client.id
+GROUP BY client.id, cs.consultancy_count, cs.agencies_used, ds.donation_count, ds.total_donated, ds.distinct_recipients, ds.first_donation, ds.latest_donation
 ORDER BY ds.total_donated DESC;
 
 
@@ -181,6 +188,7 @@ JOIN client_donations cd ON cd.client_id = acc.client_id
 JOIN datafetch_actor agency ON agency.id = acc.agency_id
 JOIN datafetch_actor client ON client.id = acc.client_id
 LEFT JOIN datafetch_organization client_org ON client_org.actor_ptr_id = client.id
+GROUP BY agency.id, client.id, acc.consultancy_count, cd.donation_count, cd.total_donated, cd.distinct_recipients
 ORDER BY cd.total_donated DESC
 LIMIT 50;
 
@@ -262,6 +270,7 @@ JOIN datafetch_actor donor ON donor.id = drt.donor_id
 JOIN datafetch_actor agency ON agency.id = da.agency_id
 JOIN datafetch_actor recipient ON recipient.id = drt.recipient_id
 WHERE drt.total_donated > 10000
+GROUP BY donor.id, agency.id, recipient.id, drt.total_donated, drt.donation_count, da.consultancy_count, drt.first_donation, drt.latest_donation
 ORDER BY drt.total_donated DESC
 LIMIT 50;
 
@@ -297,7 +306,7 @@ donating_orgs AS (
 overlap_orgs AS (
   SELECT lc.client_id AS org_id
   FROM lobbying_clients lc
-  JOIN donating_orgs do ON do.donor_id = lc.client_id
+  JOIN donating_orgs don ON don.donor_id = lc.client_id
 )
 SELECT
   COUNT(*) AS organizations_that_lobby_and_donate,
@@ -357,10 +366,481 @@ ORDER BY total_donated DESC;
 
 
 -- ============================================================================
--- SECTION 6: SECTOR & CLASSIFICATION ANALYSIS
+-- SECTION 3: POLITICAL PARTIES ANALYSIS
 -- ============================================================================
 
--- 6.1 Donations by Donor Classification
+-- 3.1 Top Political Parties by Total Donations Received
+WITH party_donations AS (
+  SELECT
+    recipient_id,
+    COUNT(*) AS donation_count,
+    SUM(value) AS total_received,
+    COUNT(DISTINCT donor_id) AS distinct_donors,
+    MIN(received_date) AS first_donation,
+    MAX(received_date) AS latest_donation
+  FROM datafetch_donation
+  WHERE recipient_id IS NOT NULL AND value > 0
+  GROUP BY recipient_id
+)
+SELECT
+  party.id AS party_id,
+  MAX(party.name) AS party_name,
+  MAX(org.classification) AS classification,
+  pd.donation_count,
+  pd.total_received,
+  pd.distinct_donors,
+  ROUND(pd.total_received::numeric / pd.donation_count, 2) AS avg_donation,
+  pd.first_donation,
+  pd.latest_donation
+FROM party_donations pd
+JOIN datafetch_actor party ON party.id = pd.recipient_id
+JOIN datafetch_organization org ON org.actor_ptr_id = party.id
+WHERE org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
+GROUP BY party.id, pd.donation_count, pd.total_received, pd.distinct_donors, pd.first_donation, pd.latest_donation
+ORDER BY pd.total_received DESC;
+
+
+-- 3.2 Party Donations by Donor Type (Individuals vs Organizations)
+WITH party_recipients AS (
+  SELECT org.actor_ptr_id AS party_id
+  FROM datafetch_organization org
+  WHERE org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
+)
+SELECT
+  party.id AS party_id,
+  MAX(party.name) AS party_name,
+  CASE
+    WHEN donor_person.actor_ptr_id IS NOT NULL THEN 'Individual'
+    WHEN donor_org.actor_ptr_id IS NOT NULL THEN COALESCE(donor_org.classification, 'Organization')
+    ELSE 'Unknown'
+  END AS donor_type,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_received,
+  COUNT(DISTINCT d.donor_id) AS distinct_donors,
+  ROUND(AVG(d.value), 2) AS avg_donation
+FROM datafetch_donation d
+JOIN party_recipients pr ON pr.party_id = d.recipient_id
+JOIN datafetch_actor party ON party.id = d.recipient_id
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+LEFT JOIN datafetch_person donor_person ON donor_person.actor_ptr_id = donor.id
+LEFT JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = donor.id
+WHERE d.value > 0
+GROUP BY party.id, donor_type
+ORDER BY party_name, total_received DESC;
+
+
+-- 3.3 Top Individual Donors to Each Party
+WITH party_recipients AS (
+  SELECT org.actor_ptr_id AS party_id
+  FROM datafetch_organization org
+  WHERE org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
+),
+individual_party_donations AS (
+  SELECT
+    d.donor_id,
+    d.recipient_id,
+    COUNT(*) AS donation_count,
+    SUM(d.value) AS total_donated
+  FROM datafetch_donation d
+  JOIN party_recipients pr ON pr.party_id = d.recipient_id
+  JOIN datafetch_person donor_person ON donor_person.actor_ptr_id = d.donor_id
+  WHERE d.value > 0
+  GROUP BY d.donor_id, d.recipient_id
+)
+SELECT
+  party.id AS party_id,
+  MAX(party.name) AS party_name,
+  donor.id AS donor_id,
+  MAX(donor.name) AS donor_name,
+  ipd.donation_count,
+  ipd.total_donated,
+  ROUND(ipd.total_donated::numeric / ipd.donation_count, 2) AS avg_donation
+FROM individual_party_donations ipd
+JOIN datafetch_actor party ON party.id = ipd.recipient_id
+JOIN datafetch_actor donor ON donor.id = ipd.donor_id
+GROUP BY party.id, donor.id, ipd.donation_count, ipd.total_donated
+ORDER BY party_name, ipd.total_donated DESC;
+
+
+-- 3.4 Top Organization Donors to Each Party
+WITH party_recipients AS (
+  SELECT org.actor_ptr_id AS party_id
+  FROM datafetch_organization org
+  WHERE org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
+),
+org_party_donations AS (
+  SELECT
+    d.donor_id,
+    d.recipient_id,
+    COUNT(*) AS donation_count,
+    SUM(d.value) AS total_donated
+  FROM datafetch_donation d
+  JOIN party_recipients pr ON pr.party_id = d.recipient_id
+  JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = d.donor_id
+  WHERE d.value > 0
+  GROUP BY d.donor_id, d.recipient_id
+)
+SELECT
+  party.id AS party_id,
+  MAX(party.name) AS party_name,
+  donor.id AS donor_id,
+  MAX(donor.name) AS donor_name,
+  MAX(donor_org.classification) AS donor_org_type,
+  opd.donation_count,
+  opd.total_donated,
+  ROUND(opd.total_donated::numeric / opd.donation_count, 2) AS avg_donation
+FROM org_party_donations opd
+JOIN datafetch_actor party ON party.id = opd.recipient_id
+JOIN datafetch_actor donor ON donor.id = opd.donor_id
+LEFT JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = donor.id
+GROUP BY party.id, donor.id, opd.donation_count, opd.total_donated
+ORDER BY party_name, opd.total_donated DESC;
+
+
+-- ============================================================================
+-- SECTION 4: ORGANIZATIONS ANALYSIS (GIVING & RECEIVING)
+-- ============================================================================
+
+-- 4.1 Top Organizations as Donors
+SELECT
+  donor.id AS org_id,
+  MAX(donor.name) AS org_name,
+  MAX(org.classification) AS org_type,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  COUNT(DISTINCT d.recipient_id) AS distinct_recipients,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_organization org ON org.actor_ptr_id = donor.id
+WHERE d.value > 0
+GROUP BY donor.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- 4.2 Top Organizations as Recipients
+SELECT
+  recipient.id AS org_id,
+  MAX(recipient.name) AS org_name,
+  MAX(org.classification) AS org_type,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_received,
+  COUNT(DISTINCT d.donor_id) AS distinct_donors,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_organization org ON org.actor_ptr_id = recipient.id
+WHERE d.value > 0
+GROUP BY recipient.id
+ORDER BY total_received DESC
+LIMIT 50;
+
+
+-- 4.3 Organizations Both Giving and Receiving (Excluding Parties)
+WITH org_as_donor AS (
+  SELECT
+    d.donor_id AS org_id,
+    COUNT(*) AS donations_given_count,
+    SUM(d.value) AS total_donated,
+    COUNT(DISTINCT d.recipient_id) AS recipients
+  FROM datafetch_donation d
+  JOIN datafetch_organization org ON org.actor_ptr_id = d.donor_id
+  WHERE d.value > 0
+  GROUP BY d.donor_id
+),
+org_as_recipient AS (
+  SELECT
+    d.recipient_id AS org_id,
+    COUNT(*) AS donations_received_count,
+    SUM(d.value) AS total_received,
+    COUNT(DISTINCT d.donor_id) AS donors
+  FROM datafetch_donation d
+  JOIN datafetch_organization org ON org.actor_ptr_id = d.recipient_id
+  WHERE d.value > 0
+  GROUP BY d.recipient_id
+)
+SELECT
+  org_actor.id AS org_id,
+  MAX(org_actor.name) AS org_name,
+  MAX(org.classification) AS org_type,
+  COALESCE(oad.donations_given_count, 0) AS donations_given,
+  COALESCE(oad.total_donated, 0) AS total_donated,
+  COALESCE(oad.recipients, 0) AS distinct_recipients,
+  COALESCE(oar.donations_received_count, 0) AS donations_received,
+  COALESCE(oar.total_received, 0) AS total_received,
+  COALESCE(oar.donors, 0) AS distinct_donors,
+  COALESCE(oar.total_received, 0) - COALESCE(oad.total_donated, 0) AS net_received
+FROM datafetch_organization org
+JOIN datafetch_actor org_actor ON org_actor.id = org.actor_ptr_id
+LEFT JOIN org_as_donor oad ON oad.org_id = org.actor_ptr_id
+LEFT JOIN org_as_recipient oar ON oar.org_id = org.actor_ptr_id
+WHERE (oad.org_id IS NOT NULL OR oar.org_id IS NOT NULL)
+  AND org.classification NOT IN ('Political Party', 'Registered Political Party', 'Registered Party')
+GROUP BY org_actor.id, org.classification, oad.donations_given_count, oad.total_donated, oad.recipients, oar.donations_received_count, oar.total_received, oar.donors
+ORDER BY COALESCE(oar.total_received, 0) + COALESCE(oad.total_donated, 0) DESC
+LIMIT 50;
+
+
+-- 4.4 Organization-to-Organization Donations
+SELECT
+  donor.id AS donor_org_id,
+  MAX(donor.name) AS donor_org_name,
+  MAX(donor_org.classification) AS donor_org_type,
+  recipient.id AS recipient_org_id,
+  MAX(recipient.name) AS recipient_org_name,
+  MAX(recipient_org.classification) AS recipient_org_type,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = donor.id
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_organization recipient_org ON recipient_org.actor_ptr_id = recipient.id
+WHERE d.value > 0
+GROUP BY donor.id, recipient.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- ============================================================================
+-- SECTION 5: INDIVIDUALS ANALYSIS (GIVING & RECEIVING)
+-- ============================================================================
+
+-- 5.1 Top Individual Donors
+SELECT
+  donor.id AS person_id,
+  MAX(donor.name) AS person_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  COUNT(DISTINCT d.recipient_id) AS distinct_recipients,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_person person ON person.actor_ptr_id = donor.id
+WHERE d.value > 0
+GROUP BY donor.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- 5.2 Top Individual Recipients (MPs/Lords/Politicians)
+SELECT
+  recipient.id AS person_id,
+  MAX(recipient.name) AS person_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_received,
+  COUNT(DISTINCT d.donor_id) AS distinct_donors,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_person person ON person.actor_ptr_id = recipient.id
+WHERE d.value > 0
+GROUP BY recipient.id
+ORDER BY total_received DESC
+LIMIT 50;
+
+
+-- 5.3 Individuals Both Giving and Receiving
+WITH person_as_donor AS (
+  SELECT
+    d.donor_id AS person_id,
+    COUNT(*) AS donations_given_count,
+    SUM(d.value) AS total_donated,
+    COUNT(DISTINCT d.recipient_id) AS recipients
+  FROM datafetch_donation d
+  JOIN datafetch_person person ON person.actor_ptr_id = d.donor_id
+  WHERE d.value > 0
+  GROUP BY d.donor_id
+),
+person_as_recipient AS (
+  SELECT
+    d.recipient_id AS person_id,
+    COUNT(*) AS donations_received_count,
+    SUM(d.value) AS total_received,
+    COUNT(DISTINCT d.donor_id) AS donors
+  FROM datafetch_donation d
+  JOIN datafetch_person person ON person.actor_ptr_id = d.recipient_id
+  WHERE d.value > 0
+  GROUP BY d.recipient_id
+)
+SELECT
+  person_actor.id AS person_id,
+  MAX(person_actor.name) AS person_name,
+  COALESCE(pad.donations_given_count, 0) AS donations_given,
+  COALESCE(pad.total_donated, 0) AS total_donated,
+  COALESCE(pad.recipients, 0) AS distinct_recipients,
+  COALESCE(par.donations_received_count, 0) AS donations_received,
+  COALESCE(par.total_received, 0) AS total_received,
+  COALESCE(par.donors, 0) AS distinct_donors,
+  COALESCE(par.total_received, 0) - COALESCE(pad.total_donated, 0) AS net_received
+FROM datafetch_person person
+JOIN datafetch_actor person_actor ON person_actor.id = person.actor_ptr_id
+LEFT JOIN person_as_donor pad ON pad.person_id = person.actor_ptr_id
+LEFT JOIN person_as_recipient par ON par.person_id = person.actor_ptr_id
+WHERE (pad.person_id IS NOT NULL OR par.person_id IS NOT NULL)
+GROUP BY person_actor.id, pad.donations_given_count, pad.total_donated, pad.recipients, par.donations_received_count, par.total_received, par.donors
+ORDER BY COALESCE(par.total_received, 0) + COALESCE(pad.total_donated, 0) DESC
+LIMIT 50;
+
+
+-- 5.4 Individual-to-Individual Donations
+SELECT
+  donor.id AS donor_person_id,
+  MAX(donor.name) AS donor_name,
+  recipient.id AS recipient_person_id,
+  MAX(recipient.name) AS recipient_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_person donor_person ON donor_person.actor_ptr_id = donor.id
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_person recipient_person ON recipient_person.actor_ptr_id = recipient.id
+WHERE d.value > 0
+GROUP BY donor.id, recipient.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- 5.5 MPs/Lords with Current Memberships - Donations Received
+WITH current_mps AS (
+  SELECT DISTINCT m.person_id
+  FROM datafetch_membership m
+  JOIN datafetch_organization org ON org.actor_ptr_id = m.organization_id
+  JOIN datafetch_actor org_actor ON org_actor.id = org.actor_ptr_id
+  WHERE LOWER(org_actor.name) LIKE '%house of commons%'
+    OR LOWER(org_actor.name) LIKE '%house of lords%'
+    OR m.role LIKE '%MP%'
+    OR m.role LIKE '%Lord%'
+)
+SELECT
+  recipient.id AS person_id,
+  MAX(recipient.name) AS person_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_received,
+  COUNT(DISTINCT d.donor_id) AS distinct_donors,
+  ROUND(AVG(d.value), 2) AS avg_donation,
+  MIN(d.received_date) AS first_donation,
+  MAX(d.received_date) AS latest_donation
+FROM datafetch_donation d
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN current_mps cm ON cm.person_id = recipient.id
+WHERE d.value > 0
+GROUP BY recipient.id
+ORDER BY total_received DESC;
+
+
+-- ============================================================================
+-- SECTION 6: BIDIRECTIONAL FLOW ANALYSIS
+-- ============================================================================
+
+-- 6.1 Donation Flow Matrix by Actor Type
+WITH donor_type_classification AS (
+  SELECT
+    d.id AS donation_id,
+    d.donor_id,
+    d.recipient_id,
+    d.value,
+    CASE
+      WHEN donor_person.actor_ptr_id IS NOT NULL THEN 'Individual'
+      WHEN donor_org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party') THEN 'Party'
+      WHEN donor_org.actor_ptr_id IS NOT NULL THEN 'Organization'
+      ELSE 'Unknown'
+    END AS donor_type,
+    CASE
+      WHEN recipient_person.actor_ptr_id IS NOT NULL THEN 'Individual'
+      WHEN recipient_org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party') THEN 'Party'
+      WHEN recipient_org.actor_ptr_id IS NOT NULL THEN 'Organization'
+      ELSE 'Unknown'
+    END AS recipient_type
+  FROM datafetch_donation d
+  LEFT JOIN datafetch_person donor_person ON donor_person.actor_ptr_id = d.donor_id
+  LEFT JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = d.donor_id
+  LEFT JOIN datafetch_person recipient_person ON recipient_person.actor_ptr_id = d.recipient_id
+  LEFT JOIN datafetch_organization recipient_org ON recipient_org.actor_ptr_id = d.recipient_id
+  WHERE d.value > 0
+)
+SELECT
+  donor_type,
+  recipient_type,
+  COUNT(*) AS donation_count,
+  SUM(value) AS total_value,
+  ROUND(AVG(value), 2) AS avg_donation,
+  COUNT(DISTINCT donor_id) AS distinct_donors,
+  COUNT(DISTINCT recipient_id) AS distinct_recipients,
+  ROUND(100.0 * SUM(value) / SUM(SUM(value)) OVER (), 2) AS pct_of_total_value
+FROM donor_type_classification
+GROUP BY donor_type, recipient_type
+ORDER BY total_value DESC;
+
+
+-- 6.2 Party-to-Individual Donation Flows
+WITH party_donors AS (
+  SELECT org.actor_ptr_id AS party_id
+  FROM datafetch_organization org
+  WHERE org.classification IN ('Political Party', 'Registered Political Party', 'Registered Party')
+)
+SELECT
+  donor.id AS party_id,
+  MAX(donor.name) AS party_name,
+  recipient.id AS recipient_person_id,
+  MAX(recipient.name) AS recipient_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  ROUND(AVG(d.value), 2) AS avg_donation
+FROM datafetch_donation d
+JOIN party_donors pd ON pd.party_id = d.donor_id
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_person recipient_person ON recipient_person.actor_ptr_id = recipient.id
+WHERE d.value > 0
+GROUP BY donor.id, recipient.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- 6.3 Organization-to-Individual Donation Flows (Non-Party)
+SELECT
+  donor.id AS org_id,
+  MAX(donor.name) AS org_name,
+  MAX(donor_org.classification) AS org_type,
+  recipient.id AS recipient_person_id,
+  MAX(recipient.name) AS recipient_name,
+  COUNT(*) AS donation_count,
+  SUM(d.value) AS total_donated,
+  ROUND(AVG(d.value), 2) AS avg_donation
+FROM datafetch_donation d
+JOIN datafetch_actor donor ON donor.id = d.donor_id
+JOIN datafetch_organization donor_org ON donor_org.actor_ptr_id = donor.id
+JOIN datafetch_actor recipient ON recipient.id = d.recipient_id
+JOIN datafetch_person recipient_person ON recipient_person.actor_ptr_id = recipient.id
+WHERE d.value > 0
+  AND donor_org.classification NOT IN ('Political Party', 'Registered Political Party', 'Registered Party')
+GROUP BY donor.id, recipient.id
+ORDER BY total_donated DESC
+LIMIT 50;
+
+
+-- ============================================================================
+-- SECTION 7: SECTOR & CLASSIFICATION ANALYSIS
+-- ============================================================================
+
+-- 7.1 Donations by Donor Classification
 SELECT
   COALESCE(org.classification, 'Unclassified/Individual') AS donor_classification,
   COUNT(*) AS donation_count,
@@ -375,7 +855,7 @@ GROUP BY COALESCE(org.classification, 'Unclassified/Individual')
 ORDER BY total_donated DESC;
 
 
--- 6.2 Lobbying Clients by Classification
+-- 7.2 Lobbying Clients by Classification
 SELECT
   COALESCE(client_org.classification, 'Unclassified') AS client_type,
   COUNT(DISTINCT c.client_id) AS distinct_clients,
@@ -388,10 +868,10 @@ ORDER BY distinct_clients DESC;
 
 
 -- ============================================================================
--- SECTION 7: DATA QUALITY CHECKS
+-- SECTION 8: DATA QUALITY CHECKS
 -- ============================================================================
 
--- 7.1 Null Donor Analysis (by donation type)
+-- 8.1 Null Donor Analysis (by donation type)
 SELECT
   donation_type,
   COUNT(*) AS total_count,
@@ -428,7 +908,7 @@ SELECT 'Ministerial Memberships', COUNT(*) FROM datafetch_membership WHERE role 
 -- 9.2 Date Range Coverage (safe casting)
 WITH safe_donations AS (
   SELECT
-    CASE WHEN received_date ~ '^\d{4}-\d{2}-\d{2}$' THEN received_date::date END AS received_dt
+    CASE WHEN received_date::text ~ '^\d{4}-\d{2}-\d{2}$' THEN received_date::date END AS received_dt
   FROM datafetch_donation
 )
 SELECT 'Earliest Donation' AS metric, MIN(received_dt)::text AS date_value
@@ -451,7 +931,7 @@ WITH lobbying_clients AS (
 safe_donations AS (
   SELECT
     d.*,
-    CASE WHEN d.received_date ~ '^\d{4}-\d{2}-\d{2}$' THEN d.received_date::date END AS received_dt
+    CASE WHEN d.received_date::text ~ '^\d{4}-\d{2}-\d{2}$' THEN d.received_date::date END AS received_dt
   FROM datafetch_donation d
   WHERE d.donor_id IN (SELECT client_id FROM lobbying_clients)
     AND d.value > 0

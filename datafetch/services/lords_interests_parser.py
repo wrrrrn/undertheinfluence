@@ -9,11 +9,21 @@ class LordsInterestsParser:
         Parses a Parliament Lords' Interests JSON file.
         Returns a list of dicts, one per Lord.
         """
-        try:
-            with open(json_path, 'r', encoding='utf-8-sig') as f: # utf-8-sig handles BOM
-                data = json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to read file {json_path}: {e}")
+        # Try different encodings (UK data may have various encodings)
+        data = None
+        for encoding in ['utf-8-sig', 'utf-8', 'iso-8859-1', 'windows-1252']:
+            try:
+                with open(json_path, 'r', encoding=encoding) as f:
+                    data = json.load(f)
+                break
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            except Exception as e:
+                logger.error(f"Failed to read file {json_path}: {e}")
+                return []
+
+        if data is None:
+            logger.error(f"Failed to read file {json_path}: Unable to decode with any encoding")
             return []
         
         results = []

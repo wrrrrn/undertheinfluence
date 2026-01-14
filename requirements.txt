@@ -33,6 +33,17 @@ gunicorn==21.2.0
 
 # Frontend (will be replaced in Phase 2.5)
 
-# Testing (compatible with Python 3.7)
+# Testing & Quality Assurance (Phase 3.4 & 3.5)
 pytest==7.4.3
 pytest-django==4.5.2
+pytest-cov==4.1.0  # Coverage reporting
+factory-boy==3.3.0  # Test fixtures
+pytest-xdist==3.5.0  # Parallel test execution
+
+# Code Quality (Phase 3.5)
+black==24.1.1  # Code formatter
+ruff==0.1.14  # Fast linter (replaces flake8, isort, etc.)
+mypy==1.8.0  # Static type checker
+django-stubs==4.2.7  # Django type stubs for mypy
+types-requests==2.31.0.20240125  # Type stubs for requests
+pre-commit==3.6.0  # Git hooks framework

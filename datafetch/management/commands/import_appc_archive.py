@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand
 from datafetch import helpers
 from datafetch import models
 from datafetch.services.appc_parser import AppcPDFParser
+from datafetch.utils.normalization import normalize_actor_name
 
 class Command(BaseCommand):
     help = 'Import historical PRCA professional lobbying registers from PDF files.'
@@ -135,18 +136,20 @@ class Command(BaseCommand):
         if not agency_name:
             return
 
+        # Normalize agency name for consistency
+        agency_name = normalize_actor_name(agency_name, strength='strong')
+
         date_range = company_data.get('date_range', (None, None))
         source_url = company_data.get('source_url', '')
 
         # Create or get the lobbying agency Organization
-        agency_dict = {
-            "name": agency_name,
-            "classification": "Lobbying agency"
-        }
-        agency_obj, created = models.Organization.objects.get_or_create(
-            name=agency_dict["name"],
-            defaults=agency_dict,
-        )
+        # Handle potential duplicates by using filter().first()
+        agency_obj = models.Organization.objects.filter(name=agency_name).first()
+        if not agency_obj:
+            agency_obj = models.Organization.objects.create(
+                name=agency_name,
+                classification="Lobbying agency"
+            )
 
         # Add address as contact detail
         addresses = company_data.get('address', [])
@@ -192,20 +195,28 @@ class Command(BaseCommand):
         for practitioner_name in company_data.get('practitioners', []):
             practitioner_name = practitioner_name.strip()
             if practitioner_name:
-                person_obj, _ = models.Person.objects.get_or_create(name=practitioner_name)
+                # Normalize practitioner name
+                practitioner_name = normalize_actor_name(practitioner_name, strength='strong')
+
+                # Handle potential duplicates by using filter().first()
+                # This can happen if practitioners were imported before name normalization
+                person_obj = models.Person.objects.filter(name=practitioner_name).first()
+                if not person_obj:
+                    person_obj = models.Person.objects.create(name=practitioner_name)
+
                 agency_obj.add_member(person_obj)
 
         # Add clients and create Consultancy relationships
         for client_name in company_data.get('clients', []):
             client_name = client_name.strip()
             if client_name:
-                client_dict = {
-                    "name": client_name
-                }
-                client_obj, _ = models.Organization.objects.get_or_create(
-                    name=client_dict["name"],
-                    defaults=client_dict,
-                )
+                # Normalize client name
+                client_name = normalize_actor_name(client_name, strength='strong')
+
+                # Handle potential duplicates by using filter().first()
+                client_obj = models.Organization.objects.filter(name=client_name).first()
+                if not client_obj:
+                    client_obj = models.Organization.objects.create(name=client_name)
 
                 # Create Consultancy relationship with date range
                 models.Consultancy.objects.get_or_create(

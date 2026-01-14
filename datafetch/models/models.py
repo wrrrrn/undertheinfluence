@@ -271,16 +271,85 @@ class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Mode
 
 class OtherName(Dateframeable, GenericRelatable, models.Model):
     """
-    An alternate or former name
-    see schema at http://popoloproject.com/schemas/name-component.json#
+    An alternate or former name.
+
+    Phase 3.1 Enhancement: Weighted Alias System
+    --------------------------------------------
+    The alias_type field enables conservative entity resolution by distinguishing
+    between high-confidence and low-confidence name variants:
+
+    - **Strong aliases**: Conservative truncations with high confidence
+      Examples: "Unite the Union" → "Unite"
+                "Conservative and Unionist Party" → "Conservative Party"
+      Use cases: Official name changes, common abbreviations
+
+    - **Weak aliases**: Aggressive normalization with lower confidence
+      Examples: "Unite the Union" → "unite union" (lowercased, no punctuation)
+                "St. John's College" → "st johns college"
+      Use cases: Fuzzy matching, search optimization
+
+    Entity Resolution Strategy:
+    1. Exact identifier matches → Confidence: 1.0 (always merge)
+    2. Strong alias match → Confidence: 0.90 (require manual review)
+    3. Weak alias match → Confidence: 0.70 (suggest only, don't auto-merge)
+
+    This prevents false positives like merging "Unite" (different organization)
+    with "Unite the Union" (trade union) based solely on weak normalization.
+
+    See: datafetch.utils.normalization.normalize_actor_name()
     """
-    name = models.CharField(_("name"), max_length=512, help_text=_("An alternate or former name"))
-    note = models.CharField(_("note"), max_length=1024, blank=True, help_text=_("A note, e.g. 'Birth name'"))
+    ALIAS_TYPE_CHOICES = [
+        ('strong', 'Strong Alias'),
+        ('weak', 'Weak Alias'),
+    ]
+
+    name = models.CharField(
+        _("name"),
+        max_length=512,
+        help_text=_("An alternate or former name")
+    )
+
+    note = models.CharField(
+        _("note"),
+        max_length=1024,
+        blank=True,
+        help_text=_("A note, e.g. 'Birth name', 'Common abbreviation', 'Former name'")
+    )
+
+    alias_type = models.CharField(
+        _("alias type"),
+        max_length=10,
+        choices=ALIAS_TYPE_CHOICES,
+        default='weak',
+        help_text=_(
+            "Strong: High-confidence variant (abbreviations, official name changes). "
+            "Weak: Low-confidence variant (normalization, fuzzy matching)."
+        )
+    )
 
     objects = OtherNameQuerySet.as_manager()
 
+    class Meta:
+        verbose_name = "Other Name"
+        verbose_name_plural = "Other Names"
+        indexes = [
+            # Index for entity resolution queries
+            models.Index(fields=['name', 'alias_type']),
+        ]
+
     def __str__(self):
-        return self.name
+        alias_indicator = "★" if self.alias_type == 'strong' else "○"
+        return f"{alias_indicator} {self.name}"
+
+    @property
+    def is_strong_alias(self):
+        """Returns True if this is a high-confidence alias."""
+        return self.alias_type == 'strong'
+
+    @property
+    def is_weak_alias(self):
+        """Returns True if this is a low-confidence alias."""
+        return self.alias_type == 'weak'
 
 
 class Identifier(GenericRelatable, models.Model):

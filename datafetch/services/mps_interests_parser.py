@@ -9,11 +9,21 @@ class MPsInterestsParser:
         Parses a TWFY MPs' Interests XML file.
         Returns a list of dicts, one per MP entry.
         """
-        try:
-            with open(xml_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            logger.error(f"Failed to read file {xml_path}: {e}")
+        # Try different encodings (UK data often has £ symbols in ISO-8859-1)
+        content = None
+        for encoding in ['utf-8', 'iso-8859-1', 'windows-1252']:
+            try:
+                with open(xml_path, 'r', encoding=encoding) as f:
+                    content = f.read()
+                break
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                logger.error(f"Failed to read file {xml_path}: {e}")
+                return []
+
+        if content is None:
+            logger.error(f"Failed to read file {xml_path}: Unable to decode with any encoding")
             return []
         
         soup = BeautifulSoup(content, 'xml')

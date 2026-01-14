@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models, helpers
+from datafetch.utils.normalization import normalize_actor_name
 
 
 class Command(BaseCommand):
@@ -99,6 +100,11 @@ class Command(BaseCommand):
 
             person_data = {k: v for k, v in person.items() if k not in person_rels.keys()}
 
+            # Normalize the name for consistency
+            if person_data.get('name'):
+                person_data['name'] = normalize_actor_name(person_data['name'], strength='strong')
+
+            # Deduplicate by identifier FIRST to avoid creating duplicates
             try:
                 identifier = models.Identifier.objects.get(**identifier_dict)
                 p = models.Person.objects.get(pk=identifier.object_id)
@@ -131,8 +137,31 @@ class Command(BaseCommand):
             id_ = organization.pop('id')
 
             org_data = {k: v for k, v in organization.items() if k not in org_rels.keys()}
-            
-            o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
+
+            # Normalize organization name for consistency
+            if org_data.get('name'):
+                org_data['name'] = normalize_actor_name(org_data['name'], strength='strong')
+
+            # Try to find by identifier first to avoid duplicates
+            identifier_dict = None
+            for identifier in organization.get('identifiers', []):
+                if identifier.get('identifier') and identifier.get('scheme'):
+                    identifier_dict = {'identifier': identifier['identifier'], 'scheme': identifier['scheme']}
+                    break
+
+            if identifier_dict:
+                try:
+                    existing_identifier = models.Identifier.objects.get(**identifier_dict)
+                    o = models.Organization.objects.get(pk=existing_identifier.object_id)
+                    # Update existing org with new data
+                    for k, v in org_data.items():
+                        setattr(o, k, v)
+                    o.save()
+                    created = False
+                except (models.Identifier.DoesNotExist, models.Organization.DoesNotExist):
+                    o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
+            else:
+                o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
 
             for rel_id, rel_model in org_rels.items():
                 if not rel_model:

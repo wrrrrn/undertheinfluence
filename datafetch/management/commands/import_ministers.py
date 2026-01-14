@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models, helpers
+from datafetch.utils.normalization import normalize_actor_name
 
 
 class Command(BaseCommand):
@@ -15,6 +16,11 @@ class Command(BaseCommand):
         for organization in organizations:
             id_ = organization['id']
             del organization['id']
+
+            # Normalize organization name for consistency
+            if organization.get('name'):
+                organization['name'] = normalize_actor_name(organization['name'], strength='strong')
+
             m, created = models.Organization.objects.get_or_create(name=organization['name'], defaults={k: v for k, v in organization.items()})
             organizations_dict[id_] = m.id
 
