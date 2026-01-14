@@ -11,20 +11,22 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-from os.path import dirname, join, realpath
-from decouple import config, Csv
+from os.path import dirname, exists, join, realpath
+import yaml
 
 BASE_DIR = realpath(dirname(dirname(__file__)))
 PROJECT_DIR = join(BASE_DIR, 'undertheinfluence')
 
-# Load configuration from environment variables
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+configuration_file = join(
+    BASE_DIR, 'conf', 'general.yml'
+)
 
-BASE_URL = config('BASE_URL', default='http://localhost:8000')
+with open(configuration_file) as f:
+    conf = yaml.load(f)
 
-# Django 3.2+ requires DEFAULT_AUTO_FIELD setting
-# Using AutoField to maintain compatibility with existing migrations
-DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+ALLOWED_HOSTS = conf.get('ALLOWED_HOSTS')
+
+BASE_URL = conf.get('BASE_URL')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
@@ -38,21 +40,20 @@ INSTALLED_APPS = [
     'appc_redirect',
     'api',
 
-    # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
+    'bootstrap_admin',
     'rest_framework',
-    'django_filters',  # Django Filter for API v2
-    'drf_spectacular',  # OpenAPI schema generation
+    'djangobower',
 
-    'wagtail.contrib.forms',
-    'wagtail.contrib.redirects',
-    'wagtail.embeds',
-    'wagtail.sites',
-    'wagtail.users',
-    'wagtail.snippets',
-    'wagtail.documents',
-    'wagtail.images',
-    'wagtail.admin',
-    'wagtail',
+    'wagtail.wagtailforms',
+    'wagtail.wagtailredirects',
+    'wagtail.wagtailembeds',
+    'wagtail.wagtailsites',
+    'wagtail.wagtailusers',
+    'wagtail.wagtailsnippets',
+    'wagtail.wagtaildocs',
+    'wagtail.wagtailimages',
+    'wagtail.wagtailadmin',
+    'wagtail.wagtailcore',
 
     'modelcluster',
     'compressor',
@@ -66,23 +67,25 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'wagtail.contrib.legacy.sitemiddleware.SiteMiddleware',  # Moved to legacy in Wagtail 2.15
-    'wagtail.contrib.redirects.middleware.RedirectMiddleware',
-]
+
+    'wagtail.wagtailcore.middleware.SiteMiddleware',
+    'wagtail.wagtailredirects.middleware.RedirectMiddleware',
+)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='change-me-in-production')
+SECRET_KEY = conf['SECRET_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = bool(int(conf.get('STAGING')))
 
 ROOT_URLCONF = 'undertheinfluence.urls'
 
@@ -104,7 +107,7 @@ TEMPLATES = [
     },
 ]
 
-# BOOTSTRAP_ADMIN_SIDEBAR_MENU = True  # Removed - bootstrap-admin not compatible with Django 2.0+
+BOOTSTRAP_ADMIN_SIDEBAR_MENU = True
 
 WSGI_APPLICATION = 'undertheinfluence.wsgi.application'
 
@@ -112,29 +115,28 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # The email address that will be displayed on the site as the contact
 # email for all support requests, and so on:
-SUPPORT_EMAIL = config('SUPPORT_EMAIL', default='')
+SUPPORT_EMAIL = conf.get('SUPPORT_EMAIL')
 
 # The From = address for error emails
-SERVER_EMAIL = config('SERVER_EMAIL', default='')
+SERVER_EMAIL = conf.get('SERVER_EMAIL')
 
 # The From = address for all emails except error emails
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
+DEFAULT_FROM_EMAIL = conf.get('DEFAULT_FROM_EMAIL')
 
 # Database
 # https://docs.djangoproject.com/en/1.8/ref/settings/#databases
 
-if config('DATABASE_SYSTEM', default='sqlite') == 'postgresql':
+if conf.get('DATABASE_SYSTEM') == 'postgresql':
     DATABASES = {
         'default': {
-            'ENGINE':   'django.db.backends.postgresql',
-            'NAME':     'undertheinfluence', # Explicitly set to match the created database
-            'USER':     config('UTI_DB_USER', default='uti'),
-            'PASSWORD': config('UTI_DB_PASS', default=''),
-            'HOST':     config('UTI_DB_HOST', default='localhost'),
-            'PORT':     config('UTI_DB_PORT', default='5432'),
+            'ENGINE':   'django.db.backends.postgresql_psycopg2',
+            'NAME':     conf.get('UTI_DB_NAME'),
+            'USER':     conf.get('UTI_DB_USER'),
+            'PASSWORD': conf.get('UTI_DB_PASS'),
+            'HOST':     conf.get('UTI_DB_HOST'),
+            'PORT':     conf.get('UTI_DB_PORT'),
         }
     }
-    # PostgreSQL timezone workaround removed - no longer needed in Django 3.2+
 else:
     DATABASES = {
         'default': {
@@ -164,6 +166,7 @@ STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
     'compressor.finders.CompressorFinder',
+    'djangobower.finders.BowerFinder',
 )
 
 STATICFILES_DIRS = (
@@ -176,7 +179,16 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
+# Django-bower settings
+BOWER_COMPONENTS_ROOT = BASE_DIR
 
+BOWER_INSTALLED_APPS = (
+    'jquery#2.1.1',
+    'bootstrap',
+    'bootstrap-material-design',
+    'bootstrap-table',
+    'moment',
+)
 
 # Wagtail settings
 
@@ -196,53 +208,10 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 10,
-    # Add filter backends for API v2
-    'DEFAULT_FILTER_BACKENDS': (
-        'django_filters.rest_framework.DjangoFilterBackend',
-    ),
-    # OpenAPI schema generation
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
-
-# drf-spectacular settings for OpenAPI schema generation
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'UnderTheInfluence API',
-    'DESCRIPTION': """
-    REST API for exploring political influence in the UK through donations and lobbying relationships.
-
-    ## Features
-    - **Aggregates**: Top donors, top recipients, network statistics, party donations, dual influence
-    - **Actor Details**: Individual politicians and organizations with relationship history
-    - **Temporal Queries**: View historical data with ?at_date= parameter
-    - **Advanced Analytics**: Donor concentration metrics, Gini coefficients, HHI analysis
-
-    ## Data Sources
-    Data is aggregated from Electoral Commission, ParlParse, APPC, and other public sources.
-    """,
-    'VERSION': '2.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    'SCHEMA_PATH_PREFIX': '/api/v2/',
-    'SWAGGER_UI_SETTINGS': {
-        'deepLinking': True,
-        'persistAuthorization': True,
-        'displayOperationId': True,
-        'filter': True,
-    },
-    'SERVERS': [
-        {'url': 'http://localhost:8000', 'description': 'Development server'},
-    ],
 }
 
 # TheyWorkForYou API key
-TWFY_API_KEY = config('TWFY_API_KEY', default='')
+TWFY_API_KEY = conf.get('TWFY_API_KEY')
 
 # Email addresses that error emails are sent to when DEBUG = False
-# Format: "Name <email>, Name <email>"
-ADMINS_STR = config('ADMINS', default='')
-if ADMINS_STR:
-    # Parse comma-separated admin list
-    ADMINS = [tuple(admin.strip().split('<')) for admin in ADMINS_STR.split(',') if admin.strip()]
-    ADMINS = [(name.strip(), email.strip(' >')) for name, email in ADMINS]
-else:
-    ADMINS = []
+ADMINS = conf['ADMINS']

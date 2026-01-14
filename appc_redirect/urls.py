@@ -1,7 +1,7 @@
 from django.views.generic import TemplateView
-from django.urls import path
+from django.conf.urls import url
 
 
 urlpatterns = [
-    path('', TemplateView.as_view(template_name='appc_redirect.html'), name='appc_redirect'),
+    url(r'', TemplateView.as_view(template_name='appc_redirect.html'), name='appc-redirect'),
 ]

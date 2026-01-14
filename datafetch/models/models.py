@@ -2,15 +2,15 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import RegexValidator
 from django.template.defaultfilters import slugify
-from django.urls import reverse
+from django.core.urlresolvers import reverse
 from django.db import models
 from model_utils import Choices
-# PassThroughManager removed in django-model-utils 3.x - use QuerySet.as_manager() instead
-# python_2_unicode_compatible removed in Django 3.0 - Python 2 no longer supported
-from django.utils.translation import gettext_lazy as _
+from model_utils.managers import PassThroughManager
+from django.utils.encoding import python_2_unicode_compatible
+from django.utils.translation import ugettext_lazy as _
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
-from polymorphic.models import PolymorphicModel
+from polymorphic import PolymorphicModel
 
 from undertheinfluence.settings import BASE_URL
 from .popolo.behaviors import Timestampable, Dateframeable, GenericRelatable
@@ -66,13 +66,13 @@ class Person(Actor):
     json_ld_context = "http://popoloproject.com/contexts/person.jsonld"
     json_ld_type = "http://www.w3.org/ns/person#Person"
 
-    family_name = models.CharField(_("family name"), max_length=512, blank=True, help_text=_("One or more family names"))
-    given_name = models.CharField(_("given name"), max_length=512, blank=True, help_text=_("One or more primary given names"))
-    additional_name = models.CharField(_("additional name"), max_length=512, blank=True, help_text=_("One or more secondary given names"))
-    honorific_prefix = models.CharField(_("honorific prefix"), max_length=512, blank=True, help_text=_("One or more honorifics preceding a person's name"))
-    honorific_suffix = models.CharField(_("honorific suffix"), max_length=512, blank=True, help_text=_("One or more honorifics following a person's name"))
-    patronymic_name = models.CharField(_("patronymic name"), max_length=512, blank=True, help_text=_("One or more patronymic names"))
-    sort_name = models.CharField(_("sort name"), max_length=512, blank=True, help_text=_("A name to use in an lexicographically ordered list"))
+    family_name = models.CharField(_("family name"), max_length=128, blank=True, help_text=_("One or more family names"))
+    given_name = models.CharField(_("given name"), max_length=128, blank=True, help_text=_("One or more primary given names"))
+    additional_name = models.CharField(_("additional name"), max_length=128, blank=True, help_text=_("One or more secondary given names"))
+    honorific_prefix = models.CharField(_("honorific prefix"), max_length=128, blank=True, help_text=_("One or more honorifics preceding a person's name"))
+    honorific_suffix = models.CharField(_("honorific suffix"), max_length=128, blank=True, help_text=_("One or more honorifics following a person's name"))
+    patronymic_name = models.CharField(_("patronymic name"), max_length=128, blank=True, help_text=_("One or more patronymic names"))
+    sort_name = models.CharField(_("sort name"), max_length=128, blank=True, help_text=_("A name to use in an lexicographically ordered list"))
     email = models.EmailField(_("email"), blank=True, null=True, help_text=_("A preferred email address"))
     gender = models.CharField(_('gender'), max_length=128, blank=True, help_text=_("A gender"))
     birth_date = models.CharField(_("birth date"), max_length=10, blank=True, help_text=_("A date of birth"))
@@ -111,11 +111,11 @@ class Organization(Actor):
     classification = models.CharField(_("classification"), max_length=512, blank=True, help_text=_("An organization category, e.g. committee"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
-    parent = models.ForeignKey('Organization', blank=True, null=True, related_name='children', on_delete=models.SET_NULL,
+    parent = models.ForeignKey('Organization', blank=True, null=True, related_name='children',
                                help_text=_("The organization that contains this organization"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='organizations', on_delete=models.SET_NULL,
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='organizations',
                                help_text=_("The geographic area to which this organization is related"))
 
     founding_date = models.CharField(_("founding date"), max_length=10, null=True, blank=True, validators=[
@@ -164,11 +164,11 @@ class Post(Dateframeable, Timestampable, models.Model):
     role = models.CharField(_("role"), max_length=512, blank=True, help_text=_("The function that the holder of the post fulfills"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
-    organization = models.ForeignKey('Organization', related_name='posts', on_delete=models.CASCADE,
+    organization = models.ForeignKey('Organization', related_name='posts',
                                      help_text=_("The organization in which the post is held"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='posts', on_delete=models.SET_NULL,
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='posts',
                                help_text=_("The geographic area to which the post is related"))
 
     # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
@@ -180,7 +180,7 @@ class Post(Dateframeable, Timestampable, models.Model):
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the post")
 
-    objects = PostQuerySet.as_manager()
+    objects = PassThroughManager.for_queryset_class(PostQuerySet)()
 
     def add_person(self, person):
         m = Membership(post=self, person=person, organization=self.organization)
@@ -198,23 +198,23 @@ class Membership(Dateframeable, Timestampable, models.Model):
     role = models.CharField(_("role"), max_length=512, blank=True, help_text=_("The role that the person fulfills in the organization"))
 
     # reference to "http://popoloproject.com/schemas/person.json#"
-    person = models.ForeignKey('Person', related_name='memberships', on_delete=models.CASCADE,
+    person = models.ForeignKey('Person', related_name='memberships',
                                help_text=_("The person who is a party to the relationship"))
 
     # reference to "http://popoloproject.com/schemas/organization.json#"
     organization = models.ForeignKey('Organization', blank=True, null=True,
-                                     related_name='memberships', on_delete=models.CASCADE,
+                                     related_name='memberships',
                                      help_text=_("The organization that is a party to the relationship"))
     on_behalf_of = models.ForeignKey('Organization', blank=True, null=True,
-                                     related_name='memberships_on_behalf_of', on_delete=models.SET_NULL,
+                                     related_name='memberships_on_behalf_of',
                                      help_text=_("The organization on whose behalf the person is a party to the relationship"))
 
     # reference to "http://popoloproject.com/schemas/post.json#"
-    post = models.ForeignKey('Post', blank=True, null=True, related_name='memberships', on_delete=models.CASCADE,
+    post = models.ForeignKey('Post', blank=True, null=True, related_name='memberships',
                              help_text=_("The post held by the person in the organization through this membership"))
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    area = models.ForeignKey('Area', blank=True, null=True, related_name='memberships', on_delete=models.SET_NULL,
+    area = models.ForeignKey('Area', blank=True, null=True, related_name='memberships',
                                help_text=_("The geographic area to which the post is related"))
 
     # array of items referencing "http://popoloproject.com/schemas/contact_detail.json#"
@@ -226,7 +226,7 @@ class Membership(Dateframeable, Timestampable, models.Model):
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the membership")
 
-    objects = MembershipQuerySet.as_manager()
+    objects = PassThroughManager.for_queryset_class(MembershipQuerySet)()
 
     def __str__(self):
         return self.role
@@ -263,7 +263,7 @@ class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Mode
     # array of items referencing "http://popoloproject.com/schemas/link.json#"
     sources = GenericRelation('Source', help_text="URLs to source documents about the contact detail")
 
-    objects = ContactDetailQuerySet.as_manager()
+    objects = PassThroughManager.for_queryset_class(ContactDetailQuerySet)()
 
     def __str__(self):
         return u"{0} - {1}".format(self.value, self.contact_type)
@@ -271,85 +271,16 @@ class ContactDetail(Timestampable, Dateframeable, GenericRelatable,  models.Mode
 
 class OtherName(Dateframeable, GenericRelatable, models.Model):
     """
-    An alternate or former name.
-
-    Phase 3.1 Enhancement: Weighted Alias System
-    --------------------------------------------
-    The alias_type field enables conservative entity resolution by distinguishing
-    between high-confidence and low-confidence name variants:
-
-    - **Strong aliases**: Conservative truncations with high confidence
-      Examples: "Unite the Union" → "Unite"
-                "Conservative and Unionist Party" → "Conservative Party"
-      Use cases: Official name changes, common abbreviations
-
-    - **Weak aliases**: Aggressive normalization with lower confidence
-      Examples: "Unite the Union" → "unite union" (lowercased, no punctuation)
-                "St. John's College" → "st johns college"
-      Use cases: Fuzzy matching, search optimization
-
-    Entity Resolution Strategy:
-    1. Exact identifier matches → Confidence: 1.0 (always merge)
-    2. Strong alias match → Confidence: 0.90 (require manual review)
-    3. Weak alias match → Confidence: 0.70 (suggest only, don't auto-merge)
-
-    This prevents false positives like merging "Unite" (different organization)
-    with "Unite the Union" (trade union) based solely on weak normalization.
-
-    See: datafetch.utils.normalization.normalize_actor_name()
+    An alternate or former name
+    see schema at http://popoloproject.com/schemas/name-component.json#
     """
-    ALIAS_TYPE_CHOICES = [
-        ('strong', 'Strong Alias'),
-        ('weak', 'Weak Alias'),
-    ]
+    name = models.CharField(_("name"), max_length=512, help_text=_("An alternate or former name"))
+    note = models.CharField(_("note"), max_length=1024, blank=True, help_text=_("A note, e.g. 'Birth name'"))
 
-    name = models.CharField(
-        _("name"),
-        max_length=512,
-        help_text=_("An alternate or former name")
-    )
-
-    note = models.CharField(
-        _("note"),
-        max_length=1024,
-        blank=True,
-        help_text=_("A note, e.g. 'Birth name', 'Common abbreviation', 'Former name'")
-    )
-
-    alias_type = models.CharField(
-        _("alias type"),
-        max_length=10,
-        choices=ALIAS_TYPE_CHOICES,
-        default='weak',
-        help_text=_(
-            "Strong: High-confidence variant (abbreviations, official name changes). "
-            "Weak: Low-confidence variant (normalization, fuzzy matching)."
-        )
-    )
-
-    objects = OtherNameQuerySet.as_manager()
-
-    class Meta:
-        verbose_name = "Other Name"
-        verbose_name_plural = "Other Names"
-        indexes = [
-            # Index for entity resolution queries
-            models.Index(fields=['name', 'alias_type']),
-        ]
+    objects = PassThroughManager.for_queryset_class(OtherNameQuerySet)()
 
     def __str__(self):
-        alias_indicator = "★" if self.alias_type == 'strong' else "○"
-        return f"{alias_indicator} {self.name}"
-
-    @property
-    def is_strong_alias(self):
-        """Returns True if this is a high-confidence alias."""
-        return self.alias_type == 'strong'
-
-    @property
-    def is_weak_alias(self):
-        """Returns True if this is a low-confidence alias."""
-        return self.alias_type == 'weak'
+        return self.name
 
 
 class Identifier(GenericRelatable, models.Model):
@@ -416,7 +347,7 @@ class Area(GenericRelatable, Dateframeable, Timestampable, models.Model):
     other_identifiers = GenericRelation('Identifier', blank=True, null=True, help_text="Other issued identifiers (zip code, other useful codes, ...)")
 
     # reference to "http://popoloproject.com/schemas/area.json#"
-    parent = models.ForeignKey('Area', blank=True, null=True, related_name='children', on_delete=models.SET_NULL,
+    parent = models.ForeignKey('Area', blank=True, null=True, related_name='children',
                                help_text=_("The area that contains this area"))
 
     # geom property, as text (GeoJson, KML, GML)
@@ -436,8 +367,8 @@ class AreaI18Name(models.Model):
     Internationalized name for an Area.
     Contains references to language and area.
     """
-    area = models.ForeignKey('Area', related_name='i18n_names', on_delete=models.CASCADE)
-    language = models.ForeignKey('Language', on_delete=models.CASCADE)
+    area = models.ForeignKey('Area', related_name='i18n_names')
+    language = models.ForeignKey('Language')
     name = models.CharField(_("name"), max_length=255)
 
     def __str__(self):

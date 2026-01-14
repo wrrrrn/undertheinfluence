@@ -5,7 +5,3 @@ __pycache__/
 /static
 /bower_components
 /conf/general.yml
-.claude/
-.env
-.env.local
-CLAUDE.md

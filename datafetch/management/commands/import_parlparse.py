@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models, helpers
-from datafetch.utils.normalization import normalize_actor_name
 
 
 class Command(BaseCommand):
@@ -82,7 +81,8 @@ class Command(BaseCommand):
                 # TODO
                 continue
 
-            identifier_dict = dict(zip(('scheme', 'identifier'), id_.split('/', 1)))
+            identifier = dict(zip(('scheme', 'identifier'), id_.split('/', 1)))
+            identifier, created = models.Identifier.objects.get_or_create(**identifier)
 
             other_names = []
             for n in person.get('other_names', []):
@@ -98,107 +98,88 @@ class Command(BaseCommand):
             person['name'] = name_dict.get('name')
             # TODO: sort_name
 
-            person_data = {k: v for k, v in person.items() if k not in person_rels.keys()}
-
-            # Normalize the name for consistency
-            if person_data.get('name'):
-                person_data['name'] = normalize_actor_name(person_data['name'], strength='strong')
-
-            # Deduplicate by identifier FIRST to avoid creating duplicates
-            try:
-                identifier = models.Identifier.objects.get(**identifier_dict)
-                p = models.Person.objects.get(pk=identifier.object_id)
-                for k, v in person_data.items():
-                    setattr(p, k, v)
-                p.save()
-            except (models.Identifier.DoesNotExist, models.Person.DoesNotExist):
-                p = models.Person.objects.create(**person_data)
-                p.identifiers.create(**identifier_dict)
-
+            if not created:
+                p = models.Person.objects.get(identifiers=identifier)
+            else:
+                p = models.Person.objects.create(**{k: v for k, v in person.items() if k not in person_rels.keys()})
+                p.identifiers.add(identifier)
             for rel_id, rel_model in person_rels.items():
-                if not rel_model or rel_id == 'identifiers':
+                if not rel_model:
                     continue
                 for rel_dict in person.get(rel_id, []):
-                    getattr(p, rel_id).get_or_create(**rel_dict)
-
+                    if rel_id == 'identifiers' and rel_dict.get('scheme').endswith('_id'):
+                        # strip _id off the end of historichansard and datadotparl
+                        rel_dict['scheme'] = rel_dict['scheme'][:-3]
+                    rel, _ = rel_model.objects.get_or_create(**rel_dict)
+                    getattr(p, rel_id).add(rel)
             people_dict[id_] = p.id
         return people_dict
 
     def _process_organizations(self, organizations):
-        org_rels = {
-            'identifiers': models.Identifier,
-            'other_names': models.OtherName,
+        # parlparse doesn't have nice party IDs, so we hardcode
+        # a lookup to Electoral Commission IDs here.
+        party_lookup = {
+          "alliance": ("PP103", "Alliance - Alliance Party of Northern Ireland",),
+          "conservative": ("PP52", "Conservative Party",),
+          "dup": ("PP70", "Democratic Unionist Party - D.U.P.",),
+          "green": ("PP63", "Green Party",),
+          "labour": ("PP53", "Labour Party",),
+          "liberal-democrat": ("PP90", "Liberal Democrats",),
+          "niup": ("PP3", "Northern Ireland Unionist Party",),
+          "niwc": ("PP91", "Northern Ireland Women's Coalition",),
+          "plaid-cymru": ("PP77", "Plaid Cymru - The Party of Wales",),
+          "pup": ("PP101", "Progressive Unionist Party of Northern Ireland",),
+          "respect": ("PP362", "The Respect Party",),
+          "scottish-national-party": ("PP102", "Scottish National Party (SNP)",),
+          "sinn-fein": ("PP39", "Sinn Féin",),
+          "social-democratic-and-labour-party": ("PP55", "SDLP (Social Democratic & Labour Party)",),
+          "ssp": ("PP46", "Scottish Socialist Party",),
+          "traditional-unionist-voice": ("PP680", "Traditional Unionist Voice - TUV",),
+          "ukip": ("PP85", "UK Independence Party (UKIP)",),
+          "ukup": ("PP107", "United Kingdom Unionist Party U.K.U.P.",),
+          "uup": ("PP83", "Ulster Unionist Party",),
         }
 
         organizations_dict = {}
+        organizations += [{
+            'id': 'house-of-commons',
+            'name': 'House of Commons',
+            'classification': 'Legislature',
+        }, {
+            'id': 'house-of-lords',
+            'name': 'House of Lords',
+            'classification': 'Legislature',
+        }, {
+            'id': 'scottish-parliament',
+            'name': 'Scottish Parliament',
+            'classification': 'Legislature',
+        }, {
+            'id': 'northern-ireland-assembly',
+            'name': 'Northern Ireland Assembly',
+            'classification': 'Legislature',
+        }]
         for organization in organizations:
-            if organization.get('classification') == 'party':
+            if organization['classification'] == 'party':
                 organization['classification'] = 'Political Party'
-            id_ = organization.pop('id')
-
-            org_data = {k: v for k, v in organization.items() if k not in org_rels.keys()}
-
-            # Normalize organization name for consistency
-            if org_data.get('name'):
-                org_data['name'] = normalize_actor_name(org_data['name'], strength='strong')
-
-            # Try to find by identifier first to avoid duplicates
-            identifier_dict = None
-            for identifier in organization.get('identifiers', []):
-                if identifier.get('identifier') and identifier.get('scheme'):
-                    identifier_dict = {'identifier': identifier['identifier'], 'scheme': identifier['scheme']}
-                    break
-
-            if identifier_dict:
-                try:
-                    existing_identifier = models.Identifier.objects.get(**identifier_dict)
-                    o = models.Organization.objects.get(pk=existing_identifier.object_id)
-                    # Update existing org with new data
-                    for k, v in org_data.items():
-                        setattr(o, k, v)
-                    o.save()
-                    created = False
-                except (models.Identifier.DoesNotExist, models.Organization.DoesNotExist):
-                    o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
+            id_ = organization['id']
+            del organization['id']
+            if id_ in party_lookup:
+                ec_identifier, organization["name"] = party_lookup[id_]
+                identifier, created = models.Identifier.objects.get_or_create(
+                    identifier=ec_identifier,
+                    scheme="electoralcommission")
+                if created:
+                    o = models.Organization.objects.create(**organization)
+                    o.identifiers.add(identifier)
+                else:
+                    o = models.Organization.objects.get(identifiers=identifier)
             else:
-                o, created = models.Organization.objects.get_or_create(name=org_data['name'], defaults=org_data)
-
-            for rel_id, rel_model in org_rels.items():
-                if not rel_model:
-                    continue
-                for rel_dict in organization.get(rel_id, []):
-                    rel, _ = getattr(o, rel_id).get_or_create(**rel_dict)
-
+                # TODO: The default here isn't quite right. We should
+                # check a bit more thoroughly that the org doesn't already
+                # exist.
+                o, created = models.Organization.objects.get_or_create(**organization)
             organizations_dict[id_] = o.id
-        return organizations_dict 
-    
-        # for organization in organizations:
-        #     if organization.get('classification') == 'party':
-        #         organization['classification'] = 'Political Party'
-        #     id_ = organization.pop('id')
-
-        #     org_data = {k: v for k, v in organization.items() if k not in org_rels.keys()}
-
-        #     if id_ in party_lookup:
-        #         ec_identifier, org_data["name"] = party_lookup[id_]
-        #         identifier_dict = {'identifier': ec_identifier, 'scheme': 'electoralcommission'}
-        #         try:
-        #             identifier = models.Identifier.objects.get(**identifier_dict)
-        #             o = models.Organization.objects.get(pk=identifier.object_id)
-        #         except (models.Identifier.DoesNotExist, models.Organization.DoesNotExist):
-        #             o = models.Organization.objects.create(**org_data)
-        #             o.identifiers.create(**identifier_dict)
-        #     else:
-        #         o, _ = models.Organization.objects.get_or_create(name=org_data.get('name'), defaults=org_data)
-
-        #     for rel_id, rel_model in org_rels.items():
-        #         if not rel_model or rel_id == 'identifiers':
-        #             continue
-        #         for rel_dict in organization.get(rel_id, []):
-        #             rel, _ = getattr(o, rel_id).get_or_create(**rel_dict)
-
-        #     organizations_dict[id_] = o.id
-        # return organizations_dict
+        return organizations_dict
 
     def _process_posts(self, posts, j):
         ignore_fields = ('id', 'area', 'identifiers',)
@@ -215,7 +196,7 @@ class Command(BaseCommand):
         return posts_dict
 
     def _process_memberships(self, memberships, j):
-        ignore_fields = ('id', 'identifiers', 'start_reason', 'end_reason', 'redirect', 'name', 'source',)
+        ignore_fields = ('id', 'identifiers', 'start_reason', 'end_reason', 'redirect',)
         unique_fields = ('person_id', 'post_id', 'organization_id', 'on_behalf_of_id', 'start_date',)
 
         for membership in memberships:
@@ -248,8 +229,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')
 
-        # RawGit CDN was shut down, use GitHub raw content directly
-        url = "https://raw.githubusercontent.com/mysociety/parlparse/master/members/people.json"
+        url = "https://cdn.rawgit.com/mysociety/parlparse/master/members/people.json"
         filename = "people.json"
         j = helpers.fetch_json(url, filename, refresh=self.refresh)
 
