@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
     'rest_framework',
+    'django_filters',  # Django Filter for API v2
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
@@ -194,6 +195,10 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 10,
+    # Add filter backends for API v2
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ),
 }
 
 # TheyWorkForYou API key

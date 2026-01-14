@@ -104,6 +104,24 @@ class Consultancy(Relationship):
         """
         return self.canonical_agency or self.agency
 
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = "Consultancy"
+        verbose_name_plural = "Consultancies"
+        indexes = [
+            # Core indexes for aggregate queries
+            models.Index(fields=['client', '-start_date'], name='consultancy_client_idx'),
+            models.Index(fields=['agency', '-start_date'], name='consultancy_agency_idx'),
+
+            # Canonical field indexes for entity-resolved queries
+            models.Index(fields=['canonical_client', '-start_date'], name='consultancy_canon_client_idx'),
+            models.Index(fields=['canonical_agency', '-start_date'], name='consultancy_canon_agency_idx'),
+
+            # Date range filtering
+            models.Index(fields=['start_date'], name='consultancy_start_idx'),
+            models.Index(fields=['end_date'], name='consultancy_end_idx'),
+        ]
+
 
 class Donation(Relationship):
     CATEGORY_CHOICES = (
@@ -228,6 +246,28 @@ class Donation(Relationship):
             return "Donation of £{:,d} (Visit to {})".format(int(self.value), self.purpose_of_visit)
         if self.donation_type == "Non Cash":
             return "Donation of £{:,d} ({})".format(int(self.value), self.nature_of_donation)
+
+    class Meta:
+        ordering = ['-received_date']
+        verbose_name = "Donation"
+        verbose_name_plural = "Donations"
+        indexes = [
+            # Core indexes for aggregate queries
+            models.Index(fields=['donor', '-received_date'], name='donation_donor_date_idx'),
+            models.Index(fields=['recipient', '-received_date'], name='donation_recip_date_idx'),
+            models.Index(fields=['donor', '-value'], name='donation_donor_val_idx'),
+            models.Index(fields=['recipient', '-value'], name='donation_recip_val_idx'),
+
+            # Date range filtering (common query pattern)
+            models.Index(fields=['received_date'], name='donation_date_idx'),
+
+            # Canonical field indexes for entity-resolved queries
+            models.Index(fields=['canonical_donor', '-received_date'], name='donation_canon_donor_idx'),
+            models.Index(fields=['canonical_recipient', '-received_date'], name='donation_canon_recip_idx'),
+
+            # Value filtering
+            models.Index(fields=['-value'], name='donation_value_idx'),
+        ]
 
 
 class PartyMembership(Dateframeable, Timestampable, models.Model):
