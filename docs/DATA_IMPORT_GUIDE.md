@@ -100,13 +100,21 @@ docker compose exec web python manage.py import_twfy --since 1996 --refresh
 ```
 
 **What it imports:**
-- MP biographical data
+- MP biographical data (Wikipedia links, BBC profiles, MP websites)
+- Profile images
+- Birth dates
 - Additional person metadata
-- Enrichment for existing MPs
 
 **Setup:**
 1. Get API key from [TheyWorkForYou](https://www.theyworkforyou.com/api/)
 2. Add to `.env`: `TWFY_API_KEY=your_key_here`
+
+**Validation Status:** ⏳ Pending
+- Identifier matching bug fixed (2026-01-14)
+- Full validation pending API rate limit reset
+- See [IMPORT_VALIDATION_STATUS.md](IMPORT_VALIDATION_STATUS.md#-import_twfy-pending-validation) for details
+
+**Note:** Test with `--since 2024` first to reduce API calls
 
 ### 4. MPs' Register of Interests
 
@@ -229,12 +237,14 @@ These imports are tested and working:
 
 | Command | Data Source | Since Support | Status |
 |---------|-------------|---------------|---------|
-| `import_parlparse` | ParlParse | ✅ `--since YYYY` | Working |
-| `import_ministers` | ParlParse Ministers | ✅ `--since YYYY` | Working |
-| `import_twfy` | TheyWorkForYou | ✅ `--since YYYY` | Working (requires API key) |
-| `import_mpsinterests` | TheyWorkForYou MPs' Interests | ✅ `--since YYYY` | Working (v3.0+) |
-| `import_lordsinterests` | Parliament Data Platform | ❌ No date filter | Working (v3.0+) |
-| `import_appc_archive` | Historical APPC PDFs | ❌ No date filter | Working (v3.0+) |
+| `import_parlparse` | ParlParse | ✅ `--since YYYY` | ✅ Validated |
+| `import_ministers` | ParlParse Ministers | ✅ `--since YYYY` | ✅ Validated |
+| `import_twfy` | TheyWorkForYou | ✅ `--since YYYY` | ⏳ Fix applied, validation pending* |
+| `import_mpsinterests` | TheyWorkForYou MPs' Interests | ✅ `--since YYYY` | ✅ Validated (v3.0+) |
+| `import_lordsinterests` | Parliament Data Platform | ❌ No date filter | ✅ Validated (v3.0+) |
+| `import_appc_archive` | Historical APPC PDFs | ❌ No date filter | ✅ Validated (v3.0+) |
+
+**\* import_twfy:** Identifier matching bug fixed 2026-01-14. Full validation pending API rate limit reset. See [IMPORT_VALIDATION_STATUS.md](IMPORT_VALIDATION_STATUS.md) for details.
 
 ## Broken Imports ⛔
 
