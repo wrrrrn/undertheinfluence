@@ -282,3 +282,370 @@ class NetworkStatsView(views.APIView):
 
         serializer = serializers.NetworkStatsSerializer(stats)
         return Response(serializer.data)
+
+
+class PartyDonationsView(generics.ListAPIView):
+    """
+    GET /api/v2/aggregates/party-donations/
+
+    Returns donations aggregated by political party (direct donations to parties).
+
+    Query Parameters:
+    - limit: Number of results (default: 50, max: 200)
+    - offset: Pagination offset
+    - received_after: Filter by date
+    - received_before: Filter by date
+
+    Example:
+        GET /api/v2/aggregates/party-donations/?limit=10&received_after=2020-01-01
+    """
+    serializer_class = serializers.PartyDonationSerializer
+    pagination_class = pagination.AggregatePagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """
+        Aggregate donations to political party organizations.
+
+        Returns: party, total_received, donation_count, donor_count
+        """
+        # Filter for political party organizations only
+        queryset = models.Donation.objects.filter(
+            recipient__organization__classification='Political Party'
+        ).exclude(recipient__isnull=True)
+
+        # Apply date filters
+        filterset = filters.DonationFilterSet(
+            self.request.query_params,
+            queryset=queryset
+        )
+        queryset = filterset.qs
+
+        # Aggregate by party (recipient)
+        aggregated = queryset.values('recipient_id', 'recipient__name').annotate(
+            total_received=Sum('value'),
+            donation_count=Count('id'),
+            donor_count=Count('donor_id', distinct=True)
+        ).order_by('-total_received')
+
+        return aggregated
+
+    def list(self, request, *args, **kwargs):
+        """Handle pagination and actor fetching efficiently."""
+        aggregated_qs = self.get_queryset()
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(aggregated_qs, request, view=self)
+
+        if page is not None:
+            # Fetch party actors for paginated results only
+            party_ids = [item['recipient_id'] for item in page]
+            parties_dict = {
+                actor.id: actor
+                for actor in models.Actor.objects.filter(id__in=party_ids)
+            }
+
+            results = []
+            for item in page:
+                party_id = item['recipient_id']
+                if party_id in parties_dict:
+                    results.append({
+                        'party': parties_dict[party_id],
+                        'total_received': item['total_received'] or 0,
+                        'donation_count': item['donation_count'],
+                        'donor_count': item['donor_count'],
+                    })
+
+            serializer = self.get_serializer(results, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback without pagination
+        party_ids = [item['recipient_id'] for item in aggregated_qs]
+        parties_dict = {
+            actor.id: actor
+            for actor in models.Actor.objects.filter(id__in=party_ids)
+        }
+        results = [
+            {
+                'party': parties_dict[item['recipient_id']],
+                'total_received': item['total_received'] or 0,
+                'donation_count': item['donation_count'],
+                'donor_count': item['donor_count'],
+            }
+            for item in aggregated_qs
+            if item['recipient_id'] in parties_dict
+        ]
+        serializer = self.get_serializer(results, many=True)
+        return Response(serializer.data)
+
+
+class DualInfluenceView(generics.ListAPIView):
+    """
+    GET /api/v2/aggregates/dual-influence/
+
+    Returns organizations that both donate AND use lobbying agencies.
+
+    This identifies actors with dual channels of political influence:
+    directly donating and hiring lobbyists.
+
+    Query Parameters:
+    - limit: Number of results (default: 50, max: 200)
+    - min_donated: Minimum total donated
+    - min_lobbying: Minimum lobbying relationships
+
+    Example:
+        GET /api/v2/aggregates/dual-influence/?limit=20&min_donated=10000
+    """
+    serializer_class = serializers.DualInfluenceSerializer
+    pagination_class = pagination.AggregatePagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """
+        Find organizations that both donate and lobby.
+
+        Uses subqueries to find actors present in both donations (as donor)
+        and consultancies (as client).
+        """
+        from django.db.models import Exists, OuterRef
+
+        # Actors who have donated
+        donors = models.Donation.objects.filter(
+            donor_id=OuterRef('pk')
+        ).values('donor_id')
+
+        # Actors who have used lobbying agencies
+        clients = models.Consultancy.objects.filter(
+            client_id=OuterRef('pk')
+        ).values('client_id')
+
+        # Find actors in both sets
+        dual_influence_actors = models.Actor.objects.annotate(
+            has_donated=Exists(donors),
+            has_lobbied=Exists(clients)
+        ).filter(has_donated=True, has_lobbied=True)
+
+        # Now aggregate their activity
+        actor_ids = list(dual_influence_actors.values_list('id', flat=True))
+
+        # Aggregate donations
+        donation_agg = models.Donation.objects.filter(
+            donor_id__in=actor_ids
+        ).values('donor_id').annotate(
+            total_donated=Sum('value'),
+            donation_count=Count('id'),
+            first_donation=Min('received_date'),
+            last_donation=Max('received_date')
+        )
+
+        # Aggregate consultancies
+        consultancy_agg = models.Consultancy.objects.filter(
+            client_id__in=actor_ids
+        ).values('client_id').annotate(
+            lobbying_count=Count('id'),
+            first_consultancy=Min('start_date'),
+            last_consultancy=Max('start_date')
+        )
+
+        # Build lookup dicts
+        donation_data = {item['donor_id']: item for item in donation_agg}
+        consultancy_data = {item['client_id']: item for item in consultancy_agg}
+
+        # Combine data
+        results = []
+        for actor_id in actor_ids:
+            don_data = donation_data.get(actor_id, {})
+            cons_data = consultancy_data.get(actor_id, {})
+
+            if don_data and cons_data:
+                # Calculate activity span (handle that consultancy dates are strings)
+                first_donation = don_data.get('first_donation')
+                last_donation = don_data.get('last_donation')
+                # Consultancy dates are stored as strings, use them directly
+                first_consultancy = cons_data.get('first_consultancy')
+                last_consultancy = cons_data.get('last_consultancy')
+
+                results.append({
+                    'actor_id': actor_id,
+                    'total_donated': don_data.get('total_donated', 0),
+                    'donation_count': don_data.get('donation_count', 0),
+                    'lobbying_count': cons_data.get('lobbying_count', 0),
+                    # Use donation dates since they're actual dates
+                    'first_activity': first_donation,
+                    'last_activity': last_donation,
+                })
+
+        # Sort by total donated descending
+        results.sort(key=lambda x: x['total_donated'], reverse=True)
+
+        return results
+
+    def list(self, request, *args, **kwargs):
+        """Handle pagination and actor fetching."""
+        results = self.get_queryset()
+
+        # Manual pagination on list
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(results, request, view=self)
+
+        if page is not None:
+            # Fetch actors for paginated results
+            actor_ids = [item['actor_id'] for item in page]
+            actors_dict = {
+                actor.id: actor
+                for actor in models.Actor.objects.filter(id__in=actor_ids)
+            }
+
+            enriched_results = []
+            for item in page:
+                actor_id = item['actor_id']
+                if actor_id in actors_dict:
+                    enriched_results.append({
+                        'organization': actors_dict[actor_id],
+                        'total_donated': item['total_donated'],
+                        'donation_count': item['donation_count'],
+                        'lobbying_count': item['lobbying_count'],
+                        'first_activity': item['first_activity'],
+                        'last_activity': item['last_activity'],
+                    })
+
+            serializer = self.get_serializer(enriched_results, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback without pagination
+        actor_ids = [item['actor_id'] for item in results]
+        actors_dict = {
+            actor.id: actor
+            for actor in models.Actor.objects.filter(id__in=actor_ids)
+        }
+        enriched_results = [
+            {
+                'organization': actors_dict[item['actor_id']],
+                'total_donated': item['total_donated'],
+                'donation_count': item['donation_count'],
+                'lobbying_count': item['lobbying_count'],
+                'first_activity': item['first_activity'],
+                'last_activity': item['last_activity'],
+            }
+            for item in results
+            if item['actor_id'] in actors_dict
+        ]
+        serializer = self.get_serializer(enriched_results, many=True)
+        return Response(serializer.data)
+
+
+# ===========================
+# Actor Detail Endpoints
+# ===========================
+
+class ActorDetailView(generics.RetrieveAPIView):
+    """
+    GET /api/v2/actors/{id}/
+
+    Returns detailed information about a specific actor (person or organization).
+
+    Includes aggregated relationship counts and totals.
+    """
+    queryset = models.Actor.objects.all()
+    serializer_class = serializers.ActorDetailSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Annotate with relationship aggregates."""
+        return models.Actor.objects.annotate(
+            donations_made_count=Count('donated_to', distinct=True),
+            donations_received_count=Count('received_donations_from', distinct=True),
+            total_donated=Sum('donated_to__value'),
+            total_received=Sum('received_donations_from__value'),
+            consultancies_as_client=Count('consulting_agencies', distinct=True),
+            consultancies_as_agency=Count('consulting_clients', distinct=True),
+        )
+
+
+class ActorDonationsMadeView(generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/donations-made/
+
+    Returns all donations made by this actor.
+
+    Query Parameters:
+    - received_after, received_before: Date filtering
+    - limit, offset: Pagination
+    """
+    serializer_class = serializers.DonationDetailSerializer
+    pagination_class = pagination.DetailPagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Get donations made by this actor."""
+        actor_id = self.kwargs['pk']
+        queryset = models.Donation.objects.filter(donor_id=actor_id).select_related(
+            'donor', 'recipient'
+        ).order_by('-received_date')
+
+        # Apply filters
+        filterset = filters.DonationFilterSet(
+            self.request.query_params,
+            queryset=queryset
+        )
+        return filterset.qs
+
+
+class ActorDonationsReceivedView(generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/donations-received/
+
+    Returns all donations received by this actor.
+
+    Query Parameters:
+    - received_after, received_before: Date filtering
+    - limit, offset: Pagination
+    """
+    serializer_class = serializers.DonationDetailSerializer
+    pagination_class = pagination.DetailPagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Get donations received by this actor."""
+        actor_id = self.kwargs['pk']
+        queryset = models.Donation.objects.filter(recipient_id=actor_id).select_related(
+            'donor', 'recipient'
+        ).order_by('-received_date')
+
+        # Apply filters
+        filterset = filters.DonationFilterSet(
+            self.request.query_params,
+            queryset=queryset
+        )
+        return filterset.qs
+
+
+class ActorConsultanciesView(generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/consultancies/
+
+    Returns consultancy relationships for this actor (as client or agency).
+
+    Query Parameters:
+    - role: 'client' or 'agency' (default: both)
+    - limit, offset: Pagination
+    """
+    serializer_class = serializers.ConsultancyDetailSerializer
+    pagination_class = pagination.DetailPagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Get consultancies involving this actor."""
+        actor_id = self.kwargs['pk']
+        role = self.request.query_params.get('role')
+
+        if role == 'client':
+            queryset = models.Consultancy.objects.filter(client_id=actor_id)
+        elif role == 'agency':
+            queryset = models.Consultancy.objects.filter(agency_id=actor_id)
+        else:
+            # Both client and agency roles
+            queryset = models.Consultancy.objects.filter(
+                Q(client_id=actor_id) | Q(agency_id=actor_id)
+            )
+
+        return queryset.select_related('client', 'agency').order_by('-start_date')

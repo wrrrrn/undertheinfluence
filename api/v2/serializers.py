@@ -143,3 +143,107 @@ class NetworkStatsSerializer(serializers.Serializer):
     unique_clients = serializers.IntegerField()
     date_range_start = serializers.DateField()
     date_range_end = serializers.DateField()
+
+
+# ===========================
+# Actor Detail Serializers
+# ===========================
+
+class ActorDetailSerializer(serializers.ModelSerializer):
+    """
+    Detailed actor serializer with relationship counts and aggregates.
+
+    Used for /api/v2/actors/{id}/ endpoint.
+    """
+    actor_type = serializers.SerializerMethodField()
+    classification = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+
+    # Aggregated relationship data (annotated in view)
+    donations_made_count = serializers.IntegerField(read_only=True, required=False)
+    donations_received_count = serializers.IntegerField(read_only=True, required=False)
+    total_donated = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True, required=False)
+    total_received = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True, required=False)
+    consultancies_as_client = serializers.IntegerField(read_only=True, required=False)
+    consultancies_as_agency = serializers.IntegerField(read_only=True, required=False)
+
+    class Meta:
+        model = models.Actor
+        fields = [
+            'id', 'name', 'actor_type', 'classification', 'image',
+            'start_date', 'end_date',
+            'donations_made_count', 'donations_received_count',
+            'total_donated', 'total_received',
+            'consultancies_as_client', 'consultancies_as_agency',
+        ]
+
+    def get_actor_type(self, obj):
+        """Return 'person' or 'organization'"""
+        return obj.polymorphic_ctype.model
+
+    def get_classification(self, obj):
+        """Return classification for organizations, None for persons"""
+        if isinstance(obj, models.Organization):
+            return obj.classification
+        return None
+
+    def get_image(self, obj):
+        """Return image URL for persons, None for organizations"""
+        if isinstance(obj, models.Person):
+            return obj.image
+        return None
+
+
+class DonationDetailSerializer(serializers.ModelSerializer):
+    """
+    Detailed donation serializer for relationship endpoints.
+
+    Used for /api/v2/actors/{id}/donations-made/, etc.
+    """
+    donor = ActorSummarySerializer(read_only=True)
+    recipient = ActorSummarySerializer(read_only=True)
+
+    class Meta:
+        model = models.Donation
+        fields = [
+            'id', 'donor', 'recipient', 'value',
+            'donation_type', 'nature_of_donation',
+            'received_date', 'accepted_date', 'reported_date',
+            'accounting_unit_name', 'accounting_units_as_central_party',
+            'purpose_of_visit',
+            'is_bequest', 'is_aggregation', 'is_sponsorship',
+        ]
+
+
+class ConsultancyDetailSerializer(serializers.ModelSerializer):
+    """
+    Detailed consultancy serializer for relationship endpoints.
+
+    Used for /api/v2/actors/{id}/consultancies/, etc.
+    """
+    agency = ActorSummarySerializer(read_only=True)
+    client = ActorSummarySerializer(read_only=True)
+
+    class Meta:
+        model = models.Consultancy
+        fields = [
+            'id', 'agency', 'client',
+            'label', 'start_date', 'end_date',
+            'source',
+        ]
+
+
+class MembershipDetailSerializer(serializers.ModelSerializer):
+    """
+    Detailed membership serializer for actor relationship endpoints.
+    """
+    person = ActorSummarySerializer(read_only=True)
+    organization = ActorSummarySerializer(read_only=True)
+
+    class Meta:
+        from datafetch.models import Membership
+        model = Membership
+        fields = [
+            'id', 'person', 'organization',
+            'label', 'role', 'start_date', 'end_date',
+        ]
