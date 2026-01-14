@@ -83,10 +83,24 @@ class Command(BaseCommand):
         This complements parlparse data without duplicating core membership info.
         """
         # Find existing Person by TWFY person_id identifier
+        #
+        # IMPORTANT: Identifier format matching
+        # import_parlparse splits full identifiers at the first '/' like this:
+        #   Full ID: 'uk.org.publicwhip/person/12345'
+        #   Stored as: scheme='uk.org.publicwhip', identifier='person/12345'
+        #
+        # This was previously incorrect - it was looking for:
+        #   identifier='uk.org.publicwhip/person/12345' (WRONG - includes scheme)
+        #
+        # Fixed 2026-01-14: Now correctly queries for 'person/{mp_id}' without scheme
+        #
+        # Validation status: Fix is logically correct based on database schema.
+        # Full validation pending TWFY API rate limit reset (requires live API calls).
+        # See: docs/IMPORT_VALIDATION_STATUS.md
         try:
             person = models.Person.objects.get(
                 identifiers__scheme='uk.org.publicwhip',
-                identifiers__identifier=f'uk.org.publicwhip/person/{mp_id}'
+                identifiers__identifier=f'person/{mp_id}'
             )
         except models.Person.DoesNotExist:
             # Person not found - skip enrichment
@@ -96,7 +110,7 @@ class Command(BaseCommand):
             # Handle duplicates - just use first
             person = models.Person.objects.filter(
                 identifiers__scheme='uk.org.publicwhip',
-                identifiers__identifier=f'uk.org.publicwhip/person/{mp_id}'
+                identifiers__identifier=f'person/{mp_id}'
             ).first()
 
         updated_fields = []

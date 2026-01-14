@@ -11,6 +11,7 @@ from django.db import transaction
 from datafetch import models, helpers
 from datafetch.services.mps_interests_parser import MPsInterestsParser
 from datafetch.models import Person, Organization, Donation, Identifier
+from datafetch.utils.normalization import normalize_actor_name
 
 class Command(BaseCommand):
     help = 'Import MPs’ Interests'
@@ -18,6 +19,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--refresh', action='store_true')
         parser.add_argument('--file', type=str, help='Path to a specific XML file to process')
+        parser.add_argument('--since', nargs='?', type=int, help='Import data since YYYY (default: 1996)')
 
     mps_datadir = join(settings.BASE_DIR, 'data', 'mpsinterests')
     base_url = "https://www.theyworkforyou.com/pwdata/scrapedxml/regmem/"
@@ -37,11 +39,12 @@ class Command(BaseCommand):
         for timestamp, filename in to_fetch:
             if len(filename) < 16:
                 continue
-            
+
             date = filename[6:16]
-            
-            # Fetch recent files (late 2020)
-            if date < "2020-9-01":
+
+            # Filter by since date (format: YYYY-MM-DD)
+            since_str = f"{self.since}-01-01"
+            if date < since_str:
                 continue
 
             filepath = join(self.mps_datadir, filename)
@@ -56,17 +59,20 @@ class Command(BaseCommand):
         return downloaded_files
 
     def _get_or_create_donor(self, name, status):
-        # Check if exists
-        actors = models.Actor.objects.filter(name__iexact=name)
+        # Normalize name for consistency
+        normalized_name = normalize_actor_name(name, strength='strong')
+
+        # Check if exists (using normalized name)
+        actors = models.Actor.objects.filter(name=normalized_name)
         if actors.exists():
             return actors.first()
-        
-        # Create new
+
+        # Create new with normalized name
         if status == "Individual":
-            donor = Person.objects.create(name=name)
+            donor = Person.objects.create(name=normalized_name)
         else:
-            donor = Organization.objects.create(name=name, classification=status)
-            
+            donor = Organization.objects.create(name=normalized_name, classification=status)
+
         return donor
 
     def _parse_date(self, date_str):
@@ -165,13 +171,14 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')
+        self.since = options.get('since', 1996)  # Default to 1996
         target_file = options.get('file')
 
         if target_file:
             self._import_data([target_file])
             return
 
-        print("Downloading MPs’ Interests ...")
+        print(f"Downloading MPs' Interests (since {self.since})...")
         files = self._download_mps_interests()
         print(f"Downloaded {len(files)} files.")
         

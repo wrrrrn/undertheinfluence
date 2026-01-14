@@ -211,13 +211,34 @@ class AppcPDFParser:
             'source_url': source_url,
             'date_range': date_range,
         }
-        
+
         # Reconstruct text using the helper that handles 'dict' blocks
         reconstructed_company_text = "\n".join([self._get_block_text(b) for b in company_blocks if self._get_block_text(b)])
         lines = reconstructed_company_text.split('\n')
-        
+
         if lines:
-            data['name'] = lines[0].strip()
+            # Extract company name - stop at first section header or limit to 512 chars
+            raw_name = lines[0].strip()
+
+            # Find where the name ends (at first section keyword)
+            section_markers = ['Address(es)', 'Contact Details', 'Practitioners', 'Fee-Paying']
+            name_end_pos = len(raw_name)
+            for marker in section_markers:
+                pos = raw_name.find(marker)
+                if pos != -1 and pos < name_end_pos:
+                    name_end_pos = pos
+
+            # Extract name up to section marker or 512 chars, whichever is shorter
+            data['name'] = raw_name[:min(name_end_pos, 512)].strip()
+
+            # If name is still suspiciously long, try to extract just the first sentence/phrase
+            if len(data['name']) > 200:
+                # Look for common separators that might indicate end of actual name
+                for separator in ['.  ', '  ', ': ']:
+                    if separator in data['name']:
+                        data['name'] = data['name'].split(separator)[0].strip()
+                        break
+
             lines = lines[1:]
 
         current_section = None

@@ -11,6 +11,7 @@ from django.db import transaction
 from datafetch import models, helpers
 from datafetch.services.lords_interests_parser import LordsInterestsParser
 from datafetch.models import Person, Organization, Donation, Identifier
+from datafetch.utils.normalization import normalize_actor_name
 
 class Command(BaseCommand):
     help = 'Import Lords’ Interests'
