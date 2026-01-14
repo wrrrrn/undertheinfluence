@@ -11,6 +11,10 @@ router = routers.DefaultRouter()
 urlpatterns = [
     path('', include(router.urls)),
 
+    # API v2 - Analysis-first API with aggregates and temporal queries
+    path('v2/', include('api.v2.urls')),
+
+    # API v1 (legacy) - Keep for backwards compatibility
     path('actors', views.ActorViewSet.as_view(), name='api_actors'),
     path('politicians', views.PoliticianViewSet.as_view(), name='api_politicians'),
     path('memberships', views.MembershipViewSet.as_view(), name='api_memberships'),

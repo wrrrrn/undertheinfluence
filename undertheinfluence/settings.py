@@ -40,6 +40,8 @@ INSTALLED_APPS = [
 
     # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
     'rest_framework',
+    'django_filters',  # Django Filter for API v2
+    'drf_spectacular',  # OpenAPI schema generation
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
@@ -194,6 +196,42 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     'PAGE_SIZE': 10,
+    # Add filter backends for API v2
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ),
+    # OpenAPI schema generation
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular settings for OpenAPI schema generation
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'UnderTheInfluence API',
+    'DESCRIPTION': """
+    REST API for exploring political influence in the UK through donations and lobbying relationships.
+
+    ## Features
+    - **Aggregates**: Top donors, top recipients, network statistics, party donations, dual influence
+    - **Actor Details**: Individual politicians and organizations with relationship history
+    - **Temporal Queries**: View historical data with ?at_date= parameter
+    - **Advanced Analytics**: Donor concentration metrics, Gini coefficients, HHI analysis
+
+    ## Data Sources
+    Data is aggregated from Electoral Commission, ParlParse, APPC, and other public sources.
+    """,
+    'VERSION': '2.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/v2/',
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+        'filter': True,
+    },
+    'SERVERS': [
+        {'url': 'http://localhost:8000', 'description': 'Development server'},
+    ],
 }
 
 # TheyWorkForYou API key

@@ -1,8 +1,12 @@
 # Phase 3 Roadmap: Data Quality, API Modernization & Frontend Excellence
 
-**Status**: Planning
+**Status**: In Progress (Phase 3.2)
 **Timeline**: 8 weeks (5 phases, some overlapping)
+**Started**: 2026-01-14
 **Goal**: Transform UnderTheInfluence from a data aggregator into a production-ready influence intelligence platform
+
+**Current Phase**: 3.2 - API & Data Layer (with 3.4 testing in parallel)
+**Completed**: Phase 3.1 - Foundation & Entity Resolution ✅
 
 This roadmap distills the comprehensive strategies documented in:
 - `docs/BACKEND_ARCHITECTURE_STRATEGY.md` (v1.1)
@@ -10,44 +14,57 @@ This roadmap distills the comprehensive strategies documented in:
 
 ---
 
-## Phase 3.1: Foundation & Entity Resolution (Weeks 1-3)
+## Phase 3.1: Foundation & Entity Resolution ✅ COMPLETE
 
 **Objective**: Establish canonical entity identification and resolve duplicate actors across data sources.
 
-### Entity Resolution System
-- [ ] Implement weighted alias system with `OtherName.alias_type` (strong/weak)
-- [ ] Create normalization utilities (`normalize_actor_name()`, `build_search_key()`)
-- [ ] Build confidence scoring system (5 levels: 1.0 → 0.40)
-- [ ] Add `ActorResolution` model to track merge candidates
-- [ ] Implement entity resolution command (`resolve_duplicates --dry-run`)
+**Status**: ✅ Completed 2026-01-14
+**PR**: #[merged] feature/data-consolidation → develop
 
-### Non-Destructive Merge Strategy
-- [ ] Add `canonical_donor_id` field to `Donation` model
-- [ ] Add `canonical_recipient_id` field to `Donation` model
-- [ ] Add `canonical_client_id` field to `Consultancy` model
-- [ ] Add `canonical_agency_id` field to `Consultancy` model
-- [ ] Create migration for new fields
-- [ ] Implement `@property effective_donor` / `effective_recipient` accessors
-- [ ] Add admin interface for canonical field management
+### Entity Resolution System ✅
+- [x] Implement weighted alias system with `OtherName.alias_type` (strong/weak)
+- [x] Create normalization utilities (`normalize_actor_name()`, `build_search_key()`)
+- [x] Build confidence scoring system (5 levels: 1.0 → 0.40)
+- [x] Add `ActorResolution` model to track merge candidates
+- [x] Implement entity resolution command (`resolve_duplicates --dry-run`)
 
-### Party Affiliation Timeline
-- [ ] Create `PartyMembership` model with temporal date ranges
-- [ ] Import historical party membership data from ParlParse
-- [ ] Implement `get_party_at_date(person, date)` utility function
-- [ ] Create `PartyDonationAggregate` materialized view
-- [ ] Add refresh trigger for materialized view
+### Non-Destructive Merge Strategy ✅
+- [x] Add `canonical_person` field to `Donation` model
+- [x] Add `canonical_organization` field to `Donation` model
+- [x] Add `canonical_agency` field to `Consultancy` model
+- [x] Create migrations for new fields (migration 0004)
+- [x] Implement `@property effective_donor` / `effective_recipient` accessors
+- [x] Add admin interface for canonical field management
 
-### Data Quality Improvements
-- [ ] Fix party classification queries (`'Political Party'` not `'party'`)
-- [ ] Resolve missing `donor_id` / `recipient_id` in donations
-- [ ] Standardize organization classifications taxonomy
-- [ ] Audit and clean partial dates (YYYY, YYYY-MM, YYYY-MM-DD)
+### Party Affiliation Timeline ✅
+- [x] Create `PartyMembership` proxy model (migration 0005)
+- [x] Import historical party membership data from ParlParse
+- [x] Implement temporal filtering utilities (`datafetch/utils/temporal.py`)
+- [ ] Create `PartyDonationAggregate` materialized view (deferred to 3.2)
+- [ ] Add refresh trigger for materialized view (deferred to 3.2)
+
+### Data Quality Improvements ✅
+- [x] Fix party classification queries (`'Political Party'` not `'party'`)
+- [x] Resolve missing `donor_id` / `recipient_id` in donations (via normalization)
+- [x] Standardize organization classifications taxonomy
+- [x] Audit and clean partial dates (YYYY, YYYY-MM, YYYY-MM-DD)
+
+**Results Achieved**:
+- ✅ 0 organization duplicates (down from 730+ expected)
+- ✅ 134 person duplicates (all legitimate common names)
+- ✅ 947 entity resolutions flagged for review
+- ✅ Full data import from 1996-2026 working
+- ✅ Comprehensive test suite created
 
 ---
 
-## Phase 3.2: API & Data Layer (Weeks 4-6)
+## Phase 3.2: API & Data Layer (Weeks 4-6) 🚧 IN PROGRESS
 
 **Objective**: Build analysis-first API with aggregate endpoints and temporal query support.
+
+**Status**: 🚧 In Progress
+**Started**: 2026-01-14
+**Note**: ⚠️ Phase 3.4 (Testing) should be done in parallel - write tests as you build features (TDD)
 
 ### API v2 Architecture
 - [ ] Create `api/v2/` module structure
@@ -156,35 +173,39 @@ This roadmap distills the comprehensive strategies documented in:
 
 ---
 
-## Phase 3.4: Testing & Quality Assurance (Weeks 7-8)
+## Phase 3.4: Testing & Quality Assurance (Ongoing - Parallel with 3.2+) 🚧 IN PROGRESS
 
 **Objective**: Establish comprehensive test coverage and quality assurance processes.
 
-### Test Infrastructure
-- [ ] Set up `pytest` and `pytest-django`
-- [ ] Configure test database settings
+**Status**: 🚧 In Progress (started with Phase 3.1, continues through all phases)
+**Started**: 2026-01-14
+**Note**: ⚠️ **TDD Approach** - Write tests for Phase 3.2 features as you build them, don't wait until the end!
+
+### Test Infrastructure ✅ (Completed in Phase 3.1)
+- [x] Set up `pytest` and `pytest-django`
+- [x] Configure test database settings (`pyproject.toml`)
 - [ ] Create fixture factories with `factory_boy`
-- [ ] Set up coverage reporting (`pytest-cov`)
+- [x] Set up coverage reporting (`pytest-cov`)
 - [ ] Configure CI/CD for automated testing (GitHub Actions)
-- [ ] Add pre-commit hooks for test execution
+- [x] Add pre-commit hooks for test execution (`.pre-commit-config.yaml`)
 
 ### Backend Unit Tests
-- [ ] **Entity Resolution Tests**
-  - Normalization function tests
-  - Alias matching with confidence scores
-  - Edge cases (Unicode, punctuation, abbreviations)
-- [ ] **Temporal Query Tests**
-  - `get_party_at_date()` accuracy
-  - Party membership timeline queries
-  - Edge cases (overlapping memberships, gaps)
-- [ ] **Canonical Field Tests**
-  - `effective_donor` / `effective_recipient` properties
-  - Canonical field inheritance in querysets
-  - Admin interface for canonical assignment
-- [ ] **Model Tests**
-  - Polymorphic Actor queries
-  - Generic relation integrity
-  - Date field parsing (YYYY, YYYY-MM, YYYY-MM-DD)
+- [x] **Entity Resolution Tests** ✅ (Phase 3.1)
+  - [x] Normalization function tests (`tests/utils/test_normalization.py`)
+  - [x] Alias matching with confidence scores (`tests/commands/test_resolve_duplicates.py`)
+  - [x] Edge cases (Unicode, punctuation, abbreviations)
+- [x] **Temporal Query Tests** ✅ (Phase 3.1)
+  - [x] Temporal filtering utilities (`tests/utils/test_temporal.py`)
+  - [x] Party membership timeline queries
+  - [x] Edge cases (overlapping memberships, gaps)
+- [x] **Canonical Field Tests** ✅ (Phase 3.1)
+  - [x] `effective_donor` / `effective_recipient` properties (`tests/integration/test_canonical_fields.py`)
+  - [x] Canonical field inheritance in querysets
+  - [x] Admin interface for canonical assignment
+- [x] **Model Tests** ✅ (Phase 3.1)
+  - [x] Polymorphic Actor queries (`tests/datafetch/test_models.py`)
+  - [x] Generic relation integrity
+  - [x] Date field parsing (YYYY, YYYY-MM, YYYY-MM-DD)
 
 ### Backend Integration Tests
 - [ ] **API Endpoint Tests**
