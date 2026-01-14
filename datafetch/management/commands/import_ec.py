@@ -52,10 +52,15 @@ class Command(BaseCommand):
         if donation.get('company_registration_number'):
             reg_num_identifier, created = self._get_or_create_reg_num_id(donation['company_registration_number'])
             if not created:
-                org = models.Organization.objects.get(identifiers=reg_num_identifier)
-                if ec_identifier:
-                    org.identifiers.add(ec_identifier)
-                return org
+                try:
+                    org = models.Organization.objects.get(identifiers=reg_num_identifier)
+                    if ec_identifier:
+                        org.identifiers.add(ec_identifier)
+                    return org
+                except models.Organization.DoesNotExist:
+                    # Identifier exists but not attached to any organization yet
+                    # Continue to create/find organization below
+                    pass
 
         if donation['donor_status'] == 'Individual':
             donor_type = 'person'
@@ -244,11 +249,31 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.refresh = options.get('refresh')
 
-        donations_url = "http://search.electoralcommission.org.uk/api/csv/Donations"
-        donations = helpers.fetch_ec_csv(donations_url, "ec.csv", self.refresh)
+        # Updated API endpoint with required query parameters
+        # start=0: start from first record
+        # rows=999999: get maximum records (API will paginate if needed)
+        # et=pp,ppm,tp,perpar,rd: all entity types (political parties, minor parties, third parties, permitted participants, regulated donees)
+        # Other params left empty to get all historical data without date filtering
+        donations_url = (
+            "https://search.electoralcommission.org.uk/api/csv/Donations"
+            "?start=0&rows=999999"
+            "&et=pp&et=ppm&et=tp&et=perpar&et=rd"
+            "&query=&sort=AcceptedDate&order=desc"
+        )
+        print("Fetching donations from Electoral Commission API...")
+        donations = helpers.fetch_ec_csv(donations_url, "ec.csv", refresh=self.refresh)
+        print(f"Fetched {len(donations)} donation records")
 
-        registrations_url = "http://search.electoralcommission.org.uk/api/csv/Registrations"
-        registered_entities = helpers.fetch_ec_csv(registrations_url, "ec_reg.csv", self.refresh)
+        registrations_url = (
+            "https://search.electoralcommission.org.uk/api/csv/Registrations"
+            "?start=0&rows=999999"
+            "&et=pp&et=ppm&et=tp&et=perpar&et=rd"
+            "&query=&sort=RegulatedEntityName&order=asc"
+        )
+        print("Fetching registrations from Electoral Commission API...")
+        registered_entities = helpers.fetch_ec_csv(registrations_url, "ec_reg.csv", refresh=self.refresh)
+        print(f"Fetched {len(registered_entities)} registered entity records")
+
         # TODO: this is a bit too simple at the moment.
         # If there are multiple entities with the same name
         # listed, an arbitrary one will be used.
