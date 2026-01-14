@@ -71,7 +71,6 @@ services:
       - UTI_DB_HOST=db
       - UTI_DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
-      - DJANGO_VITE_DEV_SERVER_HOST=web
     depends_on:
       db:
         condition: service_healthy

@@ -178,7 +178,7 @@ STATIC_URL = '/static/'
 DJANGO_VITE = {
     'default': {
         'dev_mode': DEBUG,
-        'dev_server_host': config('DJANGO_VITE_DEV_SERVER_HOST', default='vite' if DEBUG else 'localhost'),
+        'dev_server_host': config('DJANGO_VITE_DEV_SERVER_HOST', default='localhost'),
         'dev_server_port': 5173,
         'manifest_path': join(BASE_DIR, 'static', 'dist', 'manifest.json'),
     }
