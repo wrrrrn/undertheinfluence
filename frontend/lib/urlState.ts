@@ -30,6 +30,9 @@ export function parseUrlParams(): FilterState {
   const donorType = params.get(URL_PARAM_MAP.donorType);
   if (donorType) state.donorType = donorType as FilterState['donorType'];
 
+  const excludeDonorType = params.get(URL_PARAM_MAP.excludeDonorType);
+  if (excludeDonorType) state.excludeDonorType = excludeDonorType as FilterState['excludeDonorType'];
+
   const recipientType = params.get(URL_PARAM_MAP.recipientType);
   if (recipientType) state.recipientType = recipientType as FilterState['recipientType'];
 
@@ -63,6 +66,7 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
   if (state.minValue !== undefined) params.set(URL_PARAM_MAP.minValue, String(state.minValue));
   if (state.maxValue !== undefined) params.set(URL_PARAM_MAP.maxValue, String(state.maxValue));
   if (state.donorType) params.set(URL_PARAM_MAP.donorType, state.donorType);
+  if (state.excludeDonorType) params.set(URL_PARAM_MAP.excludeDonorType, state.excludeDonorType);
   if (state.recipientType) params.set(URL_PARAM_MAP.recipientType, state.recipientType);
   if (state.hasLobbying !== undefined) params.set(URL_PARAM_MAP.hasLobbying, String(state.hasLobbying));
   if (state.page !== 1) params.set(URL_PARAM_MAP.page, String(state.page));

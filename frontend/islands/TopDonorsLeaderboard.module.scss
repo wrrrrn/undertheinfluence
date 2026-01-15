@@ -1,0 +1,161 @@
+/**
+ * TopDonorsLeaderboard component styles
+ * Uses CSS Modules for scoped styling
+ */
+
+.leaderboard {
+  background: white;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+}
+
+.header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.refreshing {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--bs-secondary);
+  font-style: italic;
+}
+
+.count {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--bs-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  transition: background 0.2s ease;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--bs-light);
+  }
+}
+
+.rank {
+  flex-shrink: 0;
+  width: 3rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--bs-secondary);
+  text-align: center;
+}
+
+.card {
+  flex: 1;
+  min-width: 0; // Allow flex item to shrink
+}
+
+.loading,
+.error,
+.empty {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--bs-secondary);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+.spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid var(--bs-border-color);
+  border-top-color: var(--bs-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  color: var(--bs-danger);
+
+  strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+  }
+
+  p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+}
+
+.empty {
+  p {
+    margin: 0 0 0.5rem 0;
+  }
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.paginationButton {
+  padding: 0.5rem 1.5rem;
+  background: var(--bs-primary);
+  color: white;
+  border: none;
+  border-radius: var(--bs-border-radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--bs-primary);
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    background: var(--bs-light);
+    color: var(--bs-secondary);
+    cursor: not-allowed;
+  }
+}

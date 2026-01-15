@@ -14,6 +14,7 @@ export default function FilterPanel() {
     dateTo,
     minValue,
     donorType,
+    excludeDonorType,
     hasLobbying,
     setFilter,
     resetFilters,
@@ -36,6 +37,10 @@ export default function FilterPanel() {
     setFilter({ donorType: donorType === type ? undefined : type }, { resetPage: true });
   };
 
+  const handleExcludeDonorTypeToggle = (type: DonorType) => {
+    setFilter({ excludeDonorType: excludeDonorType === type ? undefined : type }, { resetPage: true });
+  };
+
   const handleHasLobbyingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilter({ hasLobbying: e.target.checked || undefined }, { resetPage: true });
   };
@@ -50,6 +55,7 @@ export default function FilterPanel() {
     dateTo ||
     minValue ||
     donorType ||
+    excludeDonorType ||
     hasLobbying
   );
 
@@ -117,15 +123,34 @@ export default function FilterPanel() {
 
         {/* Donor Type */}
         <div className={styles.section}>
-          <label className={styles.label}>Donor Type</label>
+          <label className={styles.label}>Include Donor Type</label>
           <div className={styles.chipGroup}>
-            {(['individual', 'organization', 'trade-union', 'company'] as DonorType[]).map(
+            {(['person', 'trade-union', 'company', 'organization'] as DonorType[]).map(
               (type) => (
                 <button
                   key={type}
                   type="button"
                   className={`${styles.chip} ${donorType === type ? styles.chipActive : ''}`}
                   onClick={() => handleDonorTypeToggle(type)}
+                >
+                  {type === 'trade-union' ? 'Trade Union' : type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Exclude Donor Type */}
+        <div className={styles.section}>
+          <label className={styles.label}>Exclude Donor Type</label>
+          <div className={styles.chipGroup}>
+            {(['trade-union', 'company'] as DonorType[]).map(
+              (type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`${styles.chip} ${excludeDonorType === type ? styles.chipActive : ''}`}
+                  onClick={() => handleExcludeDonorTypeToggle(type)}
                 >
                   {type === 'trade-union' ? 'Trade Union' : type.charAt(0).toUpperCase() + type.slice(1)}
                 </button>

@@ -3,7 +3,8 @@
  * Used across all islands for synchronized filtering
  */
 
-export type DonorType = 'individual' | 'organization' | 'trade-union' | 'company';
+// Donor types - person or specific organization classifications
+export type DonorType = 'person' | 'trade-union' | 'company' | 'organization';
 export type ActorType = 'person' | 'organization';
 
 export interface FilterState {
@@ -18,6 +19,9 @@ export interface FilterState {
   // Type filters
   donorType?: DonorType;
   recipientType?: ActorType;
+
+  // Exclusion filters
+  excludeDonorType?: DonorType;
 
   // Special filters
   hasLobbying?: boolean; // Show only donors who also lobby
@@ -45,6 +49,7 @@ export const URL_PARAM_MAP = {
   minValue: 'min_value',
   maxValue: 'max_value',
   donorType: 'donor_type',
+  excludeDonorType: 'exclude_donor_type',
   recipientType: 'recipient_type',
   hasLobbying: 'has_lobbying',
   page: 'page',

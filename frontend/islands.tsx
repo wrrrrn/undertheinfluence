@@ -54,8 +54,7 @@ class IslandErrorBoundary extends Component<
 const islands: Record<string, () => Promise<{ default: React.ComponentType<any> }>> = {
   'ActorCard': () => import('./components/ActorCard'),
   'FilterPanel': () => import('./islands/FilterPanel'),
-  // More islands will be added here:
-  // 'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
+  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
 };
 
 /**
