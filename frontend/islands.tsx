@@ -55,6 +55,7 @@ const islands: Record<string, () => Promise<{ default: React.ComponentType<any> 
   'ActorCard': () => import('./components/ActorCard'),
   'FilterPanel': () => import('./islands/FilterPanel'),
   'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
+  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
 };
 
 /**
