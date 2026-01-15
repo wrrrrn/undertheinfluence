@@ -81,11 +81,12 @@ class TopDonorSerializer(serializers.Serializer):
     """
     Serializer for top donor aggregate results.
 
-    Returns: actor (summary), total_donated, donation_count
+    Returns: actor (summary), total_donated, donation_count, is_lobbying_client
     """
     actor = ActorSummarySerializer()
     total_donated = serializers.DecimalField(max_digits=15, decimal_places=2)
     donation_count = serializers.IntegerField()
+    is_lobbying_client = serializers.BooleanField(required=False)
 
 
 class TopRecipientSerializer(serializers.Serializer):

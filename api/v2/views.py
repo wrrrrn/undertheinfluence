@@ -90,6 +90,13 @@ class TopDonorsView(generics.ListAPIView):
                 for actor in models.Actor.objects.filter(id__in=donor_ids)
             }
 
+            # Check which donors are lobbying clients (have Consultancy records)
+            lobbying_donor_ids = set(
+                models.Consultancy.objects.filter(client_id__in=donor_ids)
+                .values_list('client_id', flat=True)
+                .distinct()
+            )
+
             # Build result list with actor objects
             results = []
             for item in page:
@@ -98,7 +105,8 @@ class TopDonorsView(generics.ListAPIView):
                     results.append({
                         'actor': actors_dict[donor_id],
                         'total_donated': item['total_donated'] or 0,
-                        'donation_count': item['donation_count']
+                        'donation_count': item['donation_count'],
+                        'is_lobbying_client': donor_id in lobbying_donor_ids
                     })
 
             serializer = self.get_serializer(results, many=True)
@@ -110,11 +118,17 @@ class TopDonorsView(generics.ListAPIView):
             actor.id: actor
             for actor in models.Actor.objects.filter(id__in=donor_ids)
         }
+        lobbying_donor_ids = set(
+            models.Consultancy.objects.filter(client_id__in=donor_ids)
+            .values_list('client_id', flat=True)
+            .distinct()
+        )
         results = [
             {
                 'actor': actors_dict[item['donor_id']],
                 'total_donated': item['total_donated'] or 0,
-                'donation_count': item['donation_count']
+                'donation_count': item['donation_count'],
+                'is_lobbying_client': item['donor_id'] in lobbying_donor_ids
             }
             for item in aggregated_qs
             if item['donor_id'] in actors_dict
