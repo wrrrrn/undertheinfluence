@@ -6,6 +6,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTopDonors } from '../hooks/useTopDonors';
+import { useFilterStore } from '../store/filterStore';
 import ActorCard from '../components/ActorCard';
 import { formatCurrency } from '../types/actor';
 import styles from './TopDonorsLeaderboard.module.scss';
@@ -19,6 +20,15 @@ interface TopDonorsLeaderboardInnerProps {
 
 function TopDonorsLeaderboardInner({ limit = 20 }: TopDonorsLeaderboardInnerProps) {
   const { data, isLoading, error, isFetching } = useTopDonors(limit);
+  const { page, setFilter } = useFilterStore();
+
+  const handleNextPage = () => {
+    setFilter({ page: page + 1 });
+  };
+
+  const handlePreviousPage = () => {
+    setFilter({ page: Math.max(1, page - 1) });
+  };
 
   if (error) {
     return (
@@ -89,12 +99,15 @@ function TopDonorsLeaderboardInner({ limit = 20 }: TopDonorsLeaderboardInnerProp
           <button
             className={styles.paginationButton}
             disabled={!data.previous}
+            onClick={handlePreviousPage}
           >
             Previous
           </button>
+          <span className={styles.pageInfo}>Page {page}</span>
           <button
             className={styles.paginationButton}
             disabled={!data.next}
+            onClick={handleNextPage}
           >
             Next
           </button>

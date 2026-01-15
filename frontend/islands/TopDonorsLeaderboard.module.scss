@@ -131,9 +131,18 @@
 .pagination {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--bs-border-color);
+}
+
+.pageInfo {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bs-secondary);
+  min-width: 4rem;
+  text-align: center;
 }
 
 .paginationButton {
