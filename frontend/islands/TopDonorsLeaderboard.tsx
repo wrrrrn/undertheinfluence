@@ -70,9 +70,12 @@ function TopDonorsLeaderboardInner({ limit = 20 }: TopDonorsLeaderboardInnerProp
       </div>
 
       <div className={styles.list}>
-        {data.results.map((donor, index) => (
+        {data.results.map((donor, index) => {
+          // Calculate actual rank based on current page
+          const rank = (page - 1) * limit + index + 1;
+          return (
           <div key={donor.actor.id} className={styles.item}>
-            <div className={styles.rank}>#{index + 1}</div>
+            <div className={styles.rank}>#{rank}</div>
             <div className={styles.card}>
               <ActorCard
                 actor={{
@@ -91,7 +94,8 @@ function TopDonorsLeaderboardInner({ limit = 20 }: TopDonorsLeaderboardInnerProp
               />
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {(data.next || data.previous) && (
