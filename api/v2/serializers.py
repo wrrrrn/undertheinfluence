@@ -270,3 +270,23 @@ class DonorConcentrationSerializer(serializers.Serializer):
     top_donor_share = serializers.FloatField()
     gini_coefficient = serializers.FloatField()
     concentration_category = serializers.CharField()
+
+
+class HomepageStatsSerializer(serializers.Serializer):
+    """
+    Serializer for homepage key metrics.
+
+    Returns:
+    - total_donations: Count of all donation records
+    - total_value: Sum of all donation values (in pence)
+    - concentration_top_1_percent: Decimal percentage (0.65 = 65%)
+    - concentration_donors_count: Number of donors in top 1.3%
+    - dual_influence_count: Count of organizations that both donate and lobby
+    - timestamp: ISO timestamp for "Data as of" display
+    """
+    total_donations = serializers.IntegerField()
+    total_value = serializers.DecimalField(max_digits=15, decimal_places=2)
+    concentration_top_1_percent = serializers.FloatField()
+    concentration_donors_count = serializers.IntegerField()
+    dual_influence_count = serializers.IntegerField()
+    timestamp = serializers.DateTimeField()

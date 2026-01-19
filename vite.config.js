@@ -31,6 +31,11 @@ export default defineConfig({
     modules: {
       localsConvention: 'camelCase',
       scopeBehaviour: 'local'
+    },
+    preprocessorOptions: {
+      scss: {
+        additionalData: `@import "./frontend/styles/_variables.scss";`
+      }
     }
   }
 });

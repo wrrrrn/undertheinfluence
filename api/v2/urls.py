@@ -15,6 +15,7 @@ urlpatterns = [
     path('redoc/', SpectacularRedocView.as_view(url_name='api_v2:schema'), name='redoc'),
 
     # Aggregate endpoints
+    path('aggregates/stats/', views.HomepageStatsView.as_view(), name='homepage-stats'),
     path('aggregates/top-donors/', views.TopDonorsView.as_view(), name='top-donors'),
     path('aggregates/top-recipients/', views.TopRecipientsView.as_view(), name='top-recipients'),
     path('aggregates/network-stats/', views.NetworkStatsView.as_view(), name='network-stats'),

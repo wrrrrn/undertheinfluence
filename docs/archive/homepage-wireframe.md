@@ -1,8 +1,46 @@
 # Under The Influence - Homepage Wireframe & Design
 
 **Date**: January 2026
-**Status**: Design Phase
+**Status**: Phase 1 IMPLEMENTED (Key Metrics + Party Breakdown)
 **Target Audience**: Journalists, researchers, and citizens investigating political influence
+
+---
+
+## Implementation Status
+
+### ✅ PHASE 1 COMPLETE: Homepage Essentials (January 2026)
+- **StatsGrid Component**: 4-card metrics strip with live API data
+  - Total donations, total value, concentration (65% from 1.3%), dual influence count
+  - Filters: Date range, min value, donor type
+  - Timestamp provenance ("Data as of...")
+- **PartyBreakdown Component**: Donation breakdown by political party
+  - Official party colors (Conservative blue, Labour red, etc.)
+  - Responsive grid layout (2-3 columns)
+  - Filters: Date range, min value, donor type
+  - Shows: Total received, donor count, average donation per party
+- **FilterPanel Component**: URL-synchronized filter controls
+  - Date range picker, minimum value selector, donor type chips
+  - URL state management (shareable, bookmarkable filters)
+  - All islands respond to filter changes simultaneously
+- **Wagtail CMS Integration**: Custom StreamField blocks
+  - `StatsGridBlock`, `PartyBreakdownBlock`, `TopDonorsLeaderboardBlock`, `FilterPanelBlock`
+  - Drag-and-drop page building for editors
+- **API Endpoints**: All filtering support implemented
+  - `/api/v2/aggregates/stats/` - Homepage statistics (with filters)
+  - `/api/v2/aggregates/party-donations/` - Party breakdown (with filters)
+  - `/api/v2/aggregates/top-donors/` - Top donors leaderboard (with filters, pagination)
+
+### 🚧 IN PROGRESS: Phase 2-4
+- SearchBar with autocomplete
+- Featured Insight editorial blocks
+- Dual Influence Spotlight
+- MPs & Lords interests integration
+- Network visualizations
+
+### 📋 PENDING: Later Phases
+- Time series charts
+- Geographic mapping
+- Advanced network graphs
 
 ---
 
@@ -16,7 +54,12 @@
    - Lobbyists and their lobbying/donation activity
 3. **Homepage approach**: Mix of dashboard metrics, narrative introduction, and exploration jumping-off point
 4. **Navigation**: Home | Explore | Lobbyists
-5. **Headline data**: 21,301 donors, lobbying overlap tracking
+5. **Headline data**:
+   - 21,301 total donors
+   - 119,599 donation records
+   - £1.3B+ total value
+   - 65% from just 1.3% of donors (277 donors = extreme concentration)
+   - 62 organizations with dual influence (lobby AND donate)
 
 ---
 
@@ -41,20 +84,26 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │ KEY METRICS STRIP (4 stat cards in a row)                        │
 │ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐        │
-│ │   21,301  │ │   £XXXm   │ │    XXX    │ │    87%    │        │
-│ │  Donors   │ │  Total    │ │ Dual      │ │ From Top  │        │
-│ │ Tracked   │ │ Donated   │ │ Influence │ │ 10%       │        │
+│ │  119,599  │ │  £1.3B+   │ │    62     │ │    65%    │        │
+│ │ Donation  │ │  Total    │ │ Dual      │ │ From Top  │        │
+│ │  Records  │ │ Donated   │ │ Influence │ │  1.3%     │        │
 │ └───────────┘ └───────────┘ └───────────┘ └───────────┘        │
+│                                                                   │
+│ Note: Emphasizing 1.3% concentration (277 donors) is more        │
+│ impactful than "top 10%" and "journalist-proof"                  │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
 │ FEATURED INSIGHT (Editorial block)                               │
 │                                                                   │
 │  "The Concentration Problem"                                      │
-│  Just 10% of donors contribute 87% of all political funding.     │
+│  Just 277 donors (1.3%) contribute 65% of all political funding. │
 │  Here's who they are and what they want.                         │
 │                                                                   │
 │  [→ Read the full analysis]                                      │
+│                                                                   │
+│  Note: Should include source_query metadata to link back to      │
+│  /explore/ with filters preset (e.g., top 1.3% donors)           │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -87,6 +136,11 @@
 │ │              │ │              │ │ influence    │            │
 │ │ [See Top 50] │ │              │ │ [Explore]    │            │
 │ └──────────────┘ └──────────────┘ └──────────────┘            │
+│                                                                   │
+│ ⚠️  Note: Biggest Donors should flag public funds (House of     │
+│ Commons, Electoral Commission) which appear in top donors due to │
+│ "Short Money" grants but may confuse citizens looking for        │
+│ private influence. Consider filtering them out or marking them.  │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -145,32 +199,43 @@ Every section drives to deeper exploration:
 ```jsx
 <StatCardsRow>
   <StatCard
-    value="21,301"
-    label="Donors Tracked"
-    icon="users"
+    value="119,599"
+    label="Donation Records"
+    icon="database"
+    live={true}  // Fetches from /api/v2/aggregates/stats/
+    timestamp="2026-01-15"  // "Data as of" for intellectual honesty
   />
   <StatCard
-    value="£XXXm"
+    value="£1.3B+"
     label="Total Donated"
     icon="pound"
-    live={true}  // Fetches from API
+    live={true}
+    timestamp="2026-01-15"
   />
   <StatCard
-    value="XXX"
+    value="62"
     label="Dual Influence"
     subtext="Donors who also lobby"
     icon="link"
     live={true}
+    timestamp="2026-01-15"
   />
   <StatCard
-    value="87%"
-    label="From Top 10%"
-    subtext="Concentration of donations"
+    value="65%"
+    label="From Top 1.3%"
+    subtext="277 donors control 65% of funding"
     icon="chart"
-    variant="danger"  // Red to highlight inequality
+    variant="danger"  // Red to highlight extreme inequality
+    live={true}
+    timestamp="2026-01-15"
   />
 </StatCardsRow>
 ```
+
+**Important**: Each StatCard with `live={true}` should:
+- Fetch from materialized views (`/api/v2/aggregates/stats/`) for performance
+- Display a "Data as of" timestamp to maintain intellectual honesty with researchers
+- Timestamp should update when materialized views refresh (daily or after imports)
 
 ### Featured Insight
 **Implementation**: Wagtail StreamField block (RichTextBlock + ImageBlock + LinkBlock)
@@ -179,6 +244,12 @@ Allows editors to:
 - Highlight current investigation
 - Link to full article
 - Update regularly with new stories
+
+**Critical**: Use FactCalloutBlock for statistical claims:
+- When highlighting stats like "1.3% concentration," include `source_query` metadata
+- The block should link back to `/explore/` with filters preset (e.g., `?value_percentile=99`)
+- This maintains data provenance and allows users to verify claims
+- Example: Clicking "277 donors" opens Explore page filtered to show those exact 277 donors
 
 ### Explore by Party
 **Implementation**: React island fetching party aggregates
@@ -407,12 +478,13 @@ context['latest_articles'] = ArticlePage.objects.live().order_by('-date')[:3]
 - **Primary**: Bootstrap default blue (links, CTAs)
 - **Danger/Warning**: Red for inequality metrics (concentration %)
 - **Success**: Green for positive metrics
-- **Parties**: Use official party colors
+- **Parties**: Use official party colors **with WCAG contrast validation**
   - Labour: Red (#E4003B)
   - Conservative: Blue (#0087DC)
-  - Lib Dem: Orange (#FAA61A)
+  - Lib Dem: Orange (#FAA61A) ⚠️ **Often fails WCAG AA contrast on white backgrounds**
   - Green: Green (#6AB023)
-  - etc.
+  - **Important**: Test all party colors for 4.5:1 contrast ratio before using for text
+  - Consider darker variants for text or use party colors only for backgrounds/borders
 
 ### Typography
 - **Headings**: Keep Bootstrap defaults
@@ -452,7 +524,12 @@ context['latest_articles'] = ArticlePage.objects.live().order_by('-date')[:3]
 - **Alt text**: All images and charts described
 
 ### Specific considerations:
-- Charts include text descriptions
+- **Charts include text descriptions** and accessible alternatives
+- **Responsive charts**: ConcentrationChart and other D3.js visualizations must have:
+  - Simplified "mobile-first" views for small screens
+  - Example: On mobile, complex Pareto chart → simple "Top 1% vs. Others" bar chart
+  - Text-based summary always visible alongside visual
+  - SVG elements should degrade gracefully
 - Tables have proper headers
 - Forms have labels
 - Skip navigation link for screen readers

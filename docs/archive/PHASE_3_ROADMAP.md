@@ -1,12 +1,16 @@
 # Phase 3 Roadmap: Data Quality, API Modernization & Frontend Excellence
 
-**Status**: In Progress (Phase 3.2)
+**Status**: In Progress (Phase 3.3 - Frontend UI)
 **Timeline**: 8 weeks (5 phases, some overlapping)
 **Started**: 2026-01-14
+**Last Updated**: 2026-01-15
 **Goal**: Transform UnderTheInfluence from a data aggregator into a production-ready influence intelligence platform
 
-**Current Phase**: 3.2 - API & Data Layer (with 3.4 testing in parallel)
-**Completed**: Phase 3.1 - Foundation & Entity Resolution ✅
+**Current Phase**: 3.3 - Frontend UI & Editorial Integration (Islands Architecture)
+**Completed**:
+- Phase 3.1 - Foundation & Entity Resolution ✅
+- Phase 3.2 - API & Data Layer (partial) ✅
+- Phase 3.3 - Frontend (Phase 1 complete: StatsGrid + PartyBreakdown) ✅
 
 This roadmap distills the comprehensive strategies documented in:
 - `docs/BACKEND_ARCHITECTURE_STRATEGY.md` (v1.1)
@@ -106,64 +110,77 @@ This roadmap distills the comprehensive strategies documented in:
 
 ## Phase 3.3: Frontend UI & Editorial Integration (Weeks 5-7)
 
+**Status**: ✅ Phase 1 Complete (StatsGrid + PartyBreakdown), 🚧 Phase 2-4 In Progress
 **Objective**: Modernize frontend build system, create reusable UI components, and integrate Wagtail editorial content.
 
-### Build System Modernization (Phase 2.5)
-- [ ] Remove `django-bower` from `requirements.txt`
-- [ ] Install and configure `django-vite`
-- [ ] Create `package.json` with Vite, React, TypeScript, Bootstrap 5
-- [ ] Set up Vite config with Django integration
-- [ ] Migrate static assets to Vite build pipeline
-- [ ] Remove legacy `components.json` and Bower config
-- [ ] Update deployment scripts (remove `bower_install` command)
+### Build System Modernization (Phase 2.5) ✅ COMPLETE
+- [x] Remove `django-bower` from `requirements.txt`
+- [x] Install and configure `django-vite`
+- [x] Create `package.json` with Vite, React, TypeScript, Bootstrap 5
+- [x] Set up Vite config with Django integration
+- [x] Migrate static assets to Vite build pipeline
+- [x] Remove legacy `components.json` and Bower config
+- [x] Update deployment scripts (remove `bower_install` command)
 
-### Islands Architecture Setup
-- [ ] Configure React 18 with selective hydration
-- [ ] Create `frontend/islands/` directory structure
-- [ ] Implement island registration system
-- [ ] Set up TypeScript with strict mode
-- [ ] Configure ESLint and Prettier
+### Islands Architecture Setup ✅ COMPLETE
+- [x] Configure React 18 with selective hydration
+- [x] Create `frontend/islands/` directory structure
+- [x] Implement island registration system (`frontend/islands.tsx`)
+- [x] Set up TypeScript with strict mode
+- [x] Configure ESLint and Prettier
 
-### Core UI Components (Data Cards)
+### Core UI Components (Data Cards) - 🚧 IN PROGRESS
 - [ ] `ActorCard` - Universal actor display with avatar, stats, links
 - [ ] `DonationCard` - Donation relationship with timeline
 - [ ] `ConsultancyCard` - Lobbying relationship display
-- [ ] `StatsCard` - Aggregate statistics with sparklines
+- [x] **`StatCard`** - Metric display with timestamp, icon, variant ✅
+- [x] **`PartyCard`** - Party with donation stats and color accent ✅
 - [ ] `NetworkGraph` - Force-directed graph for relationships
 - [ ] `TimelineChart` - Donation timeline with party affiliation
 
-### Interactive Islands
-- [ ] **FilterIsland** - Faceted search with URL state management
-  - Party filter
-  - Date range picker
-  - Value bracket slider
-  - Donor type checkboxes
-  - URL parameter synchronization
+### Interactive Islands - 🚧 PHASE 1 COMPLETE
+- [x] **`StatsGrid`** - Homepage key metrics (4 StatCards with live API) ✅
+- [x] **`PartyBreakdown`** - Donation breakdown by party (PartyCard grid) ✅
+- [x] **`TopDonorsLeaderboard`** - Ranked donor list with pagination ✅
+- [x] **`FilterPanel`** - Faceted search with URL state management ✅
+  - [x] Date range picker
+  - [x] Value bracket selector
+  - [x] Donor type chips
+  - [x] URL parameter synchronization
 - [ ] **DonorConcentrationIsland** - Pareto chart (whale donors vs long tail)
 - [ ] **NetworkMapIsland** - Interactive relationship graph (D3.js/vis.js)
 - [ ] **TimelineIsland** - Scrollable donation timeline with party context
 
-### URL-Driven State Management
-- [ ] Implement `parseFilterParams()` utility
-- [ ] Create `serializeFilterState()` utility
-- [ ] Add `uti:url-state-change` custom event bus
-- [ ] Implement state listeners in all islands
-- [ ] Add browser history management
-- [ ] Ensure shareable URLs (progressive enhancement)
+### URL-Driven State Management ✅ COMPLETE
+- [x] Implement `filterStore.ts` with Zustand
+- [x] URL parameter parsing and serialization
+- [x] Custom event bus for state changes
+- [x] State listeners in all islands (via `useFilterStore()` hook)
+- [x] Browser history management (pushState/replaceState)
+- [x] Shareable URLs (progressive enhancement)
 
-### Wagtail Editorial Integration
+### Wagtail Editorial Integration - 🚧 PARTIAL
 - [ ] Create `editorial` app
 - [ ] Implement `ActorMention` join model (Page ↔ Actor)
-- [ ] Build custom StreamField blocks:
-  - `ActorHighlightBlock` - Featured actor with custom description
-  - `LiveStatsBlock` - Live aggregate from API
-  - `DonorListBlock` - Curated donor list with override logic
-  - `NetworkVisualizationBlock` - Embedded network graph
+- [x] **Build custom StreamField blocks**: ✅
+  - [x] `StatsGridBlock` - Homepage metrics
+  - [x] `PartyBreakdownBlock` - Party donation breakdown
+  - [x] `TopDonorsLeaderboardBlock` - Donor leaderboard
+  - [x] `FilterPanelBlock` - Filter controls
+  - [x] `DataVisualizationBlock` - Container for all visualization blocks
+  - [ ] `ActorHighlightBlock` - Featured actor with custom description
+  - [ ] `NetworkVisualizationBlock` - Embedded network graph
 - [ ] Implement Django signals for lifecycle management:
-  - `post_delete` → cleanup orphaned ActorMentions
-  - `page_published` → sync ActorMentions with page content
+  - [ ] `post_delete` → cleanup orphaned ActorMentions
+  - [ ] `page_published` → sync ActorMentions with page content
 - [ ] Create Topic Page template (e.g., "The Property Lobby")
 - [ ] Add editorial override system (curated lists override API defaults)
+
+### API Integration - ✅ COMPLETE (for Phase 1)
+- [x] `/api/v2/aggregates/stats/` - Homepage statistics (with filters)
+- [x] `/api/v2/aggregates/party-donations/` - Party breakdown (with filters)
+- [x] `/api/v2/aggregates/top-donors/` - Top donors (with filters, pagination)
+- [x] All endpoints support date_range, value_min, donor_type filters
 
 ### Search & Discovery
 - [ ] Rebuild search interface as FilterIsland

@@ -105,12 +105,69 @@ class ActorCardBlock(blocks.StructBlock):
         template = 'cms/blocks/actor_card.html'
 
 
+class StatsGridBlock(blocks.StructBlock):
+    """
+    Embed the homepage key metrics grid.
+
+    Displays 4 key statistics: total donations, total value, concentration, and dual influence.
+    Data is fetched live from the API with timestamp provenance.
+    """
+    title = blocks.CharBlock(
+        required=False,
+        help_text="Optional heading displayed above the metrics grid"
+    )
+    api_url = blocks.CharBlock(
+        default="/api/v2/aggregates/stats/",
+        help_text="API endpoint for statistics (usually leave as default)"
+    )
+
+    class Meta:
+        icon = 'snippet'
+        label = 'Key Metrics Grid'
+        template = 'cms/blocks/stats_grid.html'
+
+
+class PartyBreakdownBlock(blocks.StructBlock):
+    """
+    Embed party donation breakdown.
+
+    Displays donation statistics by political party with official party colors.
+    Shows total received, donor count, and average donation per party.
+    """
+    title = blocks.CharBlock(
+        default="Donations by Party",
+        help_text="Heading displayed above the party breakdown"
+    )
+    limit = blocks.IntegerBlock(
+        default=10,
+        min_value=3,
+        max_value=20,
+        help_text="Number of parties to display (3-20)"
+    )
+    compact = blocks.BooleanBlock(
+        required=False,
+        default=False,
+        help_text="Use compact layout (less detail)"
+    )
+    api_url = blocks.CharBlock(
+        default="/api/v2/aggregates/party-donations/",
+        help_text="API endpoint for party donations (usually leave as default)"
+    )
+
+    class Meta:
+        icon = 'group'
+        label = 'Party Breakdown'
+        template = 'cms/blocks/party_breakdown.html'
+
+
 class DataVisualizationBlock(blocks.StreamBlock):
     """
     Container block for data visualizations and interactive components.
 
     Allows editors to combine multiple islands on a single page.
     """
+    stats_grid = StatsGridBlock()
+    party_breakdown = PartyBreakdownBlock()
     leaderboard = TopDonorsLeaderboardBlock()
     concentration_chart = ConcentrationChartBlock()
     filter_panel = FilterPanelBlock()

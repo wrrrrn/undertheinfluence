@@ -60,12 +60,9 @@ function TopDonorsLeaderboardInner({ limit = 20 }: TopDonorsLeaderboardInnerProp
   return (
     <div className={styles.leaderboard}>
       <div className={styles.header}>
-        <h3 className={styles.title}>
-          Top Donors
-          {isFetching && <span className={styles.refreshing}>Updating...</span>}
-        </h3>
         <p className={styles.count}>
           {data.count.toLocaleString()} {data.count === 1 ? 'donor' : 'donors'} found
+          {isFetching && <span className={styles.refreshing}> • Updating...</span>}
         </p>
       </div>
 

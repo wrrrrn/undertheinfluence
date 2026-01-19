@@ -1,315 +1,436 @@
 # UnderTheInfluence Systems Architecture
 
+**Version:** 4.0 (Islands Architecture Edition)
+**Last Updated:** January 19, 2026
+**Status:** Living Document
+
+---
+
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Architecture Diagram](#architecture-diagram)
-3. [Component Overview](#component-overview)
-4. [Data Flow](#data-flow)
-5. [Data Model Architecture](#data-model-architecture)
-6. [External Dependencies](#external-dependencies)
+2. [Technology Stack](#technology-stack)
+3. [Architecture Diagrams](#architecture-diagrams)
+4. [Component Overview](#component-overview)
+5. [Data Flow](#data-flow)
+6. [Frontend Architecture (Islands)](#frontend-architecture-islands)
 7. [API Architecture](#api-architecture)
-8. [Deployment Architecture](#deployment-architecture)
-9. [Key Design Decisions](#key-design-decisions)
-10. [Future Considerations](#future-considerations)
+8. [Data Model Architecture](#data-model-architecture)
+9. [Deployment Architecture](#deployment-architecture)
+10. [Key Design Decisions](#key-design-decisions)
 
 ---
 
 ## System Overview
 
-UnderTheInfluence is a web application designed to track and expose the influence of lobbying in UK politics. The system aggregates data from multiple authoritative sources to create a comprehensive database of:
+UnderTheInfluence is a Django-based web application that tracks lobbying influence in UK politics by aggregating data from multiple authoritative sources into a unified database following the Popolo open government data specification.
 
-- **Politicians** (MPs, Lords, MSPs, MLAs)
-- **Political Organizations** (parties, legislatures, lobbying agencies)
-- **Financial Relationships** (donations to politicians and parties)
-- **Lobbying Relationships** (consultancy arrangements between organizations)
+### Primary Functions
 
-The application serves three primary purposes:
+1. **Data Aggregation**: Import and normalize political data from diverse external sources
+2. **Data Analysis**: Provide aggregate statistics, network analysis, and concentration metrics
+3. **Data Presentation**: Server-rendered pages with selective interactive components
+4. **API Access**: RESTful API for programmatic data consumption
 
-1. **Data Aggregation**: Importing and normalizing political data from diverse sources
-2. **Data Presentation**: Providing a web interface for exploring political influence relationships
-3. **Data Access**: Exposing a REST API for programmatic data consumption
+### Current Status (January 2026)
 
-### Technology Stack
+**Working Features**:
+- ✅ Full Django 6.0.1 + Wagtail 7.2.x stack
+- ✅ Islands Architecture frontend with React 18 + Vite 5
+- ✅ API v2 with aggregate endpoints and filtering
+- ✅ Docker-based development environment
+- ✅ Basic UI with homepage dashboard components
+- ✅ Data import from ParlParse (MPs/Lords) and Ministers
 
-| Layer | Technology | Status |
-|-------|------------|--------|
-| Framework | Django 6.0.1 | ✅ Phase 2 Complete |
-| CMS | Wagtail 7.2.x | ✅ Phase 2 Complete |
-| API | Django REST Framework 3.15.x | ✅ Phase 2 Complete |
-| Database | PostgreSQL 15 (Docker) / SQLite (legacy) | ✅ Stable |
-| Cache | Redis 7 (Docker) | ✅ Stable |
-| Search | Elasticsearch 7.17 (optional, Docker profile) | ⚠️ Optional |
-| Python | 3.12 | ✅ Phase 2 Complete |
-| Polymorphic Models | django-polymorphic 4.2.x | ✅ Phase 2 Complete |
-| Deployment | Docker + Docker Compose | ✅ Stable |
-| Configuration | python-decouple (environment variables) | ✅ Stable |
-| Frontend | Bootstrap, jQuery, Bootstrap Material Design | ⚠️ Needs modernization |
-| Asset Management | ~~django-bower~~ (removed), django-compressor | ⚠️ Phase 2.5 Pending |
-
-**Note**: See `docs/MODERNIZATION_PROGRESS.md` for upgrade roadmap. Phase 2 (Django/Wagtail/Python upgrade) is COMPLETE. Phase 2.5 (Frontend Modernization) is next.
+**See `docs/CURRENT_STATE.md` for detailed feature inventory.**
 
 ---
 
-## Architecture Diagram
+## Technology Stack
+
+### Backend
+
+| Layer | Technology | Version | Purpose |
+|-------|------------|---------|---------|
+| **Framework** | Django | 6.0.1 | Web framework, ORM, admin |
+| **CMS** | Wagtail | 7.2.x | Content management, StreamFields |
+| **API** | Django REST Framework | 3.15.x | RESTful API, serialization |
+| **Database** | PostgreSQL | 15 | Primary data store (Docker) |
+| **Cache** | Redis | 7 | Session cache, future API cache (Docker) |
+| **Python** | Python | 3.12 | Runtime environment |
+| **Polymorphism** | django-polymorphic | 4.2.x | Actor model inheritance |
+| **Configuration** | python-decouple | 3.8 | Environment variables |
+
+### Frontend
+
+| Layer | Technology | Version | Purpose |
+|-------|------------|---------|---------|
+| **Build System** | Vite | 5.x | Modern ES module bundler, HMR |
+| **Framework** | React | 18.x | Selective hydration (islands only) |
+| **Type Safety** | TypeScript | 5.x | Static typing, IDE support |
+| **Styling** | Bootstrap 5 | 5.3.x | Layout/grid system |
+| **Scoped Styles** | CSS Modules | (Vite) | Component-scoped SCSS |
+| **State Management** | Zustand | 4.5.x | Lightweight store (URL-synchronized) |
+| **Data Fetching** | TanStack Query | 5.x | API client with caching |
+| **Django Integration** | django-vite | 3.0+ | Asset loading in templates |
+
+### Infrastructure
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Containers** | Docker + Docker Compose | Development environment orchestration |
+| **WSGI Server** | Gunicorn | Production application server (future) |
+| **Reverse Proxy** | Nginx | Static files, SSL termination (future) |
+
+---
+
+## Architecture Diagrams
 
 ### High-Level System Architecture
 
 ```
-                                    +------------------+
-                                    |   External Data  |
-                                    |     Sources      |
-                                    +--------+---------+
-                                             |
-        +------------------------------------+------------------------------------+
-        |                    |               |               |                    |
-        v                    v               v               v                    v
-+---------------+  +----------------+  +-----------+  +------------+  +------------------+
-| ParlParse     |  | Electoral      |  | APPC      |  | Every      |  | Companies House  |
-| (MySociety)   |  | Commission     |  | Register  |  | Politician |  | / Open Corporates|
-+-------+-------+  +-------+--------+  +-----+-----+  +------+-----+  +--------+---------+
-        |                  |                 |               |                  |
-        +------------------+-----------------+---------------+------------------+
-                                             |
-                                             v
-                              +------------------------------+
-                              |    Management Commands       |
-                              |      (Data Import Layer)     |
-                              |                              |
-                              | - import_parlparse           |
-                              | - import_ec                  |
-                              | - import_appc                |
-                              | - import_everypolitician     |
-                              | - import_companieshouse      |
-                              | - import_ministers           |
-                              | - import_twfy                |
-                              | - import_mpsinterests        |
-                              | - import_lordsinterests      |
-                              +-------------+----------------+
-                                            |
-                                            v
-+-----------------------------------------------------------------------------------+
-|                              DJANGO APPLICATION                                    |
-|                                                                                   |
-|  +------------------+    +------------------+    +------------------+             |
-|  |   datafetch      |    |       api        |    |       cms        |             |
-|  |                  |    |                  |    |                  |             |
-|  | - Popolo Models  |<-->| - REST ViewSets  |    | - Wagtail Pages  |             |
-|  | - Influence      |    | - Serializers    |    | - Snippets       |             |
-|  |   Mapping Models |    | - URL Routing    |    | - StreamFields   |             |
-|  | - Admin Config   |    |                  |    |                  |             |
-|  | - Views          |    |                  |    |                  |             |
-|  +--------+---------+    +--------+---------+    +--------+---------+             |
-|           |                       |                       |                       |
-|           +-----------------------+-----------------------+                       |
-|                                   |                                               |
-|                                   v                                               |
-|                        +--------------------+                                     |
-|                        |    PostgreSQL      |                                     |
-|                        |    Database        |                                     |
-|                        +--------------------+                                     |
-|                                                                                   |
-+-----------------------------------------------------------------------------------+
-                                    |
-          +-------------------------+-------------------------+
-          |                         |                         |
-          v                         v                         v
-   +-------------+          +---------------+         +----------------+
-   | Web Browser |          | API Clients   |         | Wagtail Admin  |
-   | (Frontend)  |          | (JSON/REST)   |         | (CMS Backend)  |
-   +-------------+          +---------------+         +----------------+
+┌────────────────────────────────────────────────────────────────┐
+│                      External Data Sources                      │
+│  (ParlParse, Electoral Commission, APPC, TheyWorkForYou)       │
+└────────────────────┬───────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────┐
+│             Management Commands (Data Import Layer)             │
+│  import_parlparse | import_ministers | import_mpsinterests     │
+└────────────────────┬───────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────┐
+│                    Django Application Layer                     │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │  datafetch   │  │   api/v2     │  │     cms      │        │
+│  │              │  │              │  │              │        │
+│  │ • Models     │◄─┤ • ViewSets   │  │ • Wagtail    │        │
+│  │ • Views      │  │ • Serializers│  │   Pages      │        │
+│  │ • Admin      │  │ • Filters    │  │ • StreamField│        │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘        │
+│         │                  │                  │                 │
+│         └──────────────────┴──────────────────┘                 │
+│                            ▼                                    │
+│                  ┌──────────────────┐                          │
+│                  │   PostgreSQL 15   │                          │
+│                  └──────────────────┘                          │
+└────────────────────┬────────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────┐
+│                   Frontend Layer (Hybrid)                       │
+│                                                                 │
+│  Django Templates (Server-Rendered)                            │
+│  ┌─────────────────────────────────────────────────┐          │
+│  │  <div class="container">                         │          │
+│  │    <h1>Political Donations</h1>                  │          │
+│  │                                                   │          │
+│  │    <!-- React Island (Hydrated) -->              │          │
+│  │    <div data-island="StatsGrid"                  │          │
+│  │         data-api-url="/api/v2/aggregates/stats/">│          │
+│  │      [Interactive Component]                     │          │
+│  │    </div>                                        │          │
+│  │                                                   │          │
+│  │    <p>Static server-rendered content...</p>      │          │
+│  │  </div>                                          │          │
+│  └─────────────────────────────────────────────────┘          │
+│                                                                 │
+│  Vite Build System                                             │
+│  ┌─────────────────────────────────────────────────┐          │
+│  │ islands.tsx → Detects [data-island] markers     │          │
+│  │ StatsGrid.tsx → Lazy-loads & hydrates           │          │
+│  │ filterStore.ts → Syncs state to URL params      │          │
+│  └─────────────────────────────────────────────────┘          │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Interaction Diagram
+### Request/Response Flow (Hybrid Architecture)
 
 ```
-+------------------+     +------------------+     +------------------+
-|                  |     |                  |     |                  |
-|  appc_redirect   |     |    datafetch     |     |       cms        |
-|                  |     |                  |     |                  |
-+--------+---------+     +--------+---------+     +--------+---------+
-         |                        |                        |
-         |                        |                        |
-         v                        v                        v
-+------------------------------------------------------------------------+
-|                                                                        |
-|                          URL Router (urls.py)                          |
-|                                                                        |
-| /appc-redirect/*  --> appc_redirect.urls                               |
-| /api/*            --> api.urls                                         |
-| /search/*         --> datafetch.views.SearchView                       |
-| /person/*         --> datafetch.views.ActorView                        |
-| /organization/*   --> datafetch.views.ActorView                        |
-| /admin/*          --> wagtail.wagtailadmin                             |
-| /django-admin/*   --> django.contrib.admin                             |
-| /*                --> wagtail.wagtailcore (CMS pages)                  |
-|                                                                        |
-+------------------------------------------------------------------------+
+Browser Request
+     │
+     ▼
+┌─────────────────┐
+│  Django URLs    │ ← URL routing
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Django View    │ ← Server-side logic
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Django ORM     │ ← Database queries
+│  (Polymorphic)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  PostgreSQL     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  Django Template                    │
+│  • Renders server-side HTML         │
+│  • Includes [data-island] markers   │
+│  • Loads Vite assets ({% vite %})   │
+└────────┬────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  HTML Response (to Browser)         │
+│  • SEO-friendly content             │
+│  • Works without JavaScript         │
+│  • Island markers for hydration     │
+└────────┬────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  Islands Hydration (Client-Side)   │
+│  • islands.tsx detects markers      │
+│  • Lazy-loads React components      │
+│  • Hydrates with data-* props       │
+│  • useQuery() fetches from API v2   │
+└────────┬────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  API v2 Request (AJAX)              │
+│  • GET /api/v2/aggregates/stats/    │
+│  • Includes filter params from URL  │
+└────────┬────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  DRF ViewSet                        │
+│  • Applies django-filter filters    │
+│  • Serializes aggregated data       │
+│  • Returns JSON response            │
+└─────────────────────────────────────┘
 ```
+
+### Docker Compose Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                  Docker Compose                          │
+└──────────────────┬────────────────────┬──────────────────┘
+                   │                    │
+         ┌─────────┴────────┐  ┌───────┴────────┐
+         │                  │  │                 │
+         ▼                  ▼  ▼                 ▼
+    ┌────────┐      ┌────────────┐      ┌──────────┐
+    │  web   │      │   vite     │      │    db    │
+    │ Django │      │  Node 20   │      │ Postgres │
+    │  6.0   │      │  Vite HMR  │      │    15    │
+    │ :8000  │      │   :5173    │      │  :5432   │
+    └────┬───┘      └─────┬──────┘      └────┬─────┘
+         │                │                   │
+         │                │                   │
+         │     ┌──────────┘                   │
+         │     │                              │
+         ▼     ▼                              ▼
+    ┌────────────────────────────────────────────┐
+    │         Persistent Volumes                 │
+    │  • postgres_data (DB persistence)          │
+    │  • node_modules (anonymous, prevents sync) │
+    └────────────────────────────────────────────┘
+```
+
+**Key Docker Services**:
+- **web**: Django 6.0 application (port 8000)
+  - Serves API endpoints
+  - Renders Django templates
+  - Proxies Vite assets in dev mode
+- **vite**: Node 20 development server (port 5173)
+  - Hot Module Replacement (HMR)
+  - TypeScript compilation
+  - SCSS preprocessing
+- **db**: PostgreSQL 15 database (port 5432)
+  - Persistent data storage
+  - Full-text search (pg_trgm)
+- **redis**: Redis 7 cache (port 6379)
+  - Session storage
+  - Future API caching
 
 ---
 
 ## Component Overview
 
-### 1. datafetch App
+### 1. datafetch App (Core Data Layer)
 
-The `datafetch` app is the core data layer of the application, responsible for:
+**Purpose**: Popolo-based data models, data import, and public-facing views.
 
-- **Data Models**: Implementing the Popolo-based data schema
-- **Data Import**: Management commands for fetching and importing external data
-- **Web Views**: Public-facing views for displaying actors (people and organizations)
-- **Admin Configuration**: Django admin customizations for data management
-
-#### Directory Structure
-
+**Directory Structure**:
 ```
 datafetch/
-├── __init__.py
-├── admin.py              # Django admin configuration
-├── apps.py               # App configuration
-├── helpers.py            # Utility functions for data fetching
-├── urls.py               # URL routing for public views
-├── views.py              # View classes (ActorView, SearchView)
-├── management/
-│   └── commands/         # Data import management commands
-│       ├── import_appc.py
-│       ├── import_companieshouse.py
-│       ├── import_ec.py
-│       ├── import_everypolitician.py
-│       ├── import_lordsinterests.py
-│       ├── import_ministers.py
-│       ├── import_mpsinterests.py
-│       ├── import_parlparse.py
-│       ├── import_powerbase.py
-│       └── import_twfy.py
-└── models/
-    ├── __init__.py       # Model exports
-    ├── models.py         # Popolo-based core models
-    ├── influence_mapping.py  # Relationship models (Donation, Consultancy)
-    └── popolo/
-        ├── behaviors.py  # Abstract base classes (Timestampable, Dateframeable)
-        └── querysets.py  # Custom QuerySet classes
+├── models/
+│   ├── models.py               # Core Popolo models (Actor, Person, Org)
+│   ├── influence_mapping.py    # Donation, Consultancy
+│   └── popolo/
+│       ├── behaviors.py        # Timestampable, Dateframeable
+│       └── querysets.py        # DateframeableQuerySet
+├── management/commands/        # Data import
+│   ├── import_parlparse.py     # ✅ Working
+│   ├── import_ministers.py     # ✅ Working
+│   ├── import_mpsinterests.py  # ✅ Working
+│   ├── import_ec.py            # ⚠️ Needs update
+│   └── import_appc.py          # ⚠️ Needs rewrite
+├── views.py                    # ActorView, SearchView
+├── admin.py                    # Django admin configuration
+└── templates/                  # Django templates
 ```
 
-#### Key Views
+**Key Models**:
+- `Actor` (polymorphic base) → `Person`, `Organization`
+- `Membership` (Person ↔ Organization + Post)
+- `Donation` (Actor → Actor with £ value)
+- `Consultancy` (Organization client ↔ Organization agency)
 
-| View | URL Pattern | Purpose |
-|------|-------------|---------|
-| `SearchView` | `/search/` | Full-text search across actors |
-| `ActorView` | `/person/<pk>/`, `/organization/<pk>/` | Detail pages for actors |
-| `ActorRedirectView` | `/actor/<pk>/` | Redirects to appropriate actor type |
-
-#### Management Commands
-
-| Command | Data Source | Status |
-|---------|-------------|--------|
-| `import_parlparse` | MySociety ParlParse | ✅ Working (URLs updated) |
-| `import_ministers` | MySociety ParlParse | ✅ Working (URLs updated) |
-| `import_ec` | Electoral Commission | ✅ Working (CSV API) |
-| `import_appc` | PRCA Register | ✅ Working (New Scraper) |
-| `import_appc_archive` | PRCA Archive (PDFs) | ✅ Parsing (DB Pending) |
-| `import_everypolitician` | EveryPolitician | ⏸️ Likely Broken (cdn.rawgit.com) |
-| `import_companieshouse` | Companies House | ⏸️ Partial (untested) |
-| `import_twfy` | TheyWorkForYou | ⏸️ Partial (untested) |
-| `import_mpsinterests` | Register of MPs' Interests | ✅ Working (TWFY XML) |
-| `import_lordsinterests` | Register of Lords' Interests | ⏸️ Partial (untested) |
-| `import_powerbase` | Powerbase Wiki | ⏸️ Partial (untested) |
-
-See `docs/data-import-testing.md` for detailed testing results.
+**Generic Relations** (Popolo metadata):
+- `Identifier`, `OtherName`, `ContactDetail`, `Link`, `Source`, `Note`
 
 ---
 
-### 2. api App
+### 2. api/v2 App (REST API Layer)
 
-The `api` app provides a RESTful JSON API for programmatic access to the data using Django REST Framework.
+**Purpose**: JSON API for frontend islands and external consumers.
 
-#### Directory Structure
-
+**Directory Structure**:
 ```
-api/
-├── __init__.py
-├── serializers.py        # DRF serializers for models
-├── urls.py               # API URL routing
-└── views.py              # DRF ViewSets and APIViews
+api/v2/
+├── views.py        # DRF ViewSets and APIViews
+├── serializers.py  # DRF serializers
+├── filters.py      # django-filter configuration
+├── pagination.py   # Custom pagination classes
+└── urls.py         # API routing
 ```
 
-#### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/actors` | GET | List all actors with search support |
-| `/api/politicians` | GET | List politicians with role/date filtering |
-| `/api/memberships` | GET | List unique membership roles |
-| `/api/actors/<pk>/donations-from` | GET | Donations received by an actor |
-| `/api/actors/<pk>/donations-to` | GET | Donations made by an actor |
-| `/api/actors/<pk>/consulting-agencies` | GET | Lobbying agencies used by an actor |
-| `/api/actors/<pk>/consulting-clients` | GET | Clients of a lobbying agency |
-
-#### Serializers
-
-```python
-# Core serializers
-ActorSerializer       # id, name, url
-MembershipSerializer  # role
-DonationSerializer    # id, donor, recipient, value, dates, etc.
-ConsultancySerializer # id, client, agency, source, dates
+**Aggregate Endpoints** (Dashboard Data):
 ```
+GET /api/v2/aggregates/stats/
+  → Total donations, total value, concentration metrics
+  → Filters: date_range, value_min, donor_type
+
+GET /api/v2/aggregates/party-donations/
+  → Total received per party, donor count, avg donation
+  → Filters: date_range, value_min, donor_type
+
+GET /api/v2/aggregates/top-donors/
+  → Top N donors ranked by total donated
+  → Paginated (100/page), supports filtering
+
+GET /api/v2/aggregates/donor-concentration/
+  → Gini coefficient, HHI, concentration category
+  → Pareto distribution metrics
+```
+
+**Actor Endpoints** (Profile Data):
+```
+GET /api/v2/actors/{id}/
+  → Actor detail (name, type, image, classification)
+
+GET /api/v2/actors/{id}/donations-from/
+  → Donations received by this actor
+
+GET /api/v2/actors/{id}/donations-to/
+  → Donations made by this actor
+
+GET /api/v2/actors/{id}/consultancies/
+  → Lobbying relationships (if organization)
+```
+
+**Common Query Parameters**:
+- `received_after` / `received_before`: Date filters (YYYY-MM-DD or YYYY or YYYY-MM)
+- `value_min` / `value_max`: Donation value range
+- `donor_type`: Filter by person/organization
+- `limit` / `offset`: Pagination
 
 ---
 
-### 3. cms App
+### 3. cms App (Wagtail Integration)
 
-The `cms` app integrates Wagtail CMS for editorial content management, allowing non-technical users to create and manage content pages.
+**Purpose**: Editorial content management with embedded data islands.
 
-#### Directory Structure
-
+**Directory Structure**:
 ```
 cms/
-├── __init__.py
-├── models.py             # Wagtail page and snippet models
-├── migrations/           # Database migrations
-└── templatetags/
-    └── cms_tags.py       # Custom template tags
+├── models.py               # Wagtail page models (HomePage)
+├── blocks.py               # Custom StreamField blocks
+├── templates/cms/blocks/   # Block templates with island markers
+│   ├── stats_grid.html
+│   ├── party_breakdown.html
+│   └── top_donors_leaderboard.html
+└── migrations/
 ```
 
-#### Wagtail Models
+**Custom StreamField Blocks**:
+- `StatsGridBlock`: Embeds homepage metrics island
+- `PartyBreakdownBlock`: Embeds party donation breakdown
+- `TopDonorsLeaderboardBlock`: Embeds paginated leaderboard
+- `FilterPanelBlock`: Embeds filter controls
+- `DataVisualizationBlock`: Container for all visualization blocks
 
-| Model | Type | Purpose |
-|-------|------|---------|
-| `MyPage` | Page | Standard content page with rich text body |
-| `DataPage` | Page | Content page designed for data-driven content |
-| `Profile` | Snippet | Reusable profile blocks (name, body, image) |
-| `Analysis` | Snippet | Editorial analysis with StreamField content |
-| `Quote` | Snippet | Reusable quotation blocks |
-
-#### StreamField Blocks (Analysis)
-
-```python
-StreamField([
-    ('heading', blocks.CharBlock(classname="full title")),
-    ('paragraph', blocks.RichTextBlock()),
-    ('image', ImageChooserBlock()),
-])
-```
+**How It Works**:
+1. Editor adds block in Wagtail admin
+2. Block renders server-side template with `[data-island]` marker
+3. Vite detects marker and hydrates React component
+4. Component fetches live data from API v2
 
 ---
 
-### 4. appc_redirect App
+### 4. frontend/ (Islands Architecture)
 
-A minimal app providing redirect functionality for APPC (Association of Professional Political Consultants) register links.
+**Purpose**: Selective React hydration for interactive components.
 
-#### Directory Structure
-
+**Directory Structure**:
 ```
-appc_redirect/
-├── __init__.py
-├── migrations/
-└── urls.py               # Single redirect route
+frontend/
+├── islands/                # Top-level interactive components
+│   ├── StatsGrid.tsx       # ✅ Homepage metrics
+│   ├── PartyBreakdown.tsx  # ✅ Party donation grid
+│   ├── TopDonorsLeaderboard.tsx # ✅ Paginated leaderboard
+│   ├── FilterPanel.tsx     # ✅ Filter controls
+│   └── ConcentrationChart.tsx # ⏳ Scaffolded (not implemented)
+├── components/             # Reusable primitives
+│   ├── StatCard.tsx        # ✅ Metric display card
+│   ├── PartyCard.tsx       # ✅ Party with color accent
+│   └── ActorCard.tsx       # ✅ Person/org card
+├── hooks/                  # Custom React hooks
+│   ├── useTopDonors.ts     # ✅ TanStack Query hook
+│   └── useHomepageStats.ts # ✅ TanStack Query hook
+├── store/                  # Zustand state management
+│   └── filterStore.ts      # ✅ URL-synchronized filters
+├── types/                  # TypeScript definitions
+│   ├── actor.ts
+│   └── filters.ts
+├── styles/                 # Global SCSS + variables
+├── islands.tsx             # ✅ Island loader/registry
+├── main.tsx                # Vite entry point
+├── package.json            # NPM dependencies
+├── vite.config.ts          # Vite configuration
+└── tsconfig.json           # TypeScript configuration
 ```
 
-#### Purpose
+**Island Lifecycle**:
+1. **Server Render**: Django template outputs HTML with `<div data-island="Name">`
+2. **Island Detection**: `islands.tsx` runs on `DOMContentLoaded`
+3. **Lazy Load**: Dynamic import (`() => import('./islands/Name')`)
+4. **Hydration**: `createRoot(el).render(<Component />)`
+5. **Data Fetch**: Island uses `useQuery()` to call API v2
+6. **State Sync**: `useFilterStore()` reads/writes URL parameters
 
-The APPC register URLs are dynamic and require POST requests. This app provides a stable URL that can be used as a source reference in the database, which then redirects users to the appropriate APPC profile page.
+**Why This Works**:
+- SEO-friendly (server-rendered HTML)
+- Fast initial load (minimal JavaScript)
+- Progressive enhancement (works without JS)
+- Shareable URLs (filter state in URL)
+- No client-side routing needed
 
 ---
 
@@ -318,288 +439,278 @@ The APPC register URLs are dynamic and require POST requests. This app provides 
 ### Data Import Pipeline
 
 ```
-+-------------------+
-| External Sources  |
-| (APIs, CSV, HTML) |
-+--------+----------+
-         |
-         | 1. Fetch (HTTP requests with caching)
-         v
-+-------------------+
-| Local Cache       |
-| (data/ directory) |
-+--------+----------+
-         |
-         | 2. Parse (JSON, CSV, BeautifulSoup)
-         v
-+-------------------+
-| Python Objects    |
-| (dicts, lists)    |
-+--------+----------+
-         |
-         | 3. Transform (normalize, deduplicate)
-         v
-+-------------------+
-| Django Models     |
-| (ORM operations)  |
-+--------+----------+
-         |
-         | 4. Persist (get_or_create, update)
-         v
-+-------------------+
-| PostgreSQL        |
-| Database          |
-+-------------------+
+External API (e.g., ParlParse JSON)
+          │
+          ▼
+┌───────────────────┐
+│  fetch_json()     │ ← helpers.py caches to data/ directory
+│  (with caching)   │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  Parse JSON       │ ← Extract fields, normalize names
+│  Transform data   │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  get_or_create()  │ ← Deduplicate by external identifiers
+│  Django ORM       │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  PostgreSQL       │
+│  Database         │
+└───────────────────┘
 ```
 
-### Request/Response Flow
+**Key Features**:
+- **File-based caching**: `data/` directory stores fetched files
+- **Rate limiting**: 0.5s delay between requests
+- **Deduplication**: Uses `get_or_create()` with external IDs
+- **Canonical resolution**: `canonical_person` / `canonical_organization` fields
+
+### API Request Flow (Island → API → Database)
 
 ```
-+-------------+     +---------------+     +------------------+
-|   Browser   | --> | Django URLs   | --> | View/ViewSet     |
-+-------------+     +---------------+     +--------+---------+
-                                                   |
-                    +------------------------------+
-                    |
-                    v
-+------------------+     +------------------+     +------------------+
-| Model Manager    | --> | QuerySet         | --> | Database         |
-+------------------+     +------------------+     +------------------+
-                                                          |
-                    +-------------------------------------+
-                    |
-                    v
-+------------------+     +------------------+     +------------------+
-| Model Instances  | --> | Serializer/      | --> | HTTP Response    |
-|                  |     | Template         |     | (JSON/HTML)      |
-+------------------+     +------------------+     +------------------+
+React Island (Browser)
+          │
+          ▼
+┌───────────────────┐
+│  useQuery()       │ ← TanStack Query with 5min cache
+│  fetch(API v2)    │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  DRF ViewSet      │ ← django-filter applies query params
+│  (api/v2/views)   │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  ORM Aggregation  │ ← Sum(), Count(), annotate()
+│  .values()        │
+│  .annotate()      │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  PostgreSQL       │
+│  (GROUP BY query) │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  DRF Serializer   │ ← Transform to JSON
+│  (TopDonorSer...)  │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│  JSON Response    │ ← HTTP 200 with data
+└─────────┬─────────┘
+          │
+          ▼
+React Island (Browser)
+  → Renders UI with data
 ```
 
-### Caching Strategy
+### URL State Flow (Filter Changes)
 
-The helpers module (`datafetch/helpers.py`) implements a simple file-based caching strategy for external data:
-
-```python
-def fetch_text(url, filename, method="get", path=None, refresh=False, ...):
-    """
-    1. Check if file exists locally
-    2. If exists and refresh=False, return cached content
-    3. If not exists or refresh=True, fetch from URL
-    4. Save to local cache with 0.5s rate limiting
-    5. Return content
-    """
 ```
+User Changes Filter (FilterPanel)
+          │
+          ▼
+┌───────────────────┐
+│  setFilter({...}) │ ← Zustand store action
+│  (filterStore.ts) │
+└─────────┬─────────┘
+          │
+          ├─────────────────────┐
+          │                     │
+          ▼                     ▼
+┌───────────────────┐   ┌──────────────────┐
+│  Update URL       │   │  Update store    │
+│  pushState()      │   │  state           │
+└─────────┬─────────┘   └────────┬─────────┘
+          │                      │
+          └──────────┬───────────┘
+                     │
+                     ▼
+          ┌─────────────────────┐
+          │  All islands using  │
+          │  useFilterStore()   │
+          │  auto-refetch       │
+          └─────────┬───────────┘
+                    │
+                    ▼
+          ┌─────────────────────┐
+          │  New API calls with │
+          │  updated params     │
+          └─────────────────────┘
+```
+
+**Benefits**:
+- Shareable URLs (copy/paste link with filters)
+- Browser back/forward navigation works
+- Multiple islands synchronized automatically
+- No custom event system needed
 
 ---
 
-## Data Model Architecture
+## Frontend Architecture (Islands)
 
-### Popolo Standard
+### Islands Architecture Philosophy
 
-The data model is based on the [Popolo Project](http://www.popoloproject.com/) open government data specification. This provides:
+**"Progressive Enhancement with Selective Interactivity"**
 
-- **Interoperability**: Common vocabulary with other civic tech projects
-- **Completeness**: Rich model for political data
-- **Flexibility**: Support for partial dates, multiple identifiers, generic relations
+- **Server-rendered by default**: Django templates render full HTML
+- **Islands hydrate selectively**: React components load only where needed
+- **URL-driven state**: Filter state lives in URL parameters
+- **No client-side routing**: Django handles all navigation
 
-### Model Hierarchy
+### Island Registry (`frontend/islands.tsx`)
 
-```
-                          +-------------------+
-                          |  PolymorphicModel |
-                          |  (django-polymorphic)
-                          +--------+----------+
-                                   |
-                                   v
-+-------------+           +--------+----------+           +-------------+
-| Dateframeable|--------->|       Actor       |<---------| Timestampable|
-| (abstract)  |           |   (polymorphic)   |          | (abstract)   |
-+-------------+           +--------+----------+           +-------------+
-                                   |
-                    +--------------+--------------+
-                    |                             |
-                    v                             v
-            +-------+-------+             +-------+-------+
-            |    Person     |             | Organization  |
-            +---------------+             +---------------+
-```
+```typescript
+const islands = {
+  'StatsGrid': () => import('./islands/StatsGrid'),
+  'PartyBreakdown': () => import('./islands/PartyBreakdown'),
+  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
+  'FilterPanel': () => import('./islands/FilterPanel'),
+  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
+};
 
-### Core Models
-
-#### Actor (Base Class)
-
-```python
-class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
-    name = CharField(max_length=512)
-    image = URLField(blank=True, null=True)
-
-    # Generic Relations
-    other_names = GenericRelation('OtherName')
-    identifiers = GenericRelation('Identifier')
-    contact_details = GenericRelation('ContactDetail')
-    links = GenericRelation('Link')
-    sources = GenericRelation('Source')
-    notes = GenericRelation('Note')
+// Detect and hydrate all islands
+document.addEventListener('DOMContentLoaded', async () => {
+  const islandElements = document.querySelectorAll('[data-island]');
+  for (const el of islandElements) {
+    const islandName = el.getAttribute('data-island');
+    const { default: Component } = await islands[islandName]();
+    const root = createRoot(el);
+    root.render(<Component {...el.dataset} />);
+  }
+});
 ```
 
-#### Person
+### State Management (Zustand)
 
-```python
-class Person(Actor):
-    family_name = CharField(max_length=128, blank=True)
-    given_name = CharField(max_length=128, blank=True)
-    honorific_prefix = CharField(max_length=128, blank=True)
-    honorific_suffix = CharField(max_length=128, blank=True)
-    email = EmailField(blank=True, null=True)
-    gender = CharField(max_length=128, blank=True)
-    birth_date = CharField(max_length=10, blank=True)
-    death_date = CharField(max_length=10, blank=True)
-    summary = CharField(max_length=1024, blank=True)
-    biography = TextField(blank=True)
+```typescript
+// frontend/store/filterStore.ts
+interface FilterState {
+  dateFrom?: string;    // YYYY or YYYY-MM or YYYY-MM-DD
+  dateTo?: string;
+  minValue?: number;
+  donorType?: 'person' | 'organization' | 'trade-union' | 'company';
+  page: number;
+}
+
+const useFilterStore = create((set) => ({
+  ...DEFAULT_STATE,
+
+  setFilter: (updates) => {
+    // Update URL parameters
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) params.set(key, String(value));
+      else params.delete(key);
+    });
+    window.history.pushState({}, '', `?${params}`);
+
+    // Update store
+    set(updates);
+  },
+
+  loadFromUrl: () => {
+    const params = new URLSearchParams(window.location.search);
+    set({
+      dateFrom: params.get('date_from') || undefined,
+      dateTo: params.get('date_to') || undefined,
+      minValue: params.get('value_min') ? Number(params.get('value_min')) : undefined,
+      donorType: params.get('donor_type') as any || undefined,
+      page: Number(params.get('page')) || 1,
+    });
+  },
+}));
+
+// Initialize from URL on page load
+useFilterStore.getState().loadFromUrl();
+
+// Handle browser back/forward
+window.addEventListener('popstate', () => {
+  useFilterStore.getState().loadFromUrl();
+});
 ```
 
-#### Organization
+### Data Fetching Pattern (TanStack Query)
 
-```python
-class Organization(Actor):
-    summary = CharField(max_length=1024, blank=True)
-    description = TextField(blank=True)
-    classification = CharField(max_length=512, blank=True)
-    parent = ForeignKey('Organization', blank=True, null=True)
-    area = ForeignKey('Area', blank=True, null=True)
-    founding_date = CharField(max_length=10, blank=True)
-    dissolution_date = CharField(max_length=10, blank=True)
+```typescript
+// frontend/hooks/useTopDonors.ts
+function useTopDonors(limit = 20) {
+  const { dateFrom, dateTo, minValue, donorType, page } = useFilterStore();
+
+  const queryParams = new URLSearchParams();
+  if (dateFrom) queryParams.set('received_after', dateFrom);
+  if (dateTo) queryParams.set('received_before', dateTo);
+  if (minValue) queryParams.set('value_min', String(minValue));
+  if (donorType) queryParams.set('donor_type', donorType);
+  queryParams.set('limit', String(limit));
+  queryParams.set('offset', String((page - 1) * limit));
+
+  return useQuery({
+    queryKey: ['top-donors', queryParams.toString()],
+    queryFn: async () => {
+      const response = await fetch(`/api/v2/aggregates/top-donors/?${queryParams}`);
+      if (!response.ok) throw new Error('Failed to fetch');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
 ```
 
-### Relationship Models
+**Why TanStack Query?**
+- Automatic caching (5min stale time)
+- Loading/error states built-in
+- Automatic refetching when query key changes
+- Devtools for debugging
 
-```
-+---------------+          +---------------+          +---------------+
-|    Person     |          |  Membership   |          | Organization  |
-|               |<-------->|               |<-------->|               |
-+---------------+          +---------------+          +---------------+
-       ^                          |                          ^
-       |                          v                          |
-       |                   +---------------+                 |
-       |                   |     Post      |                 |
-       |                   +---------------+                 |
-       |                                                     |
-       |    +---------------+        +---------------+       |
-       +--->|   Donation    |<------>|               |<------+
-       |    +---------------+        +---------------+       |
-       |                                                     |
-       |    +---------------+        +---------------+       |
-       +--->|  Consultancy  |<------>|               |<------+
-            +---------------+        +---------------+
-```
+### Styling Strategy
 
-### Supporting Models
+**CSS Modules** for scoped component styles:
+```scss
+// frontend/islands/StatsGrid.module.scss
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `Post` | Position independent of holder | label, role, organization |
-| `Membership` | Person-Organization relationship | person, organization, post, role, dates |
-| `Donation` | Financial contribution | donor, recipient, value, type, dates |
-| `Consultancy` | Lobbying relationship | client, agency, dates |
-| `Identifier` | External IDs (EC ref, Companies House) | identifier, scheme |
-| `OtherName` | Aliases and former names | name, note |
-| `ContactDetail` | Contact information | type, value, label |
-| `Link` | Related URLs | url, note |
-| `Source` | Source documentation URLs | url, note |
-| `Area` | Geographic regions | name, identifier, geom |
-
-### Abstract Behaviors
-
-#### Timestampable
-
-```python
-class Timestampable(models.Model):
-    created_at = AutoCreatedField('creation time')
-    updated_at = AutoLastModifiedField('last modification time')
-
-    class Meta:
-        abstract = True
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
 ```
 
-#### Dateframeable
-
-```python
-class Dateframeable(models.Model):
-    start_date = CharField(max_length=10, blank=True, null=True)  # YYYY-MM-DD or YYYY-MM or YYYY
-    end_date = CharField(max_length=10, blank=True, null=True)
-
-    class Meta:
-        abstract = True
+**Bootstrap 5** for layout/grid:
+```typescript
+<div className="container">
+  <div className="row g-3">
+    <div className="col-md-3">
+      <FilterPanel />
+    </div>
+    <div className="col-md-9">
+      <TopDonorsLeaderboard />
+    </div>
+  </div>
+</div>
 ```
 
-### Custom QuerySets
-
-The `DateframeableQuerySet` provides temporal filtering:
-
-```python
-class DateframeableQuerySet(QuerySet):
-    def past(self, moment=None)    # Items that have ended
-    def future(self, moment=None)  # Items that haven't started
-    def current(self, moment=None) # Items active at given moment
-```
-
----
-
-## External Dependencies
-
-### Python Packages
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| Django | >=6.0,<6.1 | Web framework (Django 6.0.1) |
-| wagtail | >=7.2,<7.3 | Content management system (Wagtail 7.2.x) |
-| djangorestframework | >=3.15 | REST API framework |
-| django-polymorphic | >=4.2 | Polymorphic model inheritance |
-| django-model-utils | 2.3.1 | Model utilities (Choices, managers) |
-| beautifulsoup4 | 4.12.0 | HTML parsing for web scraping |
-| requests | 2.31.0 | HTTP client for API calls |
-| psycopg2-binary | 2.9.9 | PostgreSQL adapter |
-| python-decouple | 3.8 | Environment variable configuration |
-| PyYAML | 6.0.1 | YAML parsing (legacy configuration support) |
-| gunicorn | latest | WSGI HTTP server |
-| django-modelcluster | >=6.0 | Wagtail model clusters |
-| django-treebeard | >=4.0,<5.0 | Tree structures for Wagtail |
-| ~~django-bower~~ | ~~removed~~ | ~~Bower integration~~ (incompatible with Django 2.0+) |
-| ~~bootstrap-admin~~ | ~~removed~~ | ~~Admin theme~~ (incompatible with Django 2.0+) |
-
-**Note**: Versions updated for Django 6.0.1 / Wagtail 7.2.x / Python 3.12 compatibility. See `requirements.txt` for full list.
-
-### Frontend Libraries (via Bower)
-
-| Library | Version | Purpose |
-|---------|---------|---------|
-| jQuery | 2.1.1 | DOM manipulation |
-| Bootstrap | latest | CSS framework |
-| bootstrap-material-design | latest | Material design theme |
-| bootstrap-table | latest | Data tables |
-| moment | latest | Date/time handling |
-
-### External Data Sources
-
-| Source | URL | Status | Data Type |
-|--------|-----|--------|-----------|
-| ParlParse | raw.githubusercontent.com/mysociety/parlparse | ✅ Working | JSON (Popolo) |
-| Ministers Data | raw.githubusercontent.com/mysociety/parlparse | ✅ Working | JSON |
-| Electoral Commission | search.electoralcommission.org.uk | ⛔ Broken | CSV (API defunct) |
-| PRCA Register | prca.org.uk/register/ | ⛔ Needs Rewrite | HTML (APPC merged) |
-| EveryPolitician | cdn.rawgit.com/everypolitician | ⏸️ Likely Broken | JSON (Popolo) |
-| TheyWorkForYou API | www.theyworkforyou.com/api | ⏸️ Untested | JSON |
-| data.parliament.uk | data.parliament.uk | ⏸️ Untested | XML |
-| Open Corporates | api.opencorporates.com | ⏸️ Untested | JSON |
-
-**Note**: URLs updated from `cdn.rawgit.com` to `raw.githubusercontent.com` for ParlParse. See `docs/data-import-testing.md`.
-
-### External Services
-
-| Service | Purpose | Configuration |
-|---------|---------|---------------|
-| Elasticsearch | Full-text search | Local installation required |
-| TheyWorkForYou API | Politician data | API key in `conf/general.yml` |
+**Typography** (from `docs/FRONTEND_DESIGN.md`):
+- **Headings**: Playfair Display (editorial serif)
+- **Body/UI**: Inter (modern sans-serif)
+- **Currency**: Tabular nums, letter-spacing -0.01em
 
 ---
 
@@ -607,482 +718,512 @@ class DateframeableQuerySet(QuerySet):
 
 ### Design Principles
 
-1. **Read-Only**: All endpoints are read-only (GET requests only)
-2. **Hypermedia**: Responses include URLs for related resources
-3. **Pagination**: Results paginated with limit/offset
-4. **Filtering**: Query parameters for search and filtering
-5. **Nested Resources**: Actor-specific endpoints for relationships
+1. **Read-Only**: All endpoints are GET only (no mutations)
+2. **Filter-Driven**: Consistent query parameters across endpoints
+3. **Paginated**: Large datasets use limit/offset pagination
+4. **Cached**: Future Redis caching for aggregate endpoints
+5. **Versioned**: `/api/v2/` namespace (v1 deprecated)
 
-### Authentication & Permissions
+### Aggregate Endpoints Design
+
+**Pattern**: Optimized for dashboard widgets, not general-purpose queries.
 
 ```python
-REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
-    ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 10,
-}
+# api/v2/views.py
+class TopDonorsView(generics.ListAPIView):
+    serializer_class = TopDonorSerializer
+    pagination_class = AggregatePagination
+
+    def get_queryset(self):
+        # 1. Start with donations
+        qs = Donation.objects.exclude(donor__isnull=True)
+
+        # 2. Apply filters from query params
+        filterset = DonationFilterSet(self.request.query_params, queryset=qs)
+        qs = filterset.qs
+
+        # 3. Aggregate by donor
+        aggregated = qs.values('donor_id', 'donor__name').annotate(
+            total_donated=Sum('value'),
+            donation_count=Count('id')
+        ).order_by('-total_donated')
+
+        return aggregated
 ```
 
-- Anonymous users: Read-only access
-- Authenticated users: Model-level permissions apply
+**Performance Optimization**:
+- Only fetch Actor objects for paginated subset (not all 21k donors)
+- Reduces query time from ~3s to <0.5s
 
-### API Endpoint Details
+### Actor Endpoints Design
 
-#### GET /api/actors
+**Pattern**: Relational queries with prefetching.
 
-List and search actors (persons and organizations).
+```python
+# api/v2/views.py
+@action(detail=True, methods=['get'])
+def donations_from(self, request, pk=None):
+    actor = self.get_object()
 
-**Query Parameters:**
-- `search`: Filter by name (case-insensitive contains)
+    # Use canonical field if available
+    donations = Donation.objects.filter(
+        Q(recipient_id=actor.id) | Q(canonical_recipient_id=actor.id)
+    ).select_related('donor').prefetch_related(
+        'donor__identifiers',
+        'sources'
+    )
 
-**Response:**
-```json
-{
-  "count": 1234,
-  "next": "/api/actors?offset=10",
-  "previous": null,
-  "results": [
-    {"id": 1, "name": "Example Actor", "url": "http://..."}
-  ]
-}
+    # Apply filters
+    filterset = DonationFilterSet(request.query_params, queryset=donations)
+
+    # Paginate and serialize
+    page = self.paginate_queryset(filterset.qs)
+    serializer = DonationSerializer(page, many=True)
+    return self.get_paginated_response(serializer.data)
 ```
 
-#### GET /api/politicians
+---
 
-List politicians with advanced filtering.
+## Data Model Architecture
 
-**Query Parameters:**
-- `search`: Filter by name
-- `role`: Filter by membership role (e.g., "Member of Parliament")
-- `date`: Filter memberships active on specific date (YYYY-MM-DD)
+### Popolo Specification
 
-#### GET /api/actors/{pk}/donations-from
+Based on [Popolo Project](http://www.popoloproject.com/) open government data standard.
 
-List donations received by an actor.
+**Key Concepts**:
+- **Interoperability**: Common vocabulary with other civic tech projects
+- **Flexibility**: Supports partial dates, multiple identifiers, generic relations
+- **Completeness**: Rich model for political data
 
-**Query Parameters:**
-- `search`: Filter by donor name
-- `sort`: Field to sort by
-- `order`: Sort direction (`asc` or `desc`)
+### Model Hierarchy
+
+```
+┌──────────────────────────────────────┐
+│  PolymorphicModel (django-polymorphic) │
+│  • Single-table inheritance           │
+│  • Automatic type casting             │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│  Actor (Polymorphic Base)            │
+│  • name, image, start_date, end_date │
+│  • Generic relations (identifiers,   │
+│    other_names, links, sources)      │
+└──────┬───────────────────────────────┘
+       │
+       ├─────────────────┬──────────────┐
+       │                 │              │
+       ▼                 ▼              ▼
+┌─────────────┐  ┌──────────────┐  ┌──────────────┐
+│   Person    │  │ Organization │  │ (Future      │
+│             │  │              │  │  types)      │
+│ • given_name│  │ • summary    │  └──────────────┘
+│ • family_name│ │ • description│
+│ • email     │  │ • classification│
+│ • gender    │  │ • parent     │
+│ • birth_date│  │ • founding_date│
+└─────────────┘  └──────────────┘
+```
+
+### Relationship Models
+
+```
+Membership
+├── person (FK → Person)
+├── organization (FK → Organization)
+├── post (FK → Post, optional)
+├── on_behalf_of (FK → Organization, optional)
+├── role (CharField: "Member of Parliament", "Minister", etc.)
+├── start_date (CharField: YYYY[-MM[-DD]])
+└── end_date (CharField: YYYY[-MM[-DD]])
+
+Donation
+├── donor (FK → Actor, can be Person or Organization)
+├── recipient (FK → Actor, can be Person or Organization)
+├── canonical_donor (FK → Actor, for entity resolution)
+├── canonical_recipient (FK → Actor, for entity resolution)
+├── value (DecimalField)
+├── donation_type (CharField)
+├── received_date (DateField)
+└── accepted_date (DateField)
+
+Consultancy
+├── client (FK → Organization)
+├── agency (FK → Organization)
+├── start_date (CharField: YYYY[-MM[-DD]])
+└── end_date (CharField: YYYY[-MM[-DD]])
+```
+
+### Abstract Behaviors
+
+```python
+class Timestampable(models.Model):
+    created_at = AutoCreatedField()
+    updated_at = AutoLastModifiedField()
+
+    class Meta:
+        abstract = True
+
+class Dateframeable(models.Model):
+    start_date = CharField(max_length=10, blank=True, null=True)
+    end_date = CharField(max_length=10, blank=True, null=True)
+
+    objects = DateframeableQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def current(self, moment=None):
+        """True if this object was active at the given moment."""
+        # Implementation handles YYYY, YYYY-MM, YYYY-MM-DD formats
+```
+
+### Generic Relations (Popolo Metadata)
+
+```python
+# All these can attach to any model
+Identifier (scheme + identifier)
+OtherName (name + note)
+ContactDetail (type + value + label)
+Link (url + note)
+Source (url + note)
+Note (note)
+```
+
+**Why Generic Relations?**
+- Avoids separate join tables for each model
+- Consistent interface across types
+- Follows Popolo specification
+
+**Trade-offs**:
+- Slightly slower queries than direct ForeignKey
+- Cannot use database foreign key constraints
+- ORM queries more complex
 
 ---
 
 ## Deployment Architecture
 
-### Docker-Based Development Environment (Current)
+### Current (Development Only)
 
-```
-                              +---------------------+
-                              |   Docker Compose    |
-                              +----------+----------+
-                                         |
-                +------------------------+------------------------+
-                |                        |                        |
-                v                        v                        v
-      +---------+---------+    +---------+---------+    +---------+---------+
-      |    PostgreSQL 15  |    |     Redis 7       |    |  Django Web App   |
-      |    (database)     |    |     (cache)       |    |   (Python 3.12)   |
-      +---------+---------+    +---------+---------+    +---------+---------+
-                |                        |                        |
-                +------------------------+------------------------+
-                                         |
-                                         v
-                              +----------+----------+
-                              | Elasticsearch 7.17  |
-                              |   (optional)        |
-                              +---------------------+
-```
+**Docker Compose** orchestration for local development:
 
-All services orchestrated via `docker-compose.yml` with health checks and persistent volumes.
+```yaml
+# docker-compose.yml
+services:
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_SYSTEM=postgresql
+      - UTI_DB_HOST=db
+    depends_on:
+      - db
+      - redis
 
-### Future Production Environment
+  vite:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules  # Anonymous volume
+    command: npm run dev
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
 
-```
-                                    +------------------+
-                                    |   Load Balancer  |
-                                    |    (Optional)    |
-                                    +--------+---------+
-                                             |
-                              +--------------+--------------+
-                              |                             |
-                              v                             v
-                    +---------+---------+         +---------+---------+
-                    |   Docker Container|         |   Docker Container|
-                    |   Gunicorn WSGI   |         |   Gunicorn WSGI   |
-                    +---------+---------+         +---------+---------+
-                              |                             |
-                              +--------------+--------------+
-                                             |
-                    +------------------------+------------------------+
-                    |                        |                        |
-                    v                        v                        v
-          +---------+---------+    +---------+---------+    +---------+---------+
-          |    PostgreSQL 15  |    |   Elasticsearch   |    |   Static Files    |
-          |    (database)     |    |    (search)       |    |   (nginx/CDN)     |
-          +-------------------+    +-------------------+    +-------------------+
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=undertheinfluence
+      - POSTGRES_USER=uti
+      - POSTGRES_PASSWORD=***
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
 ```
 
-### Configuration
+### Future (Production)
 
-Configuration is managed via environment variables (`.env` file with python-decouple):
+**Planned Architecture** (not yet implemented):
 
-```bash
-# .env file
-DEBUG=False
-SECRET_KEY='***'
-ALLOWED_HOSTS='undertheinfluence.org.uk,www.undertheinfluence.org.uk'
-BASE_URL='https://www.undertheinfluence.org.uk'
-
-# Database (Docker Compose auto-configures these in development)
-DATABASE_SYSTEM='postgresql'
-UTI_DB_NAME='undertheinfluence'
-UTI_DB_USER='uti'
-UTI_DB_PASS='***'
-UTI_DB_HOST='db'
-UTI_DB_PORT='5432'
-
-# Optional
-TWFY_API_KEY='***'
-SUPPORT_EMAIL='support@example.com'
+```
+Internet
+    │
+    ▼
+┌──────────────┐
+│  Nginx       │ ← SSL termination, static files
+│  (Reverse    │
+│   Proxy)     │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│  Gunicorn    │ ← WSGI server (Django app)
+│  (Workers)   │
+└──────┬───────┘
+       │
+       ├────────────────┬─────────────────┐
+       │                │                 │
+       ▼                ▼                 ▼
+┌────────────┐  ┌────────────┐  ┌─────────────┐
+│ PostgreSQL │  │   Redis    │  │ Static Files│
+│    15      │  │     7      │  │   (CDN?)    │
+└────────────┘  └────────────┘  └─────────────┘
 ```
 
-**Security Improvement**: Migrated from unsafe `yaml.load()` to python-decouple in Phase 1.
-
-### Security Settings
-
-```python
-# Production security headers
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_BROWSER_XSS_FILTER = True
-X_FRAME_OPTIONS = "SAMEORIGIN"
-CSRF_COOKIE_HTTPONLY = True
-```
-
-### Deployment Process
-
-**Development (Docker)**:
-```bash
-# Start all services
-docker compose up -d
-
-# Run migrations
-docker compose exec web python manage.py migrate
-
-# View logs
-docker compose logs -f web
-
-# Rebuild after changes
-docker compose build web && docker compose restart web
-```
-
-**Production** (managed via separate repository: `github.com/spudmind/uti-deploy`):
-
-1. Pull latest code from repository
-2. Build Docker image: `docker compose build`
-3. Run database migrations: `docker compose exec web python manage.py migrate`
-4. Collect static files: `docker compose exec web python manage.py collectstatic`
-5. Restart containers: `docker compose restart web`
-
-**Legacy (Non-Docker)**:
-1. Pull latest code
-2. Install dependencies: `pip install -r requirements.txt`
-3. Run migrations: `python manage.py migrate`
-4. Collect static: `python manage.py collectstatic`
-5. Restart Gunicorn workers
+**Production Requirements**:
+- Environment variables in `.env` file (not committed)
+- `DEBUG=False` in production
+- `ALLOWED_HOSTS` configured
+- Static files collected to `static/dist/`
+- Database migrations applied
+- SSL certificates configured
+- Monitoring/logging setup (future)
 
 ---
 
 ## Key Design Decisions
 
-### 1. Popolo Standard Adoption
+### 1. Islands Architecture (Not SPA)
 
-**Decision**: Use the Popolo open government data specification as the foundation for data models.
+**Decision**: Use server-rendered Django templates with selective React hydration.
 
 **Rationale**:
-- Interoperability with other civic tech projects (EveryPolitician, ParlParse)
-- Rich, well-documented schema for political data
-- Reduces data transformation overhead when importing from Popolo-compliant sources
-- Community-maintained standard with ongoing development
+- **SEO**: Search engines index server-rendered HTML
+- **Performance**: Fast initial load, minimal JavaScript
+- **Accessibility**: Works without JavaScript (progressive enhancement)
+- **Maintainability**: Natural Django integration, no client-side routing
 
 **Trade-offs**:
-- Some complexity for simpler use cases
-- Partial date handling adds string-based date fields
+- Not suitable for real-time collaboration features
+- Client-side routing would require additional complexity
+- State management more complex than pure SPA
 
-### 2. Polymorphic Models for Actors
+**Alternatives Considered**:
+- ❌ **Full SPA**: Poor SEO, slow initial load, requires client-side routing
+- ❌ **HTMX**: Insufficient for complex visualizations (network graphs)
+- ❌ **Alpine.js**: Too limited for stateful components
 
-**Decision**: Use django-polymorphic for the Actor base class with Person and Organization as subclasses.
+---
+
+### 2. Polymorphic Models (Not Separate Tables)
+
+**Decision**: Use django-polymorphic for Actor base class.
 
 **Rationale**:
-- Single table for querying all actors (for search, relationships)
-- Type-specific fields in subclasses
+- Single table for querying all actors (search, relationships)
+- Type-specific fields in subclasses (Person.given_name, Organization.parent)
+- Foreign keys can reference any actor type (Donation.donor)
 - Automatic downcasting to correct type
-- Foreign keys can reference any actor type
 
 **Trade-offs**:
 - Additional database joins for type resolution
-- More complex queries
+- More complex queries than separate tables
 - ContentType dependency
 
-### 3. Generic Relations for Metadata
+**Alternatives Considered**:
+- ❌ **Separate Person/Organization tables**: Cannot query all actors together
+- ❌ **Abstract base class**: Cannot use ForeignKey to Actor
 
-**Decision**: Use Django's ContentType framework for OtherName, Identifier, ContactDetail, Link, Source, and Note.
+---
 
-**Rationale**:
-- Avoids creating separate join tables for each model
-- Consistent interface across different parent types
-- Follows Popolo specification structure
-- Flexible for future model additions
+### 3. Partial Dates as Strings (Not DateField)
 
-**Trade-offs**:
-- Slightly slower queries than direct ForeignKey
-- More complex ORM queries
-- Generic foreign keys not supported by all database features
-
-### 4. String-Based Partial Dates
-
-**Decision**: Store dates as CharField with YYYY-MM-DD, YYYY-MM, or YYYY format instead of DateField.
+**Decision**: Store dates as `CharField` with YYYY/YYYY-MM/YYYY-MM-DD format.
 
 **Rationale**:
-- Supports partial dates (common in political data: "born 1945")
+- Supports incomplete dates (common in political data: "born 1945")
 - Matches Popolo specification
-- Lexicographic ordering works correctly
+- Lexicographic ordering works correctly ("2020" < "2020-06" < "2020-06-15")
 
 **Trade-offs**:
 - Cannot use database date functions directly
 - Requires custom validation (regex + strptime)
-- String comparison edge cases
+- Comparison edge cases (YYYY vs YYYY-MM)
 
-### 5. File-Based Import Caching
+**Alternatives Considered**:
+- ❌ **DateField with defaults**: Misleading (implies precision we don't have)
+- ❌ **Separate year/month/day fields**: More complex queries
 
-**Decision**: Cache imported data files locally in the `data/` directory.
+---
 
-**Rationale**:
-- Reduces load on external APIs
-- Enables offline development
-- Provides data backup
-- Supports incremental imports
+### 4. URL-Driven State (Not Client-Side Only)
 
-**Trade-offs**:
-- Manual cache invalidation
-- Disk space usage
-- Potential for stale data
-
-### 6. Wagtail for CMS
-
-**Decision**: Use Wagtail CMS for editorial content management.
+**Decision**: Store filter state in URL parameters, synchronized via Zustand.
 
 **Rationale**:
-- Django-native CMS
-- Flexible StreamField for structured content
-- Snippet system for reusable content blocks
-- Good admin UX for non-technical editors
+- **Shareable links**: Copy/paste URL with filters intact
+- **Browser navigation**: Back/forward buttons work
+- **Deep linking**: Direct access to filtered views
+- **Multiple islands**: Automatic synchronization
 
 **Trade-offs**:
-- Adds significant dependencies
-- Learning curve for custom development
-- Version compatibility considerations
+- URL can get long with many filters
+- Sensitive filters would need different approach
+- More complex than pure client-side state
 
-### 7. Separate Relationship Models
+**Alternatives Considered**:
+- ❌ **Client-side only**: Not shareable, breaks back button
+- ❌ **Custom events**: Race conditions, "event soup"
 
-**Decision**: Create explicit Donation and Consultancy models rather than generic Relationship.
+---
+
+### 5. Zustand (Not Redux/MobX)
+
+**Decision**: Use Zustand for lightweight state management.
 
 **Rationale**:
-- Domain-specific fields (value, donation_type for Donation)
-- Type-safe queries
-- Clear API semantics
-- Better admin experience
+- **Minimal boilerplate**: 1KB gzipped
+- **No provider**: Works without React context
+- **TypeScript support**: First-class types
+- **Prevents event soup**: Centralized state updates
 
 **Trade-offs**:
-- More models to maintain
-- Code duplication for common patterns
+- Smaller ecosystem than Redux
+- No time-travel debugging by default
+- Less middleware options
+
+**Alternatives Considered**:
+- ❌ **Redux**: Too much boilerplate for small app
+- ❌ **Custom events**: Race conditions, no centralized state
+
+---
+
+### 6. CSS Modules (Not Tailwind/Styled-Components)
+
+**Decision**: Use CSS Modules with SCSS for component styling.
+
+**Rationale**:
+- **Scoped styles**: Prevents conflicts between components
+- **Familiar syntax**: Standard CSS/SCSS
+- **Bootstrap compatibility**: Works alongside global styles
+- **SCSS preprocessing**: Variables, mixins, nesting
+
+**Trade-offs**:
+- More verbose than Tailwind utility classes
+- Requires naming conventions (BEM-like)
+
+**Alternatives Considered**:
+- ❌ **Tailwind**: Cluttered markup, harder to override Bootstrap
+- ❌ **Styled-Components**: Runtime cost, JSX clutter
+
+---
+
+### 7. Django Vite (Not Webpack/Parcel)
+
+**Decision**: Use Vite via django-vite for asset bundling.
+
+**Rationale**:
+- **Fast HMR**: Instant hot module replacement
+- **Modern ES modules**: No bundling in dev mode
+- **TypeScript support**: Built-in, no config
+- **Django integration**: django-vite handles asset loading
+
+**Trade-offs**:
+- Newer tool (less mature than Webpack)
+- Browser support (requires modern browsers)
+
+**Alternatives Considered**:
+- ❌ **Webpack**: Slow HMR, complex configuration
+- ❌ **Parcel**: Less ecosystem, fewer plugins
 
 ---
 
 ## Future Considerations
 
-### Architectural Improvements
+### Performance Optimization (High Priority)
+- **Materialized views**: For expensive aggregate queries
+- **Redis caching**: API endpoint caching (15min TTL)
+- **Database indexes**: Based on query profiling
+- **Connection pooling**: pgbouncer for PostgreSQL
 
-#### 1. Database Optimization
+### Feature Additions (Medium Priority)
+- **Politicians directory page**: `/politicians/` with filtering
+- **Network visualization**: D3.js force-directed graphs
+- **Enhanced profiles**: Tabbed interface, timeline, network view
+- **Data export**: CSV download for tables
 
-**Current State**: Standard Django ORM usage without significant optimization.
+### Testing (Low Priority - Future)
+- **Frontend tests**: Vitest + React Testing Library
+- **Backend tests**: pytest-django for API
+- **Integration tests**: End-to-end testing
+- **Accessibility tests**: WCAG 2.1 AA compliance
 
-**Recommendations**:
-- Add database indexes on frequently queried fields (name, identifier)
-- Consider denormalization for search queries
-- Implement query result caching (Redis/Memcached)
-- Review N+1 query patterns in views
-
-#### 2. Search Architecture
-
-**Current State**: Basic Django QuerySet filtering with LIKE queries.
-
-**Recommendations**:
-- Full Elasticsearch integration for text search
-- Implement faceted search (by type, date range, classification)
-- Add autocomplete functionality
-- Consider Haystack abstraction layer
-
-#### 3. API Versioning
-
-**Current State**: No explicit API versioning.
-
-**Recommendations**:
-- Implement URL-based versioning (`/api/v1/`, `/api/v2/`)
-- Add API deprecation policy
-- Document breaking changes
-- Consider GraphQL for flexible queries
-
-#### 4. Async Data Import
-
-**Current State**: Synchronous management commands that block during execution.
-
-**Recommendations**:
-- Implement Celery for background task processing
-- Add progress reporting and logging
-- Enable partial/incremental imports
-- Implement import scheduling
-
-#### 5. Data Validation Pipeline
-
-**Current State**: Basic validation during import.
-
-**Recommendations**:
-- Add data quality scoring
-- Implement entity resolution/deduplication
-- Create validation reports
-- Add manual review workflow
-
-### Feature Enhancements
-
-#### 1. Data Completeness
-
-- Complete import implementations for partial importers
-- Add new data sources (Wikidata, official government APIs)
-- Implement historical data tracking
-
-#### 2. User Features
-
-- User accounts and saved searches
-- Email alerts for tracked entities
-- Data export functionality (CSV, JSON)
-- Embedded widgets for third-party sites
-
-#### 3. Visualization
-
-- Network graphs of relationships
-- Timeline views of memberships/donations
-- Geographic mapping of constituencies
-- Aggregated statistics dashboards
-
-### Technical Debt
-
-**Addressed in Phase 1-2**:
-1. ✅ **Docker Infrastructure**: Fully Dockerized development environment
-2. ✅ **Configuration Security**: Migrated from unsafe YAML to environment variables
-3. ✅ **API Security**: Added sort field whitelist
-4. ✅ **Django 6.0.1 Upgrade**: Migrated from Django 1.8 → 1.11 → 2.2 → 3.2 → 4.2 → 5.1 → 6.0.1
-5. ✅ **Wagtail 7.2.x Upgrade**: Migrated from Wagtail 1.1 → 2.0 → ... → 7.2.x
-6. ✅ **Python 3.12 Upgrade**: Migrated from Python 3.7 → 3.12
-7. ✅ **django-polymorphic 4.2.x**: Updated for Django 6.0+ compatibility
-
-**Remaining**:
-1. **Frontend Modernization**: Replace django-bower with modern tools (Phase 2.5)
-2. **Test Coverage**: Implement comprehensive test suite (Phase 3)
-3. **Documentation**: API documentation (OpenAPI/Swagger) (Phase 3)
-4. **CI/CD**: Automated testing and deployment pipeline (Phase 3)
-5. **Data Import Fixes**: Rewrite broken importers (import_ec, import_appc) (Phase 3)
-6. **Code Modernization**: Clean up deprecated patterns, leverage modern Django features (Phase 3)
-
-See `docs/MODERNIZATION_PROGRESS.md` for detailed roadmap.
-
-### Scalability Considerations
-
-1. **Read Replicas**: Database read replicas for API traffic
-2. **CDN**: Static asset delivery via CDN
-3. **Rate Limiting**: API rate limiting for external consumers
-4. **Horizontal Scaling**: Stateless application design for container deployment
+### Monitoring (Low Priority - Future)
+- **Application monitoring**: Sentry for error tracking
+- **Performance monitoring**: APM tool
+- **Logging**: Structured logging to ELK stack
+- **Metrics**: Prometheus metrics export
 
 ---
 
-## Appendix A: Model Schema Reference
+## Appendix: Configuration Reference
 
-### Entity-Relationship Diagram
+### Environment Variables
 
-```
-+------------------+       +------------------+       +------------------+
-|      Actor       |       |    Membership    |       |      Post        |
-+------------------+       +------------------+       +------------------+
-| PK id            |<---+  | PK id            |   +-->| PK id            |
-| name             |    |  | FK person_id     |---|   | label            |
-| image            |    +--| FK organization_id|   |  | role             |
-| start_date       |    |  | FK on_behalf_of_id|---|  | FK organization_id|-->+
-| end_date         |    |  | FK post_id       |---+  | FK area_id       |   |
-| created_at       |    |  | FK area_id       |      | start_date       |   |
-| updated_at       |    |  | label            |      | end_date         |   |
-+------------------+    |  | role             |      +------------------+   |
-        ^               |  | start_date       |                             |
-        |               |  | end_date         |      +------------------+   |
-+-------+--------+      |  +------------------+      |   Organization   |   |
-|     Person     |      |                           +------------------+   |
-+----------------+      +-------------------------->| (inherits Actor) |<--+
-| family_name    |      |                           | summary          |
-| given_name     |      |                           | description      |
-| email          |      |                           | classification   |
-| gender         |      |                           | FK parent_id     |--+
-| birth_date     |      |                           | FK area_id       |  |
-| death_date     |      |                           | founding_date    |  |
-| summary        |      |                           | dissolution_date |  |
-| biography      |      |                           +------------------+  |
-+----------------+      |                                    ^            |
-                        +------------------------------------+------------+
-                        |
-+------------------+    |    +------------------+
-|    Donation      |    |    |   Consultancy    |
-+------------------+    |    +------------------+
-| PK id            |    |    | PK id            |
-| FK donor_id      |----+    | FK client_id     |----+
-| FK recipient_id  |----+    | FK agency_id     |----+
-| value            |         | label            |
-| donation_type    |         | source           |
-| nature_of_donation|        | start_date       |
-| received_date    |         | end_date         |
-| accepted_date    |         +------------------+
-| reported_date    |
-| source           |
-+------------------+
+**Required**:
+```bash
+DEBUG=True                          # Development mode
+DATABASE_SYSTEM=postgresql          # Database backend
+SECRET_KEY=***                      # Django secret key (change in production!)
 ```
 
----
+**Database (if PostgreSQL)**:
+```bash
+UTI_DB_NAME=undertheinfluence       # Database name
+UTI_DB_USER=uti                     # Database user
+UTI_DB_PASS=***                     # Database password
+UTI_DB_HOST=db                      # Host (service name in Docker)
+UTI_DB_PORT=5432                    # Port
+```
 
-## Appendix B: Configuration Reference
+**Optional**:
+```bash
+ALLOWED_HOSTS=localhost,127.0.0.1   # Permitted hostnames
+BASE_URL=http://localhost:8000      # Public base URL
+TWFY_API_KEY=***                    # TheyWorkForYou API key (future)
+```
 
-### Environment Variables (via .env file)
-
-**Migration Note**: Configuration migrated from `conf/general.yml` (unsafe YAML) to `.env` file (python-decouple) in Phase 1.
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DEBUG` | Yes | True | Django debug mode ('True' or 'False') |
-| `SECRET_KEY` | Yes | - | Django secret key (change in production!) |
-| `DATABASE_SYSTEM` | Yes | 'sqlite' | 'postgresql' or 'sqlite' |
-| `UTI_DB_USER` | If PostgreSQL | 'uti' | Database username |
-| `UTI_DB_NAME` | If PostgreSQL | 'undertheinfluence' | Database name |
-| `UTI_DB_PASS` | If PostgreSQL | - | Database password |
-| `UTI_DB_HOST` | If PostgreSQL | 'localhost' | Database host ('db' in Docker) |
-| `UTI_DB_PORT` | If PostgreSQL | '5432' | Database port |
-| `ALLOWED_HOSTS` | Yes | 'localhost,127.0.0.1' | Comma-separated permitted hostnames |
-| `BASE_URL` | Yes | 'http://localhost:8000' | Public base URL |
-| `TWFY_API_KEY` | Optional | - | TheyWorkForYou API key |
-| `SUPPORT_EMAIL` | Optional | - | Support contact email |
-| `SERVER_EMAIL` | Optional | - | Error email from address |
-| `DEFAULT_FROM_EMAIL` | Optional | - | General email from address |
-
-**Docker**: In Docker Compose, database settings are automatically configured in the service environment.
+**Docker Compose Auto-Configured**:
+- Database connection settings
+- Redis connection settings
+- Vite dev server host
 
 ---
 
-*Document Version: 3.0*
-*Last Updated: January 13, 2026*
-*Updated for Django 6.0.1, Wagtail 7.2.x, Python 3.12, and Phase 2 completion*
+## References
+
+**Project Documentation**:
+- `docs/CURRENT_STATE.md` - Feature inventory and status
+- `docs/data-models.md` - Detailed data model reference
+- `docs/FRONTEND_DESIGN.md` - UI/UX design system
+- `docs/FRONTEND_IMPLEMENTATION.md` - Detailed implementation plan
+- `CLAUDE.md` - Instructions for Claude Code
+
+**External Resources**:
+- [Popolo Specification](http://www.popoloproject.com/)
+- [Islands Architecture](https://jasonformat.com/islands-architecture/)
+- [Django 6.0 Documentation](https://docs.djangoproject.com/en/6.0/)
+- [Vite Guide](https://vitejs.dev/guide/)
+- [TanStack Query](https://tanstack.com/query/latest)
+
+---
+
+**Document Maintenance**: Update this document when:
+- Architecture decisions are made
+- New components/apps are added
+- Technology stack changes
+- Deployment architecture changes
+
+**Last Major Update**: January 19, 2026 (v4.0 - Islands Architecture Edition)

@@ -1,0 +1,35 @@
+/**
+ * StatsGrid component styles
+ * Responsive grid layout for StatCards
+ */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin: 2rem 0;
+
+  // Tablet: 2 columns
+  @media (max-width: 992px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  // Mobile: 1 column
+  @media (max-width: 576px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--bs-danger);
+  background: var(--bs-light);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+
+  p {
+    margin: 0;
+  }
+}

@@ -1771,4 +1771,141 @@ This plan is based on the following strategic documents:
 
 **Architectural Review**: Plan updated 2026-01-14 based on critical feedback addressing state management, partial dates, CSS scoping, and Docker integration.
 
-**Next Steps**: Begin Phase 1 (Build System Foundation) when ready to proceed with implementation.
+---
+
+## Extension: Politicians Page & Network Analysis (January 2026)
+
+**Status**: Active Development
+**Implementation Plan**: See `~/.claude/plans/sleepy-crunching-pnueli.md`
+
+This document originally focused on the homepage and general frontend architecture. A significant extension has been planned to add:
+
+### Phase 6: Politicians Directory & Profile Enhancement
+
+**Components to Add**:
+- `PoliticianCard.tsx` - Specialized card with party color accents
+- `PoliticianList.tsx` - Grouped listings (Government/Opposition/Other → Party → Individuals)
+- Politicians directory page at `/politicians/`
+
+**Backend Requirements**:
+- `/api/v2/politicians/` endpoint with filtering by party, government status, role
+- `PoliticianListSerializer` with annotated current_party, current_position, is_current_mp, is_minister
+- `GOVERNING_PARTIES` setting in Django for government/opposition grouping
+
+**Design Specifications**: See [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) Sections 3.1.C, 6.4, 6.5
+
+---
+
+### Phase 7: Network Visualization & Analysis
+
+**Islands to Add**:
+- `NetworkGraph.tsx` - D3.js force-directed graph for ego networks
+- `NetworkGraph.module.scss` - Scoped styles for network visualization
+- `SankeyDiagram.tsx` - D3.js Sankey diagram for influence path visualization
+- `SankeyDiagram.module.scss` - Scoped styles for Sankey flows
+- `ClusterView.tsx` - Community detection visualization (future)
+
+**Supporting Modules**:
+- `frontend/lib/networkLayout.ts` - D3 force simulation wrapper
+- `frontend/hooks/useNetworkData.ts` - Network data fetching
+- `frontend/types/network.ts` - TypeScript interfaces for nodes/edges
+
+**Backend Requirements**:
+- `datafetch/utils/network.py` - PostgreSQL recursive CTE utilities:
+  - `get_ego_network(actor_id, max_hops)` - Multi-hop traversal
+  - `find_common_connections(actor_a, actor_b)` - Shared donors/memberships
+  - `find_influence_paths(source, target)` - Path finding
+  - `detect_clusters(min_size)` - Community detection
+- Network API endpoints:
+  - `/api/v2/actors/{id}/network/?max_hops=2&types=donation,membership`
+  - `/api/v2/actors/{id}/common-connections/?other_actor={id}`
+  - `/api/v2/actors/{id}/paths-to/{target_id}/`
+  - `/api/v2/network/clusters/`
+
+**D3.js Dependencies**:
+```bash
+npm install d3-force d3-selection d3-scale d3-zoom d3-drag d3-sankey
+npm install @types/d3-force @types/d3-selection @types/d3-scale @types/d3-zoom @types/d3-drag @types/d3-sankey
+```
+
+**Note on Sankey Diagrams**:
+- Use for visualizing influence paths (money flows from donor → intermediaries → politician)
+- Sankey link width proportional to donation value
+- Shows convergence (multiple donors → one recipient) and divergence patterns
+- Implementation uses `d3-sankey` plugin with `sankeyLinkHorizontal()` for smooth curves
+
+**Design Specifications**: See [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) Section 5.3
+
+---
+
+### Island Registry Updates
+
+Update `frontend/islands.tsx` to register new islands:
+
+```typescript
+const islands = {
+  // Existing islands...
+  'StatsGrid': () => import('./islands/StatsGrid'),
+  'PartyBreakdown': () => import('./islands/PartyBreakdown'),
+  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
+  'FilterPanel': () => import('./islands/FilterPanel'),
+  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
+
+  // New politician/network islands
+  'PoliticianCard': () => import('./components/PoliticianCard'),
+  'PoliticianList': () => import('./islands/PoliticianList'),
+  'NetworkGraph': () => import('./islands/NetworkGraph'),
+  'SankeyDiagram': () => import('./islands/SankeyDiagram'),
+};
+```
+
+---
+
+### Implementation Priorities
+
+Based on approved plan (Jan 15, 2026):
+
+1. **Week 1-2**: Politicians API + Directory Page (server-rendered initially)
+2. **Week 2-3**: Network Analysis Backend (PostgreSQL recursive CTEs)
+3. **Week 3-4**: Network Graph Island (D3.js visualization)
+4. **Week 4-5**: Cluster Detection Algorithm
+5. **Week 5-6**: Frontend Integration + Polish
+
+**Incremental Feature Rollout**:
+- **Phase 1**: Ego networks (show direct connections up to N hops)
+- **Phase 2**: Cluster detection (identify influence groups)
+- **Phase 3**: Path finding (trace influence through intermediaries)
+
+---
+
+### Performance Considerations
+
+**Network Graph Limits**:
+- Max 100 nodes per graph (paginate/cluster beyond that)
+- Use canvas rendering for >50 nodes (SVG for smaller)
+- Debounce force simulation updates
+- Cache network queries for 10 minutes (React Query staleTime)
+
+**Database Indexes Required**:
+```python
+# datafetch/models/models.py - Add to Membership model
+class Membership(Meta):
+    indexes = [
+        models.Index(fields=['organization', 'start_date', 'end_date']),
+        models.Index(fields=['person', 'organization']),
+        models.Index(fields=['person', 'role', 'start_date']),
+    ]
+```
+
+**Recursive CTE Performance**:
+- Limit max_hops to 4 (prevent expensive queries)
+- Add cycle detection in path arrays
+- Consider materialized views for common queries if needed
+
+---
+
+**Next Steps**:
+1. Implement Politicians API endpoints (Phase 1 of network analysis plan)
+2. Create basic politicians directory page (server-rendered)
+3. Add network utility functions with PostgreSQL recursive CTEs
+4. Build NetworkGraph React island with D3.js

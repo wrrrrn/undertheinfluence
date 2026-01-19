@@ -847,3 +847,105 @@ class DonorConcentrationView(views.APIView):
 
         gini = (2 * cumsum) / (n * total) - (n + 1) / n
         return max(0, min(1, gini))  # Clamp to [0, 1]
+
+
+class HomepageStatsView(views.APIView):
+    """
+    GET /api/v2/aggregates/stats/
+
+    Returns key statistics for the homepage metrics strip.
+
+    **Query Parameters:**
+    - received_after: Filter donations received on/after date (YYYY-MM-DD)
+    - received_before: Filter donations received on/before date (YYYY-MM-DD)
+    - value_min: Minimum donation value
+    - donor_type: Filter by donor type (person or organization)
+
+    **Returns:**
+    - total_donations: Count of all donation records
+    - total_value: Sum of all donation values (in pence)
+    - concentration_top_1_percent: Decimal percentage (e.g., 0.65 for 65%)
+    - concentration_donors_count: Number of donors in top 1.3% (277 donors)
+    - dual_influence_count: Count of organizations that both donate and lobby
+    - timestamp: ISO timestamp for "Data as of" display
+
+    **Note:** These are expensive calculations. In production, this endpoint
+    should read from materialized views refreshed nightly.
+
+    Example:
+        GET /api/v2/aggregates/stats/?received_after=2020-01-01
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Calculate homepage statistics with optional filtering."""
+        from django.utils import timezone
+
+        # Start with base queryset
+        donations_qs = models.Donation.objects.all()
+
+        # Apply filters using DonationFilterSet
+        filterset = filters.DonationFilterSet(
+            request.query_params,
+            queryset=donations_qs
+        )
+        donations_qs = filterset.qs
+
+        # Total donations and value
+        donation_stats = donations_qs.aggregate(
+            total_donations=Count('id'),
+            total_value=Sum('value')
+        )
+
+        # Donor concentration calculation
+        # Get all donors ranked by total donated (with filters applied)
+        donor_totals = donations_qs.exclude(
+            donor__isnull=True
+        ).values('donor_id').annotate(
+            total=Sum('value')
+        ).order_by('-total')
+
+        donor_totals_list = list(donor_totals)
+        total_donors = len(donor_totals_list)
+        total_value = donation_stats['total_value'] or 0
+
+        # Calculate top 1.3% concentration
+        # 1.3% of ~21k donors = ~277 donors
+        top_1_3_percent_count = max(1, int(total_donors * 0.013))
+        top_1_3_percent_total = sum(
+            item['total'] for item in donor_totals_list[:top_1_3_percent_count]
+        )
+        concentration_percentage = (
+            float(top_1_3_percent_total) / float(total_value)
+            if total_value else 0
+        )
+
+        # Dual influence count
+        # Count organizations that both donate AND use lobbying agencies (respecting filters)
+        from django.db.models import Exists, OuterRef
+
+        # Use filtered donations queryset for dual influence calculation
+        donors = donations_qs.filter(
+            donor_id=OuterRef('pk')
+        ).values('donor_id')
+
+        clients = models.Consultancy.objects.filter(
+            client_id=OuterRef('pk')
+        ).values('client_id')
+
+        dual_influence_count = models.Actor.objects.annotate(
+            has_donated=Exists(donors),
+            has_lobbied=Exists(clients)
+        ).filter(has_donated=True, has_lobbied=True).count()
+
+        data = {
+            'total_donations': donation_stats['total_donations'] or 0,
+            'total_value': donation_stats['total_value'] or 0,
+            'concentration_top_1_percent': concentration_percentage,
+            'concentration_donors_count': top_1_3_percent_count,
+            'dual_influence_count': dual_influence_count,
+            'timestamp': timezone.now().isoformat(),
+        }
+
+        serializer = serializers.HomepageStatsSerializer(data)
+        return Response(serializer.data)

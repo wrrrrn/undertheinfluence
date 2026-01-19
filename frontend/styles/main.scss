@@ -1,13 +1,25 @@
-// Main stylesheet - Imports Bootstrap 5 and custom global styles
+// Main stylesheet - Editorial Edition Design System
+// =============================================================================
 
-// Import Bootstrap 5
+// 1. Design System Variables (must come first)
+@import "variables";
+
+// 2. Import Bootstrap 5 (uses our variable overrides)
 @import "bootstrap/scss/bootstrap";
 
-// Global styles (minimal - use CSS Modules for component styles)
+// 3. Editorial Edition Typography (Playfair Display + Inter)
+@import "typography";
+
+// 4. Card System (refined cards with 20px radius, layered shadows)
+@import "cards";
+
+// 5. Global styles (minimal - use CSS Modules for component styles)
 body {
-  font-family: $font-family-sans-serif;
-  color: var(--bs-body-color);
-  background-color: var(--bs-body-bg);
+  font-family: $font-sans;
+  color: $influence-slate;
+  background-color: $wash-gray;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 // Utility classes for Islands

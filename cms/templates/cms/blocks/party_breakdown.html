@@ -1,0 +1,20 @@
+{# Template for PartyBreakdownBlock - renders the party donation breakdown #}
+
+<div class="party-breakdown-block my-5">
+    {% if value.title %}
+    <h2 class="mb-3">{{ value.title }}</h2>
+    {% endif %}
+
+    <div data-island="PartyBreakdown"
+         data-limit="{{ value.limit }}"
+         data-api-url="{{ value.api_url }}"
+         data-compact="{{ value.compact|yesno:'true,false' }}">
+        {# Server-rendered fallback for SEO and no-JS #}
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading party breakdown...</span>
+            </div>
+            <p class="text-muted mt-3">Loading donation data by political party...</p>
+        </div>
+    </div>
+</div>

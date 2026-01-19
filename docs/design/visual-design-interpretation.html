@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UnderTheInfluence | Design System v1.1 (Editorial Edition)</title>
+    
+    <!-- Editorial Font Stack -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <style>
+        :root {
+            /* Brand Colors */
+            --influence-blue: #0f172a;
+            --influence-slate: #1e293b;
+            --action-blue: #2563eb;
+            --canvas-white: #ffffff;
+            --wash-gray: #f8fafc;
+            
+            /* Party Colors (Accessible Text Variants) */
+            --party-con: #005B94;
+            --party-lab: #B0002E;
+            --party-lib: #A86500;
+            --party-grn: #3D6E0E;
+            --party-snp: #8B8200;
+            --party-ref: #0C7A8B;
+
+            /* Network Visualization Colors */
+            --net-node-person: #3b82f6;
+            --net-node-org: #10b981;
+            --net-edge-donation: #8b5cf6;
+            --net-edge-membership: #64748b;
+            --net-edge-lobbying: #f59e0b;
+
+            /* Typography */
+            --font-serif: 'Playfair Display', serif;
+            --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--wash-gray);
+            color: var(--influence-slate);
+            line-height: 1.6;
+            scroll-behavior: smooth;
+        }
+
+        /* Editorial Typography */
+        h1, h2, h3, .editorial-heading { 
+            font-family: var(--font-serif); 
+            font-weight: 800; 
+            color: var(--influence-blue);
+            letter-spacing: -0.02em;
+        }
+
+        .hero-title { font-size: 3.5rem; line-height: 1.1; margin-bottom: 1.5rem; }
+        .text-accent { font-style: italic; color: var(--action-blue); }
+        .tabular-nums { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+        /* Navigation */
+        .sidebar {
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            padding: 3rem 1.5rem;
+            background: var(--influence-blue);
+            color: white;
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+        .sidebar .brand { font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 3rem; }
+        .sidebar a {
+            color: #94a3b8;
+            text-decoration: none;
+            display: block;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .sidebar a:hover, .sidebar a.active {
+            background: rgba(255,255,255,0.08);
+            color: white;
+            transform: translateX(5px);
+        }
+
+        /* The Card Unit */
+        .uti-card {
+            background: white;
+            border: 1px solid rgba(15, 23, 42, 0.05);
+            border-radius: 20px;
+            box-shadow: 
+                0 1px 2px rgba(0,0,0,0.01),
+                0 10px 15px -3px rgba(15, 23, 42, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 2rem;
+            height: 100%;
+        }
+        .uti-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.1);
+        }
+
+        /* Swatches */
+        .swatch {
+            height: 120px;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 1.25rem;
+            color: white;
+            font-weight: 600;
+        }
+        .swatch span { font-size: 0.75rem; opacity: 0.8; font-weight: 400; display: block; }
+
+        /* Badge Styles */
+        .badge-editorial {
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: inline-block;
+        }
+        .badge-lab { background: #fee2e2; color: var(--party-lab); }
+        .badge-con { background: #e0f2fe; color: var(--party-con); }
+
+        /* Visualizations */
+        .viz-placeholder {
+            background: #f8fafc;
+            border: 2px dashed #e2e8f0;
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+        }
+
+        /* Timeline */
+        .timeline-spec {
+            position: relative;
+            padding-left: 3rem;
+        }
+        .timeline-spine {
+            position: absolute;
+            left: 12px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: #e2e8f0;
+        }
+        .timeline-dot {
+            position: absolute;
+            left: -3rem;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid var(--influence-blue);
+            z-index: 2;
+        }
+
+        section { padding: 6rem 0; border-bottom: 1px solid #e2e8f0; }
+        section:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav class="col-md-3 col-lg-2 d-none d-md-block sidebar">
+            <div class="brand">UnderThe<span class="text-accent">Influence</span></div>
+            <div class="nav flex-column">
+                <a href="#philosophy" class="active">1. Philosophy</a>
+                <a href="#identity">2. Visual Identity</a>
+                <a href="#typography">3. Typography</a>
+                <a href="#components">4. Component Specs</a>
+                <a href="#visualizations">5. Data Viz Rules</a>
+                <a href="#patterns">6. Page Patterns</a>
+            </div>
+            <div class="mt-5 pt-5 opacity-50">
+                <small class="text-uppercase fw-bold" style="font-size: 0.6rem; letter-spacing: 0.1em;">Version 1.1 / Editorial</small>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-5">
+            
+            <!-- 1. Philosophy -->
+            <section id="philosophy">
+                <div class="max-w-3xl">
+                    <h1 class="hero-title">Radical Transparency, <span class="text-accent">Accessible Depth</span></h1>
+                    <p class="lead text-muted mb-5">
+                        Our design system bridges the gap between high-end investigative journalism and interactive data analysis. 
+                        It uses editorial gravity to anchor complex network relationships.
+                    </p>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <h5 class="fw-bold mb-3"><i class="bi bi-journal-text me-2 text-primary"></i> Editorial Authority</h5>
+                            <p class="small">We use high-contrast serif typography to signal trustworthiness and journalistic heritage.</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h5 class="fw-bold mb-3"><i class="bi bi-graph-up-arrow me-2 text-primary"></i> Data Honesty</h5>
+                            <p class="small">Visual hierarchy reflects actual data significance, not aesthetic whim. No dark patterns.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Visual Identity -->
+            <section id="identity">
+                <h2 class="mb-5">Visual Identity</h2>
+                
+                <h6 class="text-uppercase fw-bold text-muted small mb-4" style="letter-spacing: 0.1em;">Core Brand Palette</h6>
+                <div class="row mb-5">
+                    <div class="col-md-3">
+                        <div class="swatch" style="background: var(--influence-blue);">
+                            <span>Influence Blue</span>
+                            #0F172A
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="swatch" style="background: var(--action-blue);">
+                            <span>Action Blue</span>
+                            #2563EB
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="swatch" style="background: #ffffff; color: #333; border: 1px solid #e2e8f0;">
+                            <span>Canvas White</span>
+                            #FFFFFF
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="swatch" style="background: var(--wash-gray); color: #333; border: 1px solid #e2e8f0;">
+                            <span>Wash Gray</span>
+                            #F8FAFC
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="text-uppercase fw-bold text-muted small mb-4" style="letter-spacing: 0.1em;">Network Nodes & Edges</h6>
+                <div class="row">
+                    <div class="col-md-2">
+                        <div class="swatch" style="background: var(--net-node-person);">
+                            <span>Person Node</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="swatch" style="background: var(--net-node-org);">
+                            <span>Org Node</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="swatch" style="background: var(--net-edge-donation);">
+                            <span>Donation Edge</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="swatch" style="background: var(--net-edge-lobbying);">
+                            <span>Lobbying Edge</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Typography -->
+            <section id="typography">
+                <h2 class="mb-5">Typography</h2>
+                <div class="uti-card">
+                    <div class="row g-5">
+                        <div class="col-lg-7 border-end">
+                            <span class="badge bg-slate-100 text-slate-800 mb-3 rounded-1 px-2 py-1 small fw-bold">PRIMARY SERIF: PLAYFAIR DISPLAY</span>
+                            <h1 class="mb-4">The anatomy of <span class="text-accent">influence</span> in Westminster.</h1>
+                            <p class="lead">Used for hero titles, page headers, and narrative sections to provide editorial weight.</p>
+                            
+                            <hr class="my-5 opacity-10">
+                            
+                            <span class="badge bg-slate-100 text-slate-800 mb-3 rounded-1 px-2 py-1 small fw-bold">PRIMARY SANS: INTER</span>
+                            <p>Used for interface elements, metadata, and body copy. 
+                               <strong>Tabular figures</strong> are mandatory for financial grids: <span class="tabular-nums fw-bold">£1,240,500.00</span></p>
+                        </div>
+                        <div class="col-lg-5 ps-lg-5">
+                            <h5 class="fw-bold mb-4">Type Scale</h5>
+                            <div class="mb-4">
+                                <small class="text-muted d-block mb-1">H1 / Editorial Hero</small>
+                                <div class="h1 mb-0">3.5rem Serif</div>
+                            </div>
+                            <div class="mb-4">
+                                <small class="text-muted d-block mb-1">H2 / Section Header</small>
+                                <div class="h2 mb-0">2.5rem Serif</div>
+                            </div>
+                            <div class="mb-4">
+                                <small class="text-muted d-block mb-1">Body Text</small>
+                                <div class="p">1rem / 1.6 Line-height</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Components -->
+            <section id="components">
+                <h2 class="mb-5">Component Specifications</h2>
+                
+                <div class="row g-4">
+                    <!-- Politician Card -->
+                    <div class="col-md-6">
+                        <h6>Politician Card (Actor Unit)</h6>
+                        <div class="uti-card" style="border-top: 5px solid var(--party-lab);">
+                            <div class="d-flex align-items-center mb-4">
+                                <div class="rounded-circle bg-slate-100 border me-3" style="width: 72px; height: 72px;"></div>
+                                <div>
+                                    <h3 class="h5 mb-1">Angela Rayner</h3>
+                                    <div class="badge-editorial badge-lab">Labour MP</div>
+                                </div>
+                            </div>
+                            <div class="row pt-4 border-top">
+                                <div class="col-6">
+                                    <div class="text-muted small fw-bold text-uppercase">Donations</div>
+                                    <div class="h5 mb-0 tabular-nums fw-bold">£620K</div>
+                                </div>
+                                <div class="col-6 border-start">
+                                    <div class="text-muted small fw-bold text-uppercase">Network</div>
+                                    <div class="h5 mb-0 fw-bold">112 <span class="small fw-normal text-muted">links</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stat Card -->
+                    <div class="col-md-3">
+                        <h6>Metric Unit</h6>
+                        <div class="uti-card text-center">
+                            <div class="text-muted small fw-bold text-uppercase mb-2">Total Flow</div>
+                            <div class="display-6 fw-bold tabular-nums">£42.8M</div>
+                            <div class="mt-2 text-success small"><i class="bi bi-caret-up-fill"></i> 12% increase</div>
+                        </div>
+                    </div>
+
+                    <!-- Badge System -->
+                    <div class="col-md-3">
+                        <h6>Badge System</h6>
+                        <div class="uti-card space-y-3">
+                            <div class="badge-editorial badge-lab d-block mb-2">Labour</div>
+                            <div class="badge-editorial badge-con d-block mb-2">Conservative</div>
+                            <div class="badge-editorial bg-slate-100 text-slate-800 d-block mb-2">Organization</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. Data Viz -->
+            <section id="visualizations">
+                <h2 class="mb-5">Visualizations & Mapping</h2>
+                
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6>5.2 Narrative Timeline Feed</h6>
+                        <div class="uti-card">
+                            <div class="timeline-spec">
+                                <div class="timeline-spine"></div>
+                                <div class="mb-5 position-relative">
+                                    <div class="timeline-dot"></div>
+                                    <div class="text-accent fw-bold small mb-1">JAN 15, 2026</div>
+                                    <h4 class="editorial-heading h5">New Interest Declared</h4>
+                                    <p class="small text-muted mb-0">A 2px spine connects chronological nodes. Hovering nodes reveals magnitude links.</p>
+                                </div>
+                                <div class="position-relative">
+                                    <div class="timeline-dot" style="border-color: var(--net-edge-lobbying);"></div>
+                                    <div class="text-accent fw-bold small mb-1">JAN 10, 2026</div>
+                                    <h4 class="editorial-heading h5">Lobbying Meeting Logged</h4>
+                                    <p class="small text-muted mb-0">Node colors must match relationship types (Amber = Lobbying).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6>5.3 Sankey Influence Flow</h6>
+                        <div class="uti-card">
+                            <div class="viz-placeholder h-100 d-flex flex-column justify-content-center">
+                                <div class="d-flex justify-content-between align-items-center mb-4 px-4">
+                                    <div class="bg-primary text-white px-2 py-1 rounded small">Donor</div>
+                                    <div class="flex-grow-1 mx-3" style="height: 12px; background: rgba(37, 99, 235, 0.2); border-radius: 10px;"></div>
+                                    <div class="bg-dark text-white px-2 py-1 rounded small">Recipient</div>
+                                </div>
+                                <p class="small text-muted px-4">Sankey flows must visually encode £ magnitude through path width. Use party-gradient link colors.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="py-5 text-center text-muted border-top">
+                <div class="brand h4 text-dark mb-2" style="font-family: var(--font-serif);">UnderTheInfluence</div>
+                <small>© 2026 Investigative Data Group. System v1.1.</small>
+            </footer>
+        </main>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
