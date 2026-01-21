@@ -56,6 +56,25 @@ class DonationFilterSet(django_filters.FilterSet):
         help_text='Filter by recipient type (person or organization)'
     )
 
+    # Classification filters (for organizations)
+    donor_classification = django_filters.CharFilter(
+        field_name='donor__organization__classification',
+        lookup_expr='iexact',
+        help_text='Filter by donor organization classification (e.g., "Trade Union", "Company")'
+    )
+    exclude_donor_classification = django_filters.CharFilter(
+        field_name='donor__organization__classification',
+        lookup_expr='iexact',
+        exclude=True,
+        help_text='Exclude donors with this classification'
+    )
+
+    # Lobbying overlap filter
+    has_lobbying = django_filters.BooleanFilter(
+        method='filter_has_lobbying',
+        help_text='Filter to show only donors who are also lobbying clients (true) or non-lobbyists (false)'
+    )
+
     # Search filters
     donor_name = django_filters.CharFilter(
         field_name='donor__name',
@@ -80,12 +99,34 @@ class DonationFilterSet(django_filters.FilterSet):
         help_text='Filter by donation nature'
     )
 
+    def filter_has_lobbying(self, queryset, name, value):
+        """
+        Filter donations to show only donors who are also lobbying clients.
+
+        If value is True: only show donations from donors who are lobbying clients
+        If value is False: only show donations from donors who are NOT lobbying clients
+        """
+        if value is None:
+            return queryset
+
+        # Get all donor IDs who are lobbying clients
+        lobbying_donor_ids = models.Consultancy.objects.values_list('client_id', flat=True).distinct()
+
+        if value:
+            # Only donors who are lobbying clients
+            return queryset.filter(donor_id__in=lobbying_donor_ids)
+        else:
+            # Only donors who are NOT lobbying clients
+            return queryset.exclude(donor_id__in=lobbying_donor_ids)
+
     class Meta:
         model = models.Donation
         fields = [
             'received_after', 'received_before',
             'value_min', 'value_max',
             'donor_type', 'recipient_type',
+            'donor_classification', 'exclude_donor_classification',
+            'has_lobbying',
             'donor_name', 'recipient_name',
             'category', 'nature',
         ]

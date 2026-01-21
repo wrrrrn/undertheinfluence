@@ -1,0 +1,17 @@
+{% load static %}
+
+<div class="data-block my-4">
+    {% if value.title %}
+    <h4 class="mb-3">{{ value.title }}</h4>
+    {% endif %}
+
+    <div data-island="FilterPanel">
+        <!-- Server-rendered fallback -->
+        <div class="card">
+            <div class="card-body">
+                <strong>Filters</strong>
+                <p class="text-muted small mb-0">Loading filter controls...</p>
+            </div>
+        </div>
+    </div>
+</div>

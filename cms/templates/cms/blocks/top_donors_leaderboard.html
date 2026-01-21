@@ -1,0 +1,36 @@
+{% load static %}
+
+<div class="data-block my-4">
+    {% if value.title %}
+    <h2 class="mb-3">{{ value.title }}</h2>
+    {% endif %}
+
+    <div class="row">
+        {% if value.show_filter_panel %}
+        <div class="col-md-3">
+            <div data-island="FilterPanel">
+                <!-- Server-rendered fallback -->
+                <div class="card">
+                    <div class="card-body">
+                        <strong>Filters</strong>
+                        <p class="text-muted small mb-0">Loading filters...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+        {% else %}
+        <div class="col-12">
+        {% endif %}
+            <div data-island="TopDonorsLeaderboard" data-limit="{{ value.limit }}">
+                <!-- Server-rendered fallback -->
+                <div class="card">
+                    <div class="card-body text-center">
+                        <strong>Loading Top Donors</strong>
+                        <p class="text-muted small mb-0">Fetching data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

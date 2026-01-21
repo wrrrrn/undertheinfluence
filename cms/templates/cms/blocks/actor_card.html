@@ -1,0 +1,17 @@
+{% load static %}
+
+<div class="data-block my-4">
+    <div
+        data-island="ActorCard"
+        data-actor-id="{{ value.actor_id }}"
+        data-compact="{% if value.compact %}true{% else %}false{% endif %}"
+        data-show-stats="{% if value.show_stats %}true{% else %}false{% endif %}">
+        <!-- Server-rendered fallback -->
+        <div class="card">
+            <div class="card-body">
+                <strong>Loading Actor Card</strong>
+                <p class="text-muted small mb-0">Fetching actor data (ID: {{ value.actor_id }})...</p>
+            </div>
+        </div>
+    </div>
+</div>

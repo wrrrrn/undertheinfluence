@@ -26,7 +26,7 @@ $(function() {
             pagination: true,
             search: true,
             onLoadSuccess: function() {
-                externalLinks(tbl);
+                // External links functionality removed
             },
             responseHandler: function(res) {
                 res.total = res.count;

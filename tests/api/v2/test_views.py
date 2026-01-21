@@ -283,6 +283,154 @@ def dual_influence_dataset(db):
     }
 
 
+@pytest.fixture
+def enhanced_filter_dataset(db):
+    """
+    Create dataset for testing enhanced filter functionality.
+
+    Includes Trade Unions, Companies, persons, and lobbying relationships.
+    Used for testing donor_classification, exclude_donor_classification, and has_lobbying filters.
+    """
+    # Create lobbying agency
+    agency = Organization.objects.create(
+        name="Lobbying Agency",
+        classification="Consultancy",
+    )
+
+    # Create Trade Union donors (some with lobbying)
+    union1 = Organization.objects.create(
+        name="Workers Union",
+        classification="Trade Union",
+    )
+    union2 = Organization.objects.create(
+        name="Teachers Union",
+        classification="Trade Union",
+    )
+    union3 = Organization.objects.create(
+        name="Transport Union",
+        classification="Trade Union",
+    )
+
+    # Create Company donors (some with lobbying)
+    company1 = Organization.objects.create(
+        name="Tech Corp",
+        classification="Company",
+    )
+    company2 = Organization.objects.create(
+        name="Finance Ltd",
+        classification="Company",
+    )
+    company3 = Organization.objects.create(
+        name="Energy Inc",
+        classification="Company",
+    )
+
+    # Create person donors
+    person1 = Person.objects.create(
+        name="John Smith",
+        family_name="Smith",
+        given_name="John",
+    )
+    person2 = Person.objects.create(
+        name="Jane Doe",
+        family_name="Doe",
+        given_name="Jane",
+    )
+
+    # Create recipients
+    mp = Person.objects.create(
+        name="MP Recipient",
+        family_name="Recipient",
+        given_name="MP",
+    )
+    party = Organization.objects.create(
+        name="Test Party",
+        classification="Political Party",
+    )
+
+    # Create donations from Trade Unions
+    Donation.objects.create(
+        donor=union1, recipient=party, value=50000.00,
+        received_date="2023-06-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=union2, recipient=mp, value=25000.00,
+        received_date="2023-09-15", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=union3, recipient=party, value=15000.00,
+        received_date="2024-01-20", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+
+    # Create donations from Companies
+    Donation.objects.create(
+        donor=company1, recipient=party, value=75000.00,
+        received_date="2023-05-10", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=company2, recipient=mp, value=40000.00,
+        received_date="2023-11-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=company3, recipient=party, value=20000.00,
+        received_date="2024-02-15", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+
+    # Create donations from persons
+    Donation.objects.create(
+        donor=person1, recipient=party, value=8000.00,
+        received_date="2023-08-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+    Donation.objects.create(
+        donor=person2, recipient=mp, value=12000.00,
+        received_date="2024-03-01", donation_type="Cash",
+        accounting_units_as_central_party=False,
+        is_bequest=False, is_aggregation=False, is_sponsorship=False,
+    )
+
+    # Create lobbying relationships
+    # union1 and company1 also lobby (dual influence)
+    Consultancy.objects.create(
+        agency=agency, client=union1,
+        start_date="2023-01-01",
+    )
+    Consultancy.objects.create(
+        agency=agency, client=company1,
+        start_date="2023-01-01",
+    )
+    # union2 also lobbies
+    Consultancy.objects.create(
+        agency=agency, client=union2,
+        start_date="2024-01-01",
+    )
+
+    # union3, company2, company3, person1, person2 do NOT lobby
+
+    return {
+        'unions': [union1, union2, union3],
+        'companies': [company1, company2, company3],
+        'persons': [person1, person2],
+        'lobbying_clients': [union1, union2, company1],  # Actors with Consultancy records
+        'non_lobbyists': [union3, company2, company3, person1, person2],
+        'agency': agency,
+        'recipients': [mp, party],
+    }
+
+
 # ===========================
 # TopDonorsView Tests
 # ===========================
@@ -1229,6 +1377,138 @@ class TestRegressions:
         response_persons = api_client.get(url, {'donor_type': 'person', 'limit': 1})
         assert response_persons.status_code == status.HTTP_200_OK
         assert response_persons.data['results'][0]['actor']['actor_type'] == 'person'
+
+    def test_donor_classification_filter(self, api_client, enhanced_filter_dataset):
+        """
+        REGRESSION: Test donor_classification filter correctly filters by organization type.
+
+        Verifies that filtering by 'Trade Union' only returns Trade Union donors,
+        and filtering by 'Company' only returns Company donors.
+        """
+        url = reverse('api_v2:top-donors')
+
+        # Test Trade Union filter
+        response_unions = api_client.get(url, {'donor_classification': 'Trade Union'})
+        assert response_unions.status_code == status.HTTP_200_OK
+        assert response_unions.data['count'] > 0
+
+        # All results should be Trade Unions
+        for result in response_unions.data['results']:
+            assert result['actor']['classification'] == 'Trade Union'
+
+        # Test Company filter
+        response_companies = api_client.get(url, {'donor_classification': 'Company'})
+        assert response_companies.status_code == status.HTTP_200_OK
+        assert response_companies.data['count'] > 0
+
+        # All results should be Companies
+        for result in response_companies.data['results']:
+            assert result['actor']['classification'] == 'Company'
+
+    def test_exclude_donor_classification_filter(self, api_client, enhanced_filter_dataset):
+        """
+        REGRESSION: Test exclude_donor_classification filter correctly excludes types.
+
+        Verifies that excluding 'Trade Union' removes all Trade Union donors,
+        and excluding 'Company' removes all Company donors.
+        """
+        url = reverse('api_v2:top-donors')
+
+        # Get baseline count
+        response_all = api_client.get(url)
+        total_count = response_all.data['count']
+
+        # Exclude Trade Unions
+        response_no_unions = api_client.get(url, {'exclude_donor_classification': 'Trade Union'})
+        assert response_no_unions.status_code == status.HTTP_200_OK
+
+        # Should have fewer results than baseline
+        assert response_no_unions.data['count'] < total_count
+
+        # No results should be Trade Unions
+        for result in response_no_unions.data['results']:
+            assert result['actor']['classification'] != 'Trade Union'
+
+        # Exclude Companies
+        response_no_companies = api_client.get(url, {'exclude_donor_classification': 'Company'})
+        assert response_no_companies.status_code == status.HTTP_200_OK
+        assert response_no_companies.data['count'] < total_count
+
+        # No results should be Companies
+        for result in response_no_companies.data['results']:
+            assert result['actor']['classification'] != 'Company'
+
+    def test_has_lobbying_filter(self, api_client, enhanced_filter_dataset):
+        """
+        REGRESSION: Test has_lobbying filter shows only donors who are lobbying clients.
+
+        Verifies that has_lobbying=true only returns donors with Consultancy records,
+        and has_lobbying=false only returns donors without Consultancy records.
+        """
+        url = reverse('api_v2:top-donors')
+
+        # Test has_lobbying=true
+        response_lobbyists = api_client.get(url, {'has_lobbying': 'true'})
+        assert response_lobbyists.status_code == status.HTTP_200_OK
+        assert response_lobbyists.data['count'] > 0
+
+        # All results should have is_lobbying_client=True
+        for result in response_lobbyists.data['results']:
+            assert result.get('is_lobbying_client') is True
+
+        # Test has_lobbying=false
+        response_non_lobbyists = api_client.get(url, {'has_lobbying': 'false'})
+        assert response_non_lobbyists.status_code == status.HTTP_200_OK
+
+        # All results should have is_lobbying_client=False or None
+        for result in response_non_lobbyists.data['results']:
+            assert result.get('is_lobbying_client') in (False, None)
+
+    def test_combined_filters(self, api_client, enhanced_filter_dataset):
+        """
+        REGRESSION: Test combining multiple filters works correctly.
+
+        Verifies that donor_classification + has_lobbying filters work together,
+        and that exclusion filters combine with other filters.
+        """
+        url = reverse('api_v2:top-donors')
+
+        # Test: Trade Unions who also lobby
+        response = api_client.get(url, {
+            'donor_classification': 'Trade Union',
+            'has_lobbying': 'true'
+        })
+        assert response.status_code == status.HTTP_200_OK
+
+        # All results should be Trade Unions AND lobbying clients
+        for result in response.data['results']:
+            assert result['actor']['classification'] == 'Trade Union'
+            assert result.get('is_lobbying_client') is True
+
+        # Test: Exclude Companies, only show lobbyists
+        response = api_client.get(url, {
+            'exclude_donor_classification': 'Company',
+            'has_lobbying': 'true'
+        })
+        assert response.status_code == status.HTTP_200_OK
+
+        # No results should be Companies, all should be lobbyists
+        for result in response.data['results']:
+            assert result['actor']['classification'] != 'Company'
+            assert result.get('is_lobbying_client') is True
+
+        # Test: Date range + classification + value filter
+        response = api_client.get(url, {
+            'donor_classification': 'Trade Union',
+            'value_min': '10000',
+            'received_after': '2023-01-01'
+        })
+        assert response.status_code == status.HTTP_200_OK
+
+        # All results should meet all criteria
+        for result in response.data['results']:
+            assert result['actor']['classification'] == 'Trade Union'
+            assert Decimal(result['total_donated']) >= Decimal('10000')
 
 
 class TestEdgeCases:

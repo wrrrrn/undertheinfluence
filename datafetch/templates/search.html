@@ -4,6 +4,84 @@
 
 {% block content %}
     <h2>Search Results</h2>
+
+    {# Test: FilterPanel + ActorCard Integration #}
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <h4>Test: FilterPanel</h4>
+            <div data-island="FilterPanel">
+                <!-- Server-rendered fallback -->
+                <div style="padding: 1rem; border: 1px solid #dee2e6; border-radius: 0.375rem;">
+                    <strong>Filters</strong>
+                    <p class="text-muted small">Loading filters...</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <h4>Filtered Results</h4>
+            <p class="text-muted mb-3">Change filters to see URL update and leaderboard refresh</p>
+
+            <div data-island="TopDonorsLeaderboard" data-limit="10">
+                <!-- Server-rendered fallback -->
+                <div style="padding: 2rem; border: 1px solid #dee2e6; border-radius: 0.375rem; text-align: center;">
+                    <strong>Top Donors</strong>
+                    <p class="text-muted small">Loading leaderboard...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+
+    {# Test ConcentrationChart island #}
+    <div class="mb-4">
+        <h4>Test: ConcentrationChart</h4>
+        <p class="text-muted mb-3">Visualizes donor concentration with Gini coefficient, HHI, and distribution chart</p>
+        <div data-island="ConcentrationChart">
+            <!-- Server-rendered fallback -->
+            <div style="padding: 2rem; border: 1px solid #dee2e6; border-radius: 0.375rem; text-align: center;">
+                <strong>Donor Concentration</strong>
+                <p class="text-muted small">Loading concentration metrics...</p>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+
+    {# Test ActorCard island - Compact mode #}
+    <div class="mb-4">
+        <h4>Test: ActorCard Component (Compact)</h4>
+        <div
+            data-island="ActorCard"
+            data-actor='{"id": 123, "name": "David Sainsbury", "actor_type": "person", "classification": "Individual Donor"}'
+            data-stats='{"totalDonated": 47900000, "donationCount": 156}'
+            data-compact="true"
+            data-show-stats="true">
+            <!-- Server-rendered fallback for SEO/no-JS -->
+            <a href="/person/123/" style="display: block; padding: 0.75rem; border: 1px solid #dee2e6; border-radius: 0.375rem;">
+                <strong>David Sainsbury</strong> - Individual Donor - £47.9M
+            </a>
+        </div>
+    </div>
+
+    {# Test ActorCard island - Full mode #}
+    <div class="mb-4">
+        <h4>Test: ActorCard Component (Full)</h4>
+        <div style="max-width: 300px;"
+            data-island="ActorCard"
+            data-actor='{"id": 456, "name": "Unite the Union", "actor_type": "organization", "classification": "Trade Union"}'
+            data-stats='{"totalDonated": 12500000, "donationCount": 89, "isLobbyingClient": true}'
+            data-compact="false"
+            data-show-stats="true">
+            <!-- Server-rendered fallback -->
+            <div style="padding: 1rem; border: 1px solid #dee2e6; border-radius: 0.375rem;">
+                <strong>Unite the Union</strong><br>
+                <small>Trade Union</small><br>
+                Donated: £12.5M
+            </div>
+        </div>
+    </div>
+
     {% if results %}
     <p>{{ num_results }} results found for query '{{ query }}':</p>
     <ul>

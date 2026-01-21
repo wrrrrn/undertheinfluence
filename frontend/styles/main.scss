@@ -1,0 +1,40 @@
+// Main stylesheet - Editorial Edition Design System
+// =============================================================================
+
+// 1. Design System Variables (must come first)
+@import "variables";
+
+// 2. Import Bootstrap 5 (uses our variable overrides)
+@import "bootstrap/scss/bootstrap";
+
+// 3. Editorial Edition Typography (Playfair Display + Inter)
+@import "typography";
+
+// 4. Card System (refined cards with 20px radius, layered shadows)
+@import "cards";
+
+// 5. Global styles (minimal - use CSS Modules for component styles)
+body {
+  font-family: $font-sans;
+  color: $influence-slate;
+  background-color: $wash-gray;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Utility classes for Islands
+.island-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--bs-secondary);
+}
+
+.island-error {
+  padding: 1rem;
+  border: 1px solid var(--bs-danger);
+  border-radius: var(--bs-border-radius);
+  background-color: rgba(var(--bs-danger-rgb), 0.1);
+  color: var(--bs-danger);
+}

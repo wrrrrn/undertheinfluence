@@ -8,6 +8,8 @@ from wagtail.admin.panels import FieldPanel
 from wagtail.snippets.models import register_snippet
 from wagtail.images.blocks import ImageChooserBlock
 
+from cms.blocks import DataVisualizationBlock
+
 
 class MyPage(Page):
     class Meta:
@@ -138,3 +140,59 @@ class Quote(models.Model):
 
     def __str__(self):
         return self.attribution
+
+
+class HomePage(Page):
+    """
+    Modern homepage with StreamField support for React islands.
+
+    Allows editors to build rich, data-driven pages by combining:
+    - Interactive leaderboards
+    - Concentration charts
+    - Filter panels
+    - Actor cards
+    - Rich text content
+    """
+    hero_title = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Large heading displayed at the top of the page"
+    )
+    hero_subtitle = models.TextField(
+        blank=True,
+        help_text="Subtitle or description below the hero title"
+    )
+
+    body = StreamField([
+        ('heading', blocks.CharBlock(
+            classname="full title",
+            icon='title',
+            label='Heading'
+        )),
+        ('paragraph', blocks.RichTextBlock(
+            icon='pilcrow',
+            label='Rich Text Paragraph'
+        )),
+        ('image', ImageChooserBlock(
+            icon='image',
+            label='Image'
+        )),
+        ('data_visualization', DataVisualizationBlock(
+            icon='snippet',
+            label='Data Visualization'
+        )),
+    ], use_json_field=True, blank=True)
+
+    content_panels = Page.content_panels + [
+        FieldPanel('hero_title'),
+        FieldPanel('hero_subtitle'),
+        FieldPanel('body'),
+    ]
+
+    class Meta:
+        verbose_name = "Home Page"
+
+    def get_context(self, request):
+        """Add any additional context data for the template."""
+        context = super().get_context(request)
+        return context

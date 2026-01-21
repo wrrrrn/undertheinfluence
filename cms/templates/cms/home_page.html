@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags wagtailimages_tags %}
+
+{% block content %}
+    {# Hero Section #}
+    {% if page.hero_title or page.hero_subtitle %}
+    <div class="hero bg-light py-5 mb-5">
+        <div class="container">
+            {% if page.hero_title %}
+            <h1 class="display-4">{{ page.hero_title }}</h1>
+            {% endif %}
+
+            {% if page.hero_subtitle %}
+            <p class="lead">{{ page.hero_subtitle }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# Main Content #}
+    <div class="container">
+        {% if page.body %}
+            {% for block in page.body %}
+                {% if block.block_type == 'heading' %}
+                    <h2 class="mb-4 mt-5">{{ block.value }}</h2>
+
+                {% elif block.block_type == 'paragraph' %}
+                    <div class="rich-text mb-4">
+                        {{ block.value|richtext }}
+                    </div>
+
+                {% elif block.block_type == 'image' %}
+                    <figure class="my-4">
+                        {% image block.value width-800 %}
+                    </figure>
+
+                {% elif block.block_type == 'data_visualization' %}
+                    {# Render nested StreamField blocks #}
+                    {% include_block block %}
+
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+{% endblock %}

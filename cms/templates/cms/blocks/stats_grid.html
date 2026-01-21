@@ -1,0 +1,48 @@
+{# Template for StatsGridBlock - renders the homepage key metrics grid #}
+
+<div class="stats-grid-block my-4">
+    {% if value.title %}
+    <h2 class="mb-3">{{ value.title }}</h2>
+    {% endif %}
+
+    <div data-island="StatsGrid" data-api-url="{{ value.api_url }}">
+        {# Server-rendered fallback for SEO and no-JS #}
+        <div class="row g-3">
+            <div class="col-md-3 col-sm-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="h2 mb-1">—</div>
+                        <div class="text-muted small text-uppercase">Donation Records</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="h2 mb-1">—</div>
+                        <div class="text-muted small text-uppercase">Total Donated</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="h2 mb-1">—</div>
+                        <div class="text-muted small text-uppercase">From Top 1.3%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="h2 mb-1">—</div>
+                        <div class="text-muted small text-uppercase">Dual Influence Orgs</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 text-center">
+            <em>Loading live statistics...</em>
+        </p>
+    </div>
+</div>

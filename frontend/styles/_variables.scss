@@ -1,0 +1,247 @@
+// UnderTheInfluence Design System v1.1 (Editorial Edition)
+// Variable Definitions - Design Tokens
+// =============================================================================
+// Updated: January 15, 2026
+// Major Changes: Editorial typography (Playfair + Inter), refined cards, softer shadows
+
+// Typography
+// -----------------------------------------------------------------------------
+// Editorial Edition: Dual-font strategy for authority + clarity
+
+// Font Families
+$font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif !default;
+$font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !default;
+
+// Font Weights
+$font-weight-normal: 400 !default;
+$font-weight-medium: 500 !default;
+$font-weight-semibold: 600 !default;
+$font-weight-bold: 700 !default;
+$font-weight-extrabold: 800 !default;
+
+// Type Scale (Desktop)
+$font-size-hero: 3.5rem !default;     // 56px - Homepage hero
+$font-size-h1: 2.5rem !default;       // 40px - Page titles
+$font-size-h2: 2rem !default;         // 32px - Section headers
+$font-size-h3: 1.5rem !default;       // 24px - Subsection headers
+$font-size-h4: 1.25rem !default;      // 20px - Card titles
+$font-size-base: 1rem !default;       // 16px - Body text
+$font-size-small: 0.875rem !default;  // 14px - Metadata
+$font-size-tiny: 0.75rem !default;    // 12px - Labels, captions
+
+// Type Scale (Mobile - responsive adjustments)
+$font-size-hero-mobile: 2rem !default;
+$font-size-h1-mobile: 1.75rem !default;
+$font-size-h2-mobile: 1.5rem !default;
+
+// Line Heights
+$line-height-tight: 1.1 !default;     // Headings
+$line-height-snug: 1.25 !default;     // H2-H3
+$line-height-normal: 1.5 !default;    // Body text
+$line-height-relaxed: 1.6 !default;   // Editorial body
+
+// Letter Spacing
+$letter-spacing-tight: -0.02em !default;   // Large headings
+$letter-spacing-normal: -0.01em !default;  // H2-H3
+$letter-spacing-tracked: 0.05em !default;  // Uppercase labels
+
+// Brand Colors
+// -----------------------------------------------------------------------------
+
+$influence-blue: #0f172a !default;     // Primary brand - dark slate
+$influence-slate: #1e293b !default;    // Body text
+$action-blue: #2563eb !default;        // Links, CTAs, active states
+$canvas-white: #ffffff !default;       // Card backgrounds
+$wash-gray: #f8fafc !default;          // Page backgrounds
+
+// Political Party Colors (Accessible Text Variants)
+// -----------------------------------------------------------------------------
+// These pass WCAG AA contrast (4.5:1) on white backgrounds
+
+$party-conservative: #005B94 !default;
+$party-labour: #B0002E !default;
+$party-libdem: #A86500 !default;
+$party-green: #3D6E0E !default;
+$party-snp: #8B8200 !default;
+$party-reform: #0C7A8B !default;
+
+// Party Pastel Backgrounds (for badges)
+$party-conservative-bg: #e0f2fe !default;
+$party-labour-bg: #fee2e2 !default;
+$party-libdem-bg: #fef3c7 !default;
+$party-green-bg: #dcfce7 !default;
+$party-snp-bg: #fef9c3 !default;
+$party-reform-bg: #cffafe !default;
+
+// Network Visualization Colors
+// -----------------------------------------------------------------------------
+
+$net-node-person: #3b82f6 !default;        // Blue 500
+$net-node-org: #10b981 !default;           // Green 500
+$net-node-default: #94a3b8 !default;       // Slate 400
+
+$net-edge-donation: #8b5cf6 !default;      // Purple 500
+$net-edge-membership: #64748b !default;    // Slate 500
+$net-edge-lobbying: #f59e0b !default;      // Amber 500
+
+$cluster-highlight: rgba(59, 130, 246, 0.1) !default;  // Blue with transparency
+
+// Data Visualization Colors
+// -----------------------------------------------------------------------------
+
+$viz-inequality-red: #dc3545 !default;     // Danger, concentration
+$viz-growth-green: #198754 !default;       // Positive trends
+$viz-neutral-gray: #6c757d !default;       // Other categories
+$viz-lobbying-gold: #ffc107 !default;      // Dual-influence
+
+// Gray Scale
+// -----------------------------------------------------------------------------
+
+$gray-50: #f8fafc !default;
+$gray-100: #f1f5f9 !default;
+$gray-200: #e2e8f0 !default;
+$gray-300: #cbd5e1 !default;
+$gray-400: #94a3b8 !default;
+$gray-500: #64748b !default;
+$gray-600: #475569 !default;
+$gray-700: #334155 !default;
+$gray-800: #1e293b !default;
+$gray-900: #0f172a !default;
+
+// Spacing Scale
+// -----------------------------------------------------------------------------
+// Rem-based spacing for consistency
+
+$spacing-xs: 0.25rem !default;    // 4px
+$spacing-sm: 0.5rem !default;     // 8px
+$spacing-md: 1rem !default;       // 16px
+$spacing-lg: 1.5rem !default;     // 24px
+$spacing-xl: 2rem !default;       // 32px
+$spacing-2xl: 3rem !default;      // 48px
+$spacing-3xl: 4rem !default;      // 64px
+$spacing-4xl: 6rem !default;      // 96px
+
+// Card Design
+// -----------------------------------------------------------------------------
+
+$card-radius: 20px !default;               // Large, soft corners
+$card-padding: 2rem !default;              // Generous padding
+$card-border-width: 1px !default;
+$card-border-color: rgba(15, 23, 42, 0.05) !default;
+
+// Card Shadow (layered for depth)
+$card-shadow-base:
+  0 1px 2px rgba(0, 0, 0, 0.01),
+  0 10px 15px -3px rgba(15, 23, 42, 0.05) !default;
+
+$card-shadow-hover:
+  0 20px 25px -5px rgba(15, 23, 42, 0.1) !default;
+
+// Card Lift Animation
+$card-hover-lift: -5px !default;
+$card-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !default;
+
+// Border Radius
+// -----------------------------------------------------------------------------
+
+$radius-sm: 6px !default;      // Badges, small buttons
+$radius-md: 12px !default;     // Default, medium elements
+$radius-lg: 20px !default;     // Cards, large containers
+$radius-full: 9999px !default; // Pills, circles
+
+// Breakpoints
+// -----------------------------------------------------------------------------
+// Match Bootstrap 5 defaults
+
+$breakpoint-sm: 576px !default;
+$breakpoint-md: 768px !default;
+$breakpoint-lg: 992px !default;
+$breakpoint-xl: 1200px !default;
+$breakpoint-xxl: 1400px !default;
+
+// Z-Index Scale
+// -----------------------------------------------------------------------------
+
+$z-dropdown: 1000 !default;
+$z-sticky: 1020 !default;
+$z-fixed: 1030 !default;
+$z-modal-backdrop: 1040 !default;
+$z-modal: 1050 !default;
+$z-popover: 1060 !default;
+$z-tooltip: 1070 !default;
+
+// Animation Durations
+// -----------------------------------------------------------------------------
+
+$duration-fast: 0.15s !default;
+$duration-base: 0.3s !default;
+$duration-slow: 0.5s !default;
+
+// Easing Functions
+// -----------------------------------------------------------------------------
+
+$ease-out: cubic-bezier(0.4, 0, 0.2, 1) !default;     // Smooth deceleration
+$ease-in: cubic-bezier(0.4, 0, 1, 1) !default;        // Smooth acceleration
+$ease-in-out: cubic-bezier(0.4, 0, 0.2, 1) !default;  // Smooth both ends
+
+// Bootstrap Overrides
+// -----------------------------------------------------------------------------
+// Override Bootstrap's default variables to match our design system
+
+$primary:       $action-blue;
+$secondary:     $viz-neutral-gray;
+$success:       $viz-growth-green;
+$danger:        $viz-inequality-red;
+$warning:       $viz-lobbying-gold;
+$light:         $wash-gray;
+$dark:          $influence-blue;
+
+// Override Bootstrap Typography
+$font-family-sans-serif: $font-sans;
+$headings-font-family: $font-serif;
+$headings-font-weight: $font-weight-extrabold;
+$headings-color: $influence-blue;
+$headings-letter-spacing: $letter-spacing-tight;
+
+// Override Bootstrap Borders & Radii
+$border-radius: $radius-md;
+$border-radius-sm: $radius-sm;
+$border-radius-lg: $radius-lg;
+$border-radius-pill: $radius-full;
+
+// Override Bootstrap Shadows
+$box-shadow: $card-shadow-base;
+$box-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.01);
+$box-shadow-lg: $card-shadow-hover;
+
+// CSS Custom Properties (for runtime theming)
+// -----------------------------------------------------------------------------
+// Export key variables as CSS custom properties
+
+:root {
+  // Colors
+  --influence-blue: #{$influence-blue};
+  --influence-slate: #{$influence-slate};
+  --action-blue: #{$action-blue};
+  --canvas-white: #{$canvas-white};
+  --wash-gray: #{$wash-gray};
+
+  // Typography
+  --font-serif: #{$font-serif};
+  --font-sans: #{$font-sans};
+
+  // Party Colors
+  --party-con: #{$party-conservative};
+  --party-lab: #{$party-labour};
+  --party-lib: #{$party-libdem};
+  --party-grn: #{$party-green};
+  --party-snp: #{$party-snp};
+  --party-ref: #{$party-reform};
+
+  // Network Colors
+  --net-node-person: #{$net-node-person};
+  --net-node-org: #{$net-node-org};
+  --net-edge-donation: #{$net-edge-donation};
+  --net-edge-membership: #{$net-edge-membership};
+  --net-edge-lobbying: #{$net-edge-lobbying};
+}

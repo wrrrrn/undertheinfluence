@@ -1,0 +1,290 @@
+// Typography Styles - Editorial Edition
+// =============================================================================
+// Playfair Display (serif) for editorial headings
+// Inter (sans-serif) for interface and body text
+
+@import 'variables';
+
+// Base Body Typography
+// -----------------------------------------------------------------------------
+
+body {
+  font-family: $font-sans;
+  font-size: $font-size-base;
+  line-height: $line-height-relaxed;
+  color: $influence-slate;
+  background-color: $wash-gray;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Editorial Headings
+// -----------------------------------------------------------------------------
+// Use Playfair Display for all headings to provide journalistic authority
+
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: $font-serif;
+  font-weight: $font-weight-extrabold;
+  color: $headings-color;
+  margin-bottom: $spacing-md;
+  line-height: $line-height-tight;
+}
+
+h1, .h1 {
+  font-size: $font-size-h1;
+  letter-spacing: $letter-spacing-tight;
+  margin-bottom: $spacing-lg;
+
+  @media (max-width: $breakpoint-md) {
+    font-size: $font-size-h1-mobile;
+  }
+}
+
+h2, .h2 {
+  font-size: $font-size-h2;
+  letter-spacing: $letter-spacing-normal;
+  margin-bottom: $spacing-md;
+
+  @media (max-width: $breakpoint-md) {
+    font-size: $font-size-h2-mobile;
+  }
+}
+
+h3, .h3 {
+  font-size: $font-size-h3;
+  font-weight: $font-weight-bold;
+  letter-spacing: normal;
+}
+
+h4, .h4 {
+  font-size: $font-size-h4;
+  font-weight: $font-weight-semibold;
+}
+
+h5, .h5 {
+  font-size: $font-size-base;
+  font-weight: $font-weight-semibold;
+  text-transform: uppercase;
+  letter-spacing: $letter-spacing-tracked;
+}
+
+h6, .h6 {
+  font-size: $font-size-small;
+  font-weight: $font-weight-bold;
+  text-transform: uppercase;
+  letter-spacing: $letter-spacing-tracked;
+  color: $gray-600;
+}
+
+// Hero Title (Homepage)
+// -----------------------------------------------------------------------------
+
+.hero-title {
+  font-family: $font-serif;
+  font-size: $font-size-hero;
+  font-weight: $font-weight-extrabold;
+  line-height: $line-height-tight;
+  letter-spacing: $letter-spacing-tight;
+  color: $influence-blue;
+  margin-bottom: $spacing-2xl;
+
+  @media (max-width: $breakpoint-md) {
+    font-size: $font-size-hero-mobile;
+  }
+}
+
+// Editorial Classes
+// -----------------------------------------------------------------------------
+
+.editorial-heading {
+  font-family: $font-serif !important;
+  font-weight: $font-weight-extrabold;
+  color: $influence-blue;
+  letter-spacing: $letter-spacing-tight;
+}
+
+.text-accent {
+  font-style: italic;
+  font-family: $font-serif;
+  color: $action-blue;
+}
+
+// Body Text Variants
+// -----------------------------------------------------------------------------
+
+.lead {
+  font-size: $font-size-h4;
+  line-height: $line-height-relaxed;
+  font-weight: $font-weight-normal;
+  color: $gray-700;
+}
+
+.small {
+  font-size: $font-size-small;
+}
+
+.tiny {
+  font-size: $font-size-tiny;
+  font-weight: $font-weight-medium;
+}
+
+// Tabular Numbers (CRITICAL for financial data)
+// -----------------------------------------------------------------------------
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  font-feature-settings: "tnum";
+}
+
+// Apply to all elements that display money/numbers
+.donation-amount,
+.stat-value,
+.financial-figure,
+table.financial td,
+.metric-card .value {
+  @extend .tabular-nums;
+}
+
+// Text Colors
+// -----------------------------------------------------------------------------
+
+.text-primary { color: $action-blue !important; }
+.text-secondary { color: $gray-600 !important; }
+.text-muted { color: $gray-500 !important; }
+.text-success { color: $viz-growth-green !important; }
+.text-danger { color: $viz-inequality-red !important; }
+.text-warning { color: $viz-lobbying-gold !important; }
+
+// Links
+// -----------------------------------------------------------------------------
+
+a {
+  color: $action-blue;
+  text-decoration: none;
+  transition: color $duration-fast ease;
+
+  &:hover {
+    color: darken($action-blue, 15%);
+    text-decoration: underline;
+  }
+
+  &:focus {
+    outline: 2px solid $action-blue;
+    outline-offset: 2px;
+  }
+}
+
+// Labels & Uppercase Text
+// -----------------------------------------------------------------------------
+
+.label-uppercase {
+  font-family: $font-sans;
+  font-size: $font-size-tiny;
+  font-weight: $font-weight-bold;
+  text-transform: uppercase;
+  letter-spacing: $letter-spacing-tracked;
+  color: $gray-600;
+}
+
+// Badge Typography
+// -----------------------------------------------------------------------------
+
+.badge {
+  font-family: $font-sans;
+  font-size: $font-size-tiny;
+  font-weight: $font-weight-bold;
+  text-transform: uppercase;
+  letter-spacing: $letter-spacing-tracked;
+  padding: 0.35rem 0.75rem;
+  border-radius: $radius-sm;
+}
+
+// Stat Cards / Metrics
+// -----------------------------------------------------------------------------
+
+.metric-value {
+  font-family: $font-sans;
+  font-size: 3rem;
+  font-weight: $font-weight-bold;
+  line-height: 1;
+  @extend .tabular-nums;
+
+  @media (max-width: $breakpoint-md) {
+    font-size: 2rem;
+  }
+}
+
+.metric-label {
+  font-size: $font-size-tiny;
+  font-weight: $font-weight-bold;
+  text-transform: uppercase;
+  letter-spacing: $letter-spacing-tracked;
+  color: $gray-600;
+}
+
+// Timeline Typography
+// -----------------------------------------------------------------------------
+
+.timeline-date {
+  font-family: $font-serif;
+  font-style: italic;
+  font-size: $font-size-small;
+  font-weight: $font-weight-bold;
+  color: $action-blue;
+}
+
+.timeline-heading {
+  font-family: $font-serif;
+  font-size: $font-size-h4;
+  font-weight: $font-weight-bold;
+  color: $influence-blue;
+  margin: $spacing-sm 0;
+}
+
+// Utility Classes
+// -----------------------------------------------------------------------------
+
+.font-serif { font-family: $font-serif !important; }
+.font-sans { font-family: $font-sans !important; }
+
+.fw-normal { font-weight: $font-weight-normal !important; }
+.fw-medium { font-weight: $font-weight-medium !important; }
+.fw-semibold { font-weight: $font-weight-semibold !important; }
+.fw-bold { font-weight: $font-weight-bold !important; }
+.fw-extrabold { font-weight: $font-weight-extrabold !important; }
+
+.lh-tight { line-height: $line-height-tight !important; }
+.lh-snug { line-height: $line-height-snug !important; }
+.lh-normal { line-height: $line-height-normal !important; }
+.lh-relaxed { line-height: $line-height-relaxed !important; }
+
+// Responsive Typography
+// -----------------------------------------------------------------------------
+
+@media (max-width: $breakpoint-sm) {
+  body {
+    font-size: 0.9375rem; // Slightly smaller on mobile
+  }
+
+  .hero-title {
+    font-size: 2rem;
+    margin-bottom: $spacing-lg;
+  }
+}
+
+// Print Styles
+// -----------------------------------------------------------------------------
+
+@media print {
+  body {
+    font-size: 12pt;
+    color: black;
+    background: white;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+}
