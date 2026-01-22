@@ -17,6 +17,10 @@ The queries have been organized into focused files based on analytical perspecti
 | `07_organizational_flows.sql` | **Org-to-org flows** | Organizational donation patterns, bidirectional flows |
 | `08_summary_stats.sql` | **Database overview** | Record counts, data quality, classification statistics |
 | `09_grassroots_funding.sql` | **Grassroots funding** | Analysis EXCLUDING whale donors (£500K+) and trade unions |
+| `10_mp_lobbying_connections.sql` | **MP-lobbying links** | MPs connected to lobbying clients |
+| `11_ministerial_meetings.sql` | **Ministerial access** | GOV.UK transparency data, lobbying practitioners, influence triangle |
+| `12_lobby_employee_analysis.sql` | **Lobbying practitioners** | Staff analysis, former MPs/SPADs, practitioner networks |
+| `13_director_psc_analysis.sql` | **Corporate ownership** | Directors, beneficial owners, corporate consolidation, revolving door |
 
 ## Quick Start
 
@@ -371,6 +375,101 @@ Query `2.3` shows which parties would lose most funding if whales/unions withdre
 
 ---
 
+### 11 - Ministerial Meetings & Lobbying Practitioners
+
+**Focus**: GOV.UK ministerial transparency data and lobbying practitioner networks
+
+**Data Coverage**: 7,183 meetings across 8 departments (as of Jan 2026)
+- DBT (2,172), DSIT (1,211), Home Office (798), DWP (793)
+- DfT (782), DHSC (543), MoJ (532), DfE (352)
+
+**Sections**:
+1. Ministerial Meetings Overview - Meetings by department, top external actors, top ministers
+2. Meeting Topics & Patterns - Keyword analysis, tech vs child safety comparison
+3. Lobbying Infrastructure - Agency statistics, client counts, practitioner headcounts
+4. The Influence Triangle - Organizations using meetings + lobbying + donations
+5. Tech Giants' Lobbying Networks - Which agencies do Google, Meta, etc. use?
+6. Trade Unions - Full Spectrum Influence - Unions using all three channels
+7. Lobbying Practitioners - Total counts, notable names (revolving door)
+8. Specific Organization Deep Dives - Google's full influence profile
+9. Summary Statistics - Cross-reference analysis
+
+**Key Queries**:
+- `1.1` - Total meetings by department
+- `1.2` - Top 50 external actors by ministerial access
+- `1.3` - Top ministers by meeting count
+- `2.1` - Meeting topics by keyword analysis
+- `2.2` - Tech company meetings vs child safety group meetings
+- `4.1` - Organizations with BOTH ministerial meetings AND lobbying clients
+- `4.2` - Full influence triangle: meetings + lobbying + donations
+- `5.1` - Which lobbying agencies do tech giants use?
+- `6.1` - Trade unions with meetings, lobbying, AND donations
+- `7.3` - Search for notable political names in lobbying practitioners
+- `8.1-8.3` - Google's full influence profile (meetings, agencies, donations)
+- `9.2` - Cross-reference summary: How many orgs use multiple influence channels?
+
+**Key Findings** (from Jan 2026 analysis):
+- **Google** leads tech with 21 meetings, 13 ministers, using 6 lobbying agencies
+- **UNISON** is the top "triple influencer" (16 meetings, lobbying, £44M donated)
+- **AI dominates** ministerial discussions (1,207 meetings, 17% of total)
+- **Alastair Campbell** (former Blair advisor) registered as practitioner at Portland
+- **Pharma uses more agencies** (7-8 each) than tech (1-6) due to regulatory complexity
+
+**Use Cases**:
+- Identify who has most access to government ministers
+- Track the "revolving door" between politics and lobbying
+- Map organizations using multiple influence channels
+- Compare sectors' lobbying strategies (tech vs pharma vs unions)
+- Analyze ministerial meeting topics over time
+
+---
+
+### 13 - Director & PSC (Beneficial Owner) Analysis
+
+**Focus**: Companies House director and beneficial owner data for lobbying agencies
+
+**Data Source**: Companies House Officers API and PSC API via `enrich_companies_house --fetch-all`
+
+**Sections**:
+1. Multi-Agency Directors - People directing multiple lobbying agencies
+2. Largest Boards - Agencies with most directors
+3. Beneficial Ownership Concentration - Breakdown of ownership stakes
+4. Owner-Operators - Directors who also own significant stakes
+5. Corporate Ownership (Holding Companies) - Agencies owned by corporate entities
+6. Parent Companies - Holding companies owning multiple agencies
+7. Revolving Door - Former MPs who became lobbying agency directors
+8. Lobbying Agencies in Ministerial Meetings - Overlap analysis
+9. Ministers Meeting Lobbying Agencies - Which ministers meet lobbied agencies
+10. Meeting Details - Full meeting records with lobbying agencies
+11. Summary Statistics - High-level counts for director/PSC data
+12. Director Network - Shared directorships between agencies
+
+**Key Queries**:
+- `1` - People directing multiple lobbying agencies (potential coordination)
+- `2` - Agencies with largest boards (>3 directors)
+- `3` - Beneficial ownership breakdown (25-50%, 50-75%, 75-100% stakes)
+- `4` - Owner-operators (directors who also own significant stakes)
+- `5-6` - Corporate ownership chains and holding company networks
+- `7` - Former MPs who became lobbying directors (revolving door)
+- `8-10` - Ministerial meeting overlap with lobbying agencies
+- `11` - Summary statistics (396 directors, 231 PSCs as of Jan 2026)
+- `12` - Shared directorship network (agencies connected by common directors)
+
+**Key Findings** (from Jan 2026 import):
+- **396 directors** imported across 196 lobbying agencies
+- **231 beneficial owners** (PSCs) identified
+- **2 former MPs** now directing lobbying agencies (revolving door)
+- **Corporate consolidation** patterns identified via holding companies
+
+**Use Cases**:
+- Identify corporate consolidation in lobbying industry
+- Track the "revolving door" between Parliament and lobbying
+- Map ownership structures and hidden connections
+- Find shared directorship networks suggesting coordination
+- Correlate ownership with ministerial access
+
+---
+
 ## Query Conventions
 
 All queries follow these conventions:
@@ -491,4 +590,4 @@ When adding new queries:
 
 ---
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-22

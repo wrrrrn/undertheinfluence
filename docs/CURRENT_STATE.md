@@ -1,8 +1,8 @@
 # UnderTheInfluence: Current State Summary
 
-**Last Updated**: January 19, 2026
-**Branch**: `feature/new-ui`
-**Status**: Working prototype with modern frontend architecture
+**Last Updated**: January 21, 2026
+**Branch**: `feature/more-data`
+**Status**: Working prototype with modern frontend architecture and ministerial meetings data
 
 ---
 
@@ -23,9 +23,11 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 - ✅ Homepage with StatsGrid, PartyBreakdown, TopDonorsLeaderboard islands
 - ✅ API v2 aggregate endpoints with filtering
 - ✅ Data import from ParlParse (MPs/Lords) and Ministers
+- ✅ **Ministerial Meetings Import** - 41,362 meetings from 23 departments (Jan 2026)
+- ✅ **Companies House Enrichment** - Directors & beneficial owners for lobbying agencies
 - ✅ Zustand-based URL state management
 
-**What's Next**: Expand frontend components, add politician directory page, enhance entity profiles.
+**What's Next**: Import remaining departments (DFID, DIT, AGO, SO, OAG), API endpoints for meetings, frontend visualization.
 
 ---
 
@@ -105,7 +107,8 @@ Actor (Polymorphic Base)
 Relationships:
 ├── Membership (Person ↔ Organization + Post)
 ├── Donation (Actor → Actor with £ value)
-└── Consultancy (Organization client ↔ Organization agency)
+├── Consultancy (Organization client ↔ Organization agency)
+└── MinisterialMeeting (Minister ↔ External Actor)
 ```
 
 **Key Features**:
@@ -131,13 +134,18 @@ Relationships:
 - ✅ **Working**: `import_parlparse` (MPs/Lords since 2010)
 - ✅ **Working**: `import_ministers` (ministerial appointments)
 - ✅ **Working**: `import_mpsinterests` (MPs' Register of Interests)
+- ✅ **Working**: `import_ministerial_meetings` (GOV.UK transparency data)
+- ✅ **Working**: `enrich_companies_house` (directors, PSCs, company data)
 - ⚠️ **Partial**: `import_ec` (Electoral Commission - API changes needed)
 - ⚠️ **Partial**: `import_appc` (APPC lobbying - site changes)
 
 **Database** (PostgreSQL via Docker):
-- ~26,000 actors (persons + organizations)
-- ~150,000 memberships
-- ~91,000+ donations (Electoral Commission data)
+- ~71,000 actors (36,926 persons + 34,078 organizations)
+- ~150,000 memberships (including 396 director memberships, 172 PSC memberships)
+- ~91,000 donations (Electoral Commission data)
+- ~48,000 consultancies (lobbying relationships)
+- **41,362 ministerial meetings** (23 departments, 297 ministers, 26,497 external actors)
+- **Companies House data**: 196 lobbying agencies matched, 396 directors, 231 PSCs imported
 - Full import from 1996-2026 working
 
 ### Backend - API Layer
@@ -593,9 +601,11 @@ Docker Compose automatically configures these for local development.
 ## Success Metrics (Current Baseline)
 
 **Data Coverage**:
-- ✅ 26,000+ actors (persons + organizations)
+- ✅ 71,000+ actors (36,926 persons + 34,078 organizations)
 - ✅ 150,000+ memberships
 - ✅ 91,000+ donations
+- ✅ 48,000+ consultancies (lobbying relationships)
+- ✅ **41,362 ministerial meetings** (23 departments, 297 ministers)
 - ✅ 30 years of data (1996-2026)
 
 **Performance (Current)**:
@@ -661,4 +671,4 @@ Docker Compose automatically configures these for local development.
 - Architecture decisions are made
 - Deployment status changes
 
-**Last Major Update**: January 19, 2026 (initial creation)
+**Last Major Update**: January 22, 2026 (added Companies House directors & PSC enrichment)

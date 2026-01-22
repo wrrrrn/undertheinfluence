@@ -58,13 +58,13 @@ If you need more control, run imports individually:
 
 ```bash
 # Import all data from 1996 onwards
-docker compose exec web python manage.py import_parlparse --since 1996 --refresh
+docker compose exec api python manage.py import_parlparse --since 1996 --refresh
 
 # Import all data (no date filter)
-docker compose exec web python manage.py import_parlparse --refresh
+docker compose exec api python manage.py import_parlparse --refresh
 
 # Append new data without refreshing cache
-docker compose exec web python manage.py import_parlparse --since 2020
+docker compose exec api python manage.py import_parlparse --since 2020
 ```
 
 **What it imports:**
@@ -79,10 +79,10 @@ docker compose exec web python manage.py import_parlparse --since 2020
 
 ```bash
 # Import ministerial appointments from 1996
-docker compose exec web python manage.py import_ministers --since 1996 --refresh
+docker compose exec api python manage.py import_ministers --since 1996 --refresh
 
 # Import all ministerial data
-docker compose exec web python manage.py import_ministers --refresh
+docker compose exec api python manage.py import_ministers --refresh
 ```
 
 **What it imports:**
@@ -96,7 +96,7 @@ docker compose exec web python manage.py import_ministers --refresh
 
 ```bash
 # Requires TWFY_API_KEY in .env
-docker compose exec web python manage.py import_twfy --since 1996 --refresh
+docker compose exec api python manage.py import_twfy --since 1996 --refresh
 ```
 
 **What it imports:**
@@ -120,10 +120,10 @@ docker compose exec web python manage.py import_twfy --since 1996 --refresh
 
 ```bash
 # Import MPs' donations, gifts, and interests from 1996
-docker compose exec web python manage.py import_mpsinterests --since 1996 --refresh
+docker compose exec api python manage.py import_mpsinterests --since 1996 --refresh
 
 # Import all available data
-docker compose exec web python manage.py import_mpsinterests --refresh
+docker compose exec api python manage.py import_mpsinterests --refresh
 ```
 
 **What it imports:**
@@ -140,7 +140,7 @@ docker compose exec web python manage.py import_mpsinterests --refresh
 
 ```bash
 # Import Lords' donations and interests
-docker compose exec web python manage.py import_lordsinterests --refresh
+docker compose exec api python manage.py import_lordsinterests --refresh
 ```
 
 **What it imports:**
@@ -153,17 +153,60 @@ docker compose exec web python manage.py import_lordsinterests --refresh
 
 **Note:** No date filtering available - imports all current data
 
-### 6. APPC Archive (Historical Lobbying Registers)
+### 6. Ministerial Meetings (GOV.UK Transparency Data)
+
+```bash
+# Auto-discover and import all publications since 2024
+docker compose exec api python manage.py import_ministerial_meetings \
+    --department DSIT --since 2024 --auto
+
+# Import specific department with auto-discovery
+docker compose exec api python manage.py import_ministerial_meetings \
+    --department DBT --since 2024 --auto
+
+# Import from specific URL (CSV or XLSX)
+docker compose exec api python manage.py import_ministerial_meetings \
+    --url https://assets.publishing.service.gov.uk/... \
+    --department DSIT --quarter "Q1 2024"
+
+# Dry run (parse without saving)
+docker compose exec api python manage.py import_ministerial_meetings \
+    --department DSIT --since 2024 --auto --dry-run
+```
+
+**What it imports:**
+- Ministerial meetings with external organizations/individuals
+- Minister and department associations
+- Meeting dates, purposes, and locations
+- Entity resolution for external actors
+
+**Data Source:** [GOV.UK Transparency Publications](https://www.gov.uk/government/collections)
+
+**Coverage:** 23 departments imported (41,362 meetings):
+- BEIS (7,332), DfT (4,332), DHSC (3,917), DBT (3,642)
+- Home Office (2,469), DESNZ (2,305), DCMS (2,254), DSIT (2,047)
+- MHCLG (2,033), DWP (1,926), MoJ (1,619), Defra (1,440)
+- DfE (1,109), Cabinet Office (1,034), HMT (1,013), NIO (910)
+- FCDO (597), FCO (481), BIS (403), MoD (305)
+- Wales Office (146), DECC (41), UKEF (7)
+
+**Note:** Uses `--auto` flag to scrape GOV.UK collection pages and auto-discover quarterly publications. DCMS was imported manually via individual CSV files (no collection URL).
+
+**Remaining departments:**
+- DFID, DIT - have collection URLs but scraper found 0 downloadable files (needs investigation)
+- AGO, SO, OAG - publish quarterly returns but lack collection pages (manual import required)
+
+### 7. APPC Archive (Historical Lobbying Registers)
 
 ```bash
 # Import historical APPC lobbying registers from PDFs
-docker compose exec web python manage.py import_appc_archive --refresh
+docker compose exec api python manage.py import_appc_archive --refresh
 
 # Process a specific PDF file
-docker compose exec web python manage.py import_appc_archive --file /path/to/register.pdf
+docker compose exec api python manage.py import_appc_archive --file /path/to/register.pdf
 
 # Dry run (parse without saving to database)
-docker compose exec web python manage.py import_appc_archive --dry-run
+docker compose exec api python manage.py import_appc_archive --dry-run
 ```
 
 **What it imports:**
@@ -176,24 +219,85 @@ docker compose exec web python manage.py import_appc_archive --dry-run
 
 **Note:** Creates agencies, practitioners, and consultancy relationships
 
-### 7. Entity Resolution
+### 8. Companies House Enrichment (Directors & PSCs)
+
+```bash
+# Enrich organizations with Companies House data (match + basic info)
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --verbose
+
+# Fetch directors for matched organizations
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --fetch-directors --force
+
+# Fetch beneficial owners (PSCs) for matched organizations
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --fetch-pscs --force
+
+# Fetch both directors AND PSCs
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --fetch-all --force
+
+# Include resigned directors and ceased PSCs
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --fetch-all --include-resigned --force
+
+# Test single organization
+docker compose exec api python manage.py enrich_companies_house \
+    --org-id 12345 --fetch-all --verbose --debug
+
+# Dry run (preview without changes)
+docker compose exec api python manage.py enrich_companies_house \
+    --category lobbying_agency --fetch-all --dry-run
+```
+
+**What it imports:**
+- Company directors → `Person` records with `Membership` (role="Director")
+- Beneficial owners (PSCs) → `Person` records with `Membership` (role="Beneficial Owner (X%)")
+- Corporate directors/PSCs → `Note` attached to organization
+- Company identifiers (uk.gov.companieshouse.officer, uk.gov.companieshouse.psc)
+- Founding dates, registered addresses, SIC codes, former names
+
+**Categories available:**
+- `lobbying_agency` - Organizations that provide lobbying services
+- `lobbying_client` - Organizations that hire lobbying agencies
+- `donor` - Organizations that make donations
+- `meeting_attendee` - Organizations that attend ministerial meetings
+- `all` - All organizations
+
+**Identifier schemes created:**
+- `uk.gov.companieshouse` - Company registration number
+- `uk.gov.companieshouse.officer` - Director/officer ID
+- `uk.gov.companieshouse.psc` - Person with Significant Control ID
+
+**Data Source:** [Companies House API](https://developer.company-information.service.gov.uk/)
+
+**Setup:**
+1. Get API key from [Companies House Developer Hub](https://developer.company-information.service.gov.uk/)
+2. Add to `.env`: `COMPANIES_HOUSE_API_KEY=your_key_here`
+
+**Rate Limits:** 600 requests per 5 minutes. The client handles rate limiting automatically.
+
+**Analysis:** See `analysis/13_director_psc_analysis.sql` for SQL queries analyzing directors, ownership structures, and political connections.
+
+### 9. Entity Resolution
 
 ```bash
 # Identify duplicate actors
-docker compose exec web python manage.py resolve_duplicates
+docker compose exec api python manage.py resolve_duplicates
 
 # Clear pending resolutions first
-docker compose exec web python manage.py resolve_duplicates --clear
+docker compose exec api python manage.py resolve_duplicates --clear
 
 # Dry run (preview without creating records)
-docker compose exec web python manage.py resolve_duplicates --dry-run
+docker compose exec api python manage.py resolve_duplicates --dry-run
 
 # Filter by type
-docker compose exec web python manage.py resolve_duplicates --type person
-docker compose exec web python manage.py resolve_duplicates --type organization
+docker compose exec api python manage.py resolve_duplicates --type person
+docker compose exec api python manage.py resolve_duplicates --type organization
 
 # Custom threshold (default 0.6)
-docker compose exec web python manage.py resolve_duplicates --threshold 0.7
+docker compose exec api python manage.py resolve_duplicates --threshold 0.7
 ```
 
 ## Data Quality Improvements (v3.0)
@@ -243,17 +347,11 @@ These imports are tested and working:
 | `import_mpsinterests` | TheyWorkForYou MPs' Interests | ✅ `--since YYYY` | ✅ Validated (v3.0+) |
 | `import_lordsinterests` | Parliament Data Platform | ❌ No date filter | ✅ Validated (v3.0+) |
 | `import_appc_archive` | Historical APPC PDFs | ❌ No date filter | ✅ Validated (v3.0+) |
+| `import_ministerial_meetings` | GOV.UK Transparency | ✅ `--since YYYY` | ✅ Validated (41,362 meetings, 23 depts) |
+| `import_ec` | Electoral Commission API | ❌ No date filter | ✅ Working (91,328 donations) |
+| `import_appc` | PRCA Lobbying Register | ❌ No date filter | ✅ Working (scrapes prca.global) |
 
 **\* import_twfy:** Identifier matching bug fixed 2026-01-14. Full validation pending API rate limit reset. See [IMPORT_VALIDATION_STATUS.md](IMPORT_VALIDATION_STATUS.md) for details.
-
-## Broken Imports ⛔
-
-These imports are **broken** and should not be used:
-
-| Command | Issue | Fix Required |
-|---------|-------|--------------|
-| `import_ec` | Electoral Commission CSV API defunct | Rewrite for new portal |
-| `import_appc` | appc.org.uk defunct (merged with PRCA) | Rewrite for PRCA register |
 
 ## Untested/Partial Imports ⏸️
 
@@ -275,8 +373,9 @@ These imports are incomplete or untested:
 4. ✅ **import_mpsinterests** - MPs' donations & interests (requires persons from step 1)
 5. ✅ **import_lordsinterests** - Lords' donations & interests (requires persons from step 1)
 6. ✅ **import_appc_archive** - Historical lobbying registers (creates agencies & consultancies)
-7. ⏸️ **import_ec** - Donations (currently broken)
-8. ⏸️ **import_appc** - Modern lobbying (currently broken)
+7. ✅ **import_ministerial_meetings** - GOV.UK ministerial meetings (requires persons/ministers)
+8. ⏸️ **import_ec** - Donations (currently broken)
+9. ⏸️ **import_appc** - Modern lobbying (currently broken)
 
 ## Post-Import Tasks
 
@@ -296,7 +395,7 @@ open http://localhost:8000/django-admin/datafetch/actorresolution/
 ### 2. Check Data Statistics
 
 ```bash
-docker compose exec web python manage.py shell
+docker compose exec api python manage.py shell
 ```
 
 ```python
@@ -318,7 +417,7 @@ print(f"Potential name duplicates: {dupes.count()}")
 
 ```bash
 # Check for actors without identifiers
-docker compose exec web python manage.py shell -c "
+docker compose exec api python manage.py shell -c "
 from datafetch.models import Person, Organization
 
 persons_without_ids = Person.objects.filter(identifiers__isnull=True).count()
@@ -343,7 +442,7 @@ print(f'Orgs without identifiers: {orgs_without_ids:,}')
 
 **Solution:**
 1. Wipe database: `./scripts/full_data_import.sh`
-2. Or run entity resolution: `docker compose exec web python manage.py resolve_duplicates`
+2. Or run entity resolution: `docker compose exec api python manage.py resolve_duplicates`
 
 ### Memory Issues with Large Imports
 
@@ -351,8 +450,8 @@ print(f'Orgs without identifiers: {orgs_without_ids:,}')
 
 **Solution:** Import in smaller date ranges:
 ```bash
-docker compose exec web python manage.py import_parlparse --since 2020
-docker compose exec web python manage.py import_parlparse --since 2015
+docker compose exec api python manage.py import_parlparse --since 2020
+docker compose exec api python manage.py import_parlparse --since 2015
 # etc.
 ```
 
@@ -402,10 +501,10 @@ docker compose exec web python manage.py import_parlparse --since 2015
 ```bash
 # Use --refresh sparingly (it re-downloads everything)
 # Without --refresh, cached files are used
-docker compose exec web python manage.py import_parlparse --since 2020
+docker compose exec api python manage.py import_parlparse --since 2020
 
 # Use specific date ranges instead of importing everything
-docker compose exec web python manage.py import_parlparse --since 2020
+docker compose exec api python manage.py import_parlparse --since 2020
 ```
 
 ### Database Optimization
@@ -419,8 +518,8 @@ docker compose exec db psql -U undertheinfluence -c "VACUUM ANALYZE;"
 
 ```bash
 # Process in batches by type
-docker compose exec web python manage.py resolve_duplicates --type person
-docker compose exec web python manage.py resolve_duplicates --type organization
+docker compose exec api python manage.py resolve_duplicates --type person
+docker compose exec api python manage.py resolve_duplicates --type organization
 ```
 
 ## Development
@@ -429,10 +528,10 @@ docker compose exec web python manage.py resolve_duplicates --type organization
 
 ```bash
 # Use dry-run mode to test without database changes
-docker compose exec web python manage.py resolve_duplicates --dry-run
+docker compose exec api python manage.py resolve_duplicates --dry-run
 
 # Test with small dataset first
-docker compose exec web python manage.py import_parlparse --since 2024
+docker compose exec api python manage.py import_parlparse --since 2024
 ```
 
 ### Adding New Import Scripts
