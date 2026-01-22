@@ -283,3 +283,78 @@ GROUP BY a1.agency_name, a2.agency_name
 HAVING COUNT(DISTINCT a1.person_id) > 0
 ORDER BY shared_directors DESC, a1.agency_name
 LIMIT 30;
+
+
+-- ------------------------------------------------------------
+-- 13. DIRECTORS/PSCS NAMED IN MINISTERIAL MEETINGS
+-- Finds directors whose names appear in meeting attendee records
+-- Note: Slow query due to ILIKE pattern matching
+-- ------------------------------------------------------------
+WITH directors_pscs AS (
+    SELECT DISTINCT
+        pa.name AS person_name,
+        pa.id AS person_id,
+        m.role,
+        oa.name AS company_name
+    FROM datafetch_membership m
+    JOIN datafetch_person p ON m.person_id = p.actor_ptr_id
+    JOIN datafetch_actor pa ON p.actor_ptr_id = pa.id
+    JOIN datafetch_organization o ON m.organization_id = o.actor_ptr_id
+    JOIN datafetch_actor oa ON o.actor_ptr_id = oa.id
+    WHERE m.role = 'Director' OR m.role LIKE 'Beneficial Owner%'
+)
+SELECT
+    dp.person_name,
+    dp.role,
+    dp.company_name,
+    mm.meeting_date,
+    ma.name AS minister_name,
+    LEFT(mm.purpose, 80) AS purpose
+FROM directors_pscs dp
+JOIN datafetch_ministerialmeeting mm
+    ON mm.external_actor_name_raw ILIKE '%' || dp.person_name || '%'
+JOIN datafetch_person minister ON mm.minister_id = minister.actor_ptr_id
+JOIN datafetch_actor ma ON minister.actor_ptr_id = ma.id
+WHERE LENGTH(dp.person_name) > 10  -- avoid short name false positives
+ORDER BY mm.meeting_date DESC
+LIMIT 50;
+
+
+-- ------------------------------------------------------------
+-- 14. DIRECTORS/PSCS WHO ARE DIRECT MEETING ATTENDEES
+-- Directors/PSCs recorded as Person external actors in meetings
+-- ------------------------------------------------------------
+WITH person_meetings AS (
+    SELECT
+        mm.id AS meeting_id,
+        mm.meeting_date,
+        mm.purpose,
+        mm.external_actor_id,
+        pa.name AS person_name,
+        ma.name AS minister_name
+    FROM datafetch_ministerialmeeting mm
+    JOIN datafetch_person p ON mm.external_actor_id = p.actor_ptr_id
+    JOIN datafetch_actor pa ON p.actor_ptr_id = pa.id
+    JOIN datafetch_person minister ON mm.minister_id = minister.actor_ptr_id
+    JOIN datafetch_actor ma ON minister.actor_ptr_id = ma.id
+),
+person_roles AS (
+    SELECT
+        m.person_id,
+        m.role,
+        oa.name AS company_name
+    FROM datafetch_membership m
+    JOIN datafetch_organization o ON m.organization_id = o.actor_ptr_id
+    JOIN datafetch_actor oa ON o.actor_ptr_id = oa.id
+    WHERE m.role = 'Director' OR m.role LIKE 'Beneficial Owner%'
+)
+SELECT
+    pm.person_name,
+    pr.role,
+    pr.company_name,
+    pm.meeting_date,
+    pm.minister_name,
+    LEFT(pm.purpose, 80) AS purpose
+FROM person_meetings pm
+JOIN person_roles pr ON pm.external_actor_id = pr.person_id
+ORDER BY pm.meeting_date DESC;

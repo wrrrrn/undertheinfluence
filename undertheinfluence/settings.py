@@ -248,6 +248,9 @@ SPECTACULAR_SETTINGS = {
 # TheyWorkForYou API key
 TWFY_API_KEY = config('TWFY_API_KEY', default='')
 
+# Companies House API key (for organization enrichment)
+COMPANIES_HOUSE_API_KEY = config('COMPANIES_HOUSE_API_KEY', default='')
+
 # Email addresses that error emails are sent to when DEBUG = False
 # Format: "Name <email>, Name <email>"
 ADMINS_STR = config('ADMINS', default='')
