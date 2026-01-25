@@ -1,33 +1,140 @@
 -- ============================================================================
--- PARLIAMENTARY COMMITTEE FUNDING ANALYSIS
+-- DEPARTMENT & COMMITTEE ANALYSIS
 -- ============================================================================
--- Purpose: Analyze donations to members of Select Committees and other parliamentary groups
--- Focus: Committee membership influence analysis
--- Date: 2026-01-19
+-- Purpose: Analyze influence across government departments and parliamentary committees
+-- Focus: Funding, meetings, and attendees by department; committee member funding
+-- Date: 2026-01-22
 -- Database: PostgreSQL
 -- ============================================================================
 
--- TODO: APPG (All-Party Parliamentary Group) Membership Data
+
 -- ============================================================================
--- Currently APPGs exist in the database (63 APPGs) but have ZERO membership records.
--- We need to create an import_appg.py command to fetch membership data from:
--- https://www.parliament.uk/mps-lords-and-offices/standards-and-financial-interests/parliamentary-commissioner-for-standards/registers-of-interests/register-of-all-party-parliamentary-groups/
---
--- Once APPG memberships are imported, add queries similar to the committee
--- queries below to analyze:
--- - Donations to APPG members by APPG topic (e.g., Financial Markets, China, etc.)
--- - Top donors to APPGs focused on specific industries
--- - Overlap between committee and APPG memberships
--- - APPG member funding vs non-member funding
+-- SECTION 1: DEPARTMENT-LEVEL OVERVIEW
 -- ============================================================================
+
+-- 1.1 All Departments - Meetings, Attendees, and Minister Funding
+WITH dept_meetings AS (
+    SELECT
+        department_id,
+        COUNT(*) as meeting_count,
+        COUNT(DISTINCT minister_id) as ministers_with_meetings,
+        COUNT(DISTINCT external_actor_id) as unique_orgs
+    FROM datafetch_ministerialmeeting
+    GROUP BY department_id
+),
+dept_attendees AS (
+    SELECT
+        mm.department_id,
+        COUNT(DISTINCT ma.id) as total_attendees,
+        COUNT(DISTINCT ma.actor_id) as unique_attendee_orgs
+    FROM datafetch_meetingattendee ma
+    JOIN datafetch_ministerialmeeting mm ON mm.id = ma.meeting_id
+    GROUP BY mm.department_id
+),
+dept_ministers AS (
+    SELECT
+        m.organization_id as dept_id,
+        m.person_id
+    FROM datafetch_membership m
+    WHERE m.role IS NOT NULL
+      AND m.role != ''
+      AND m.role NOT LIKE '%Member of Parliament%'
+      AND m.role NOT LIKE '%MSP for%'
+),
+dept_funding AS (
+    SELECT
+        dm.dept_id,
+        COUNT(*) as donation_count,
+        SUM(d.value) as total_received,
+        COUNT(DISTINCT d.donor_id) as unique_donors
+    FROM dept_ministers dm
+    JOIN datafetch_donation d ON d.recipient_id = dm.person_id
+    WHERE d.value > 0
+    GROUP BY dm.dept_id
+)
+SELECT
+    dept.name as department,
+    COALESCE(dm.meeting_count, 0) as meetings,
+    COALESCE(da.total_attendees, 0) as total_attendees,
+    COALESCE(da.unique_attendee_orgs, 0) as unique_attendee_orgs,
+    COALESCE(df.donation_count, 0) as donations_to_ministers,
+    COALESCE(df.total_received, 0) as total_minister_funding,
+    COALESCE(df.unique_donors, 0) as unique_donors
+FROM datafetch_actor dept
+WHERE dept.id IN (
+    SELECT DISTINCT department_id FROM datafetch_ministerialmeeting
+    UNION
+    SELECT DISTINCT organization_id FROM datafetch_membership
+    WHERE role IS NOT NULL AND role != ''
+)
+LEFT JOIN dept_meetings dm ON dm.department_id = dept.id
+LEFT JOIN dept_attendees da ON da.department_id = dept.id
+LEFT JOIN dept_funding df ON df.dept_id = dept.id
+WHERE COALESCE(dm.meeting_count, 0) > 0 OR COALESCE(df.donation_count, 0) > 0
+ORDER BY COALESCE(dm.meeting_count, 0) DESC;
+
+-- 1.2 Top Organizations by Department Access (Meetings)
+-- Which organizations have the most access to each department?
+SELECT
+    dept.name as department,
+    org.name as organization,
+    COUNT(*) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers_met
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor dept ON mm.department_id = dept.id
+JOIN datafetch_actor org ON mm.external_actor_id = org.id
+GROUP BY dept.name, org.name
+HAVING COUNT(*) >= 3
+ORDER BY dept.name, meetings DESC;
+
+-- 1.3 Meeting Attendees by Department
+-- Which organizations attend meetings at each department?
+SELECT
+    dept.name as department,
+    org.name as attendee_organization,
+    COUNT(*) as attendance_count,
+    COUNT(DISTINCT mm.id) as distinct_meetings
+FROM datafetch_meetingattendee ma
+JOIN datafetch_ministerialmeeting mm ON mm.id = ma.meeting_id
+JOIN datafetch_actor dept ON mm.department_id = dept.id
+JOIN datafetch_actor org ON ma.actor_id = org.id
+GROUP BY dept.name, org.name
+HAVING COUNT(*) >= 2
+ORDER BY dept.name, attendance_count DESC;
+
+-- 1.4 Department Deep Dive Template (DSIT as example)
+-- Detailed breakdown for a specific department
+WITH dsit_dept AS (
+    SELECT id FROM datafetch_actor
+    WHERE name LIKE '%Science, Innovation and Technology%'
+       OR name LIKE '%DSIT%'
+       OR name LIKE '%Digital%Culture%'
+    LIMIT 1
+)
+SELECT
+    org.name as organization,
+    COUNT(DISTINCT mm.id) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers_met,
+    (
+        SELECT COUNT(*)
+        FROM datafetch_meetingattendee ma2
+        JOIN datafetch_ministerialmeeting mm2 ON mm2.id = ma2.meeting_id
+        WHERE ma2.actor_id = org.id AND mm2.department_id IN (SELECT id FROM dsit_dept)
+    ) as attendee_appearances,
+    STRING_AGG(DISTINCT SUBSTRING(mm.purpose, 1, 50), '; ') as sample_topics
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor org ON mm.external_actor_id = org.id
+WHERE mm.department_id IN (SELECT id FROM dsit_dept)
+GROUP BY org.id, org.name
+ORDER BY meetings DESC
+LIMIT 30;
 
 
 -- ============================================================================
--- SECTION 1: SELECT COMMITTEE OVERVIEW
+-- SECTION 2: SELECT COMMITTEE OVERVIEW
 -- ============================================================================
 
--- 1.1 Committee Membership Statistics
--- Shows which committees have the most members
+-- 2.1 Committee Membership Statistics
 SELECT
   org.id AS committee_id,
   MAX(org.name) AS committee_name,
@@ -42,8 +149,7 @@ GROUP BY org.id
 ORDER BY member_count DESC
 LIMIT 30;
 
-
--- 1.2 All Committees with Member Counts and Donation Totals
+-- 2.2 All Committees with Member Counts and Donation Totals
 WITH committee_members AS (
   SELECT
     m.organization_id AS committee_id,
@@ -77,11 +183,10 @@ ORDER BY total_donations_to_members DESC;
 
 
 -- ============================================================================
--- SECTION 2: DEPARTMENTAL SELECT COMMITTEES
+-- SECTION 3: DEPARTMENTAL SELECT COMMITTEES
 -- ============================================================================
--- Focus on the main departmental select committees that scrutinize government
 
--- 2.1 Major Departmental Select Committees - Member Funding
+-- 3.1 Major Departmental Select Committees - Member Funding
 WITH major_committees AS (
   SELECT id, name
   FROM datafetch_actor
@@ -137,9 +242,7 @@ JOIN datafetch_actor person ON person.id = md.person_id
 GROUP BY committee.name, person.id
 ORDER BY committee.name, total_received DESC;
 
-
--- 2.2 Committee Chairs - Funding Analysis
--- Committee chairs often have significant influence
+-- 3.2 Committee Chairs - Funding Analysis
 WITH committee_chairs AS (
   SELECT
     m.organization_id AS committee_id,
@@ -170,9 +273,7 @@ SELECT
   COUNT(*) AS donation_count,
   SUM(cd.value) AS total_received,
   COUNT(DISTINCT cd.donor_id) AS distinct_donors,
-  ROUND(AVG(cd.value), 2) AS avg_donation,
-  MIN(cd.received_date) AS first_donation,
-  MAX(cd.received_date) AS latest_donation
+  ROUND(AVG(cd.value), 2) AS avg_donation
 FROM chair_donations cd
 JOIN datafetch_actor committee ON committee.id = cd.committee_id
 JOIN datafetch_actor person ON person.id = cd.person_id
@@ -181,11 +282,10 @@ ORDER BY total_received DESC;
 
 
 -- ============================================================================
--- SECTION 3: INDUSTRY-SPECIFIC COMMITTEE ANALYSIS
+-- SECTION 4: INDUSTRY-SPECIFIC COMMITTEE ANALYSIS
 -- ============================================================================
--- Analyze funding patterns for committees that oversee specific industries
 
--- 3.1 Financial Services - Treasury Committee
+-- 4.1 Financial Services - Treasury Committee
 WITH treasury_committee AS (
   SELECT id FROM datafetch_actor
   WHERE name LIKE '%Treasury Committee%'
@@ -226,8 +326,7 @@ LEFT JOIN datafetch_organization org ON org.actor_ptr_id = donor.id
 GROUP BY donor.id, recipient.id
 ORDER BY total_donated DESC;
 
-
--- 3.2 Agriculture - DEFRA Committee
+-- 4.2 Agriculture - DEFRA Committee
 WITH defra_committee AS (
   SELECT id FROM datafetch_actor
   WHERE name LIKE '%Environment, Food and Rural Affairs Committee%'
@@ -269,11 +368,10 @@ ORDER BY total_donated DESC;
 
 
 -- ============================================================================
--- SECTION 4: COMMITTEE MEMBER VS NON-MEMBER COMPARISON
+-- SECTION 5: COMMITTEE MEMBER VS NON-MEMBER COMPARISON
 -- ============================================================================
 
--- 4.1 Do Committee Members Receive More Funding?
--- Compare donation patterns for committee members vs non-members
+-- 5.1 Do Committee Members Receive More Funding?
 WITH committee_members AS (
   SELECT DISTINCT m.person_id
   FROM datafetch_membership m
@@ -309,9 +407,7 @@ FROM mp_donations
 GROUP BY mp_category
 ORDER BY total_received DESC;
 
-
--- 4.2 Top Donors to Committee Members
--- Who funds MPs serving on committees?
+-- 5.2 Top Donors to Committee Members
 WITH committee_members AS (
   SELECT DISTINCT m.person_id
   FROM datafetch_membership m
@@ -347,10 +443,10 @@ LIMIT 50;
 
 
 -- ============================================================================
--- SECTION 5: CROSS-COMMITTEE ANALYSIS
+-- SECTION 6: CROSS-COMMITTEE & MINISTERIAL ANALYSIS
 -- ============================================================================
 
--- 5.1 MPs Serving on Multiple Committees - Funding Analysis
+-- 6.1 MPs Serving on Multiple Committees - Funding Analysis
 WITH mp_committee_counts AS (
   SELECT
     m.person_id,
@@ -389,9 +485,7 @@ GROUP BY person.id, md.committee_count, md.donation_count, md.total_received, md
 ORDER BY total_received DESC
 LIMIT 30;
 
-
--- 5.2 Committee Overlap with Ministerial Roles
--- MPs who serve on committees AND hold ministerial positions
+-- 6.2 Committee Overlap with Ministerial Roles
 WITH committee_members AS (
   SELECT DISTINCT
     m.person_id,
@@ -448,10 +542,10 @@ LIMIT 30;
 
 
 -- ============================================================================
--- SECTION 6: SUMMARY STATISTICS
+-- SECTION 7: SUMMARY STATISTICS
 -- ============================================================================
 
--- 6.1 Overall Committee Funding Summary
+-- 7.1 Overall Committee Funding Summary
 WITH committee_stats AS (
   SELECT
     COUNT(DISTINCT org.id) AS total_committees,
@@ -495,7 +589,28 @@ SELECT
   ROUND(AVG(total_received), 2)::text
 FROM committee_member_donations;
 
+-- 7.2 Department Meeting Summary
+SELECT
+    'Total Departments with Meetings' as metric,
+    COUNT(DISTINCT department_id)::text as value
+FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT
+    'Total Meetings',
+    COUNT(*)::text
+FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT
+    'Total Meeting Attendees',
+    COUNT(*)::text
+FROM datafetch_meetingattendee
+UNION ALL
+SELECT
+    'Unique Attendee Organizations',
+    COUNT(DISTINCT actor_id)::text
+FROM datafetch_meetingattendee;
+
 
 -- ============================================================================
--- END OF PARLIAMENTARY COMMITTEE FUNDING ANALYSIS
+-- END OF DEPARTMENT & COMMITTEE ANALYSIS
 -- ============================================================================

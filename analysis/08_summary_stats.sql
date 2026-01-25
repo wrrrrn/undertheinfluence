@@ -2,8 +2,8 @@
 -- SUMMARY STATISTICS & DATA QUALITY
 -- ============================================================================
 -- Purpose: Database overview, data quality checks, and aggregate statistics
--- Focus: Record counts, date ranges, null analysis, classification stats
--- Date: 2026-01-19
+-- Focus: Record counts, date ranges, null analysis, classification stats, meetings
+-- Date: 2026-01-22
 -- Database: PostgreSQL
 -- ============================================================================
 
@@ -121,6 +121,148 @@ ORDER BY year DESC;
 -- ============================================================================
 -- END OF QUERY SUITE
 -- ============================================================================
+
+-- ============================================================================
+-- SECTION 10: MINISTERIAL MEETINGS OVERVIEW
+-- ============================================================================
+
+-- 10.1 Meetings Summary Statistics
+SELECT 'Total Ministerial Meetings' AS metric, COUNT(*) AS count FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT 'Unique Ministers', COUNT(DISTINCT minister_id) FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT 'Unique External Actors', COUNT(DISTINCT external_actor_id) FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT 'Departments Covered', COUNT(DISTINCT department_id) FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT 'Roundtable Meetings', COUNT(*) FROM datafetch_ministerialmeeting WHERE is_roundtable = true
+UNION ALL
+SELECT 'Total Meeting Attendees', COUNT(*) FROM datafetch_meetingattendee
+UNION ALL
+SELECT 'Unique Attendee Organizations', COUNT(DISTINCT actor_id) FROM datafetch_meetingattendee;
+
+
+-- 10.2 Meetings by Department
+SELECT
+    d.name as department,
+    COUNT(*) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers,
+    COUNT(DISTINCT mm.external_actor_id) as external_actors
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor d ON mm.department_id = d.id
+GROUP BY d.name
+ORDER BY meetings DESC;
+
+
+-- 10.3 Meeting Date Coverage
+SELECT
+    'Earliest Meeting' AS metric,
+    MIN(meeting_date)::text AS value
+FROM datafetch_ministerialmeeting
+WHERE meeting_date IS NOT NULL
+UNION ALL
+SELECT
+    'Latest Meeting',
+    MAX(meeting_date)::text
+FROM datafetch_ministerialmeeting
+WHERE meeting_date IS NOT NULL;
+
+
+-- 10.4 Attendee Distribution Analysis
+SELECT
+    CASE
+        WHEN attendee_count = 1 THEN '1 attendee'
+        WHEN attendee_count BETWEEN 2 AND 3 THEN '2-3 attendees'
+        WHEN attendee_count BETWEEN 4 AND 5 THEN '4-5 attendees'
+        WHEN attendee_count BETWEEN 6 AND 10 THEN '6-10 attendees'
+        ELSE '10+ attendees'
+    END AS attendee_group,
+    COUNT(*) AS meeting_count
+FROM (
+    SELECT
+        mm.id,
+        COUNT(ma.id) AS attendee_count
+    FROM datafetch_ministerialmeeting mm
+    LEFT JOIN datafetch_meetingattendee ma ON ma.meeting_id = mm.id
+    GROUP BY mm.id
+) subq
+GROUP BY attendee_group
+ORDER BY
+    CASE attendee_group
+        WHEN '1 attendee' THEN 1
+        WHEN '2-3 attendees' THEN 2
+        WHEN '4-5 attendees' THEN 3
+        WHEN '6-10 attendees' THEN 4
+        ELSE 5
+    END;
+
+
+-- ============================================================================
+-- SECTION 11: CROSS-DATASET INFLUENCE OVERVIEW
+-- ============================================================================
+
+-- 11.1 Full Database Influence Summary
+SELECT
+    'Organizations with meetings' as category,
+    COUNT(DISTINCT external_actor_id)::text as count
+FROM datafetch_ministerialmeeting
+UNION ALL
+SELECT
+    'Organizations with lobbying clients',
+    COUNT(DISTINCT client_id)::text
+FROM datafetch_consultancy
+UNION ALL
+SELECT
+    'Organizations as donors',
+    COUNT(DISTINCT donor_id)::text
+FROM datafetch_donation WHERE donor_id IS NOT NULL AND value > 0
+UNION ALL
+SELECT
+    'Organizations using ALL channels',
+    COUNT(*)::text
+FROM (
+    SELECT DISTINCT client_id as org_id FROM datafetch_consultancy
+    INTERSECT
+    SELECT DISTINCT donor_id FROM datafetch_donation WHERE value > 1000
+    INTERSECT
+    SELECT DISTINCT external_actor_id FROM datafetch_ministerialmeeting
+) all_three;
+
+
+-- 11.2 Top 10 Most Influential Organizations (All Channels)
+WITH org_meetings AS (
+    SELECT external_actor_id as org_id, COUNT(*) as meetings
+    FROM datafetch_ministerialmeeting
+    GROUP BY external_actor_id
+),
+org_lobbying AS (
+    SELECT client_id as org_id, COUNT(DISTINCT agency_id) as agencies
+    FROM datafetch_consultancy
+    GROUP BY client_id
+),
+org_donations AS (
+    SELECT donor_id as org_id, SUM(value) as total_donated
+    FROM datafetch_donation
+    WHERE value > 0
+    GROUP BY donor_id
+)
+SELECT
+    a.name as organization,
+    COALESCE(om.meetings, 0) as meetings,
+    COALESCE(ol.agencies, 0) as lobbying_agencies,
+    COALESCE(od.total_donated, 0) as total_donated
+FROM datafetch_actor a
+LEFT JOIN org_meetings om ON om.org_id = a.id
+LEFT JOIN org_lobbying ol ON ol.org_id = a.id
+LEFT JOIN org_donations od ON od.org_id = a.id
+WHERE (om.meetings > 0 OR ol.agencies > 0 OR od.total_donated > 0)
+ORDER BY
+    (CASE WHEN om.meetings > 0 THEN 1 ELSE 0 END +
+     CASE WHEN ol.agencies > 0 THEN 1 ELSE 0 END +
+     CASE WHEN od.total_donated > 0 THEN 1 ELSE 0 END) DESC,
+    COALESCE(od.total_donated, 0) DESC
+LIMIT 10;
+
 
 -- ============================================================================
 -- END OF SUMMARY STATISTICS & DATA QUALITY

@@ -1,9 +1,9 @@
 -- ============================================================================
--- SECTOR & INDUSTRY FUNDING ANALYSIS
+-- SECTOR & INDUSTRY INFLUENCE ANALYSIS
 -- ============================================================================
--- Purpose: Analyze donations by industry sector - who is lobbying whom in specific sectors
+-- Purpose: Analyze influence by industry sector - donations, meetings, and lobbying
 -- Focus: Agriculture, Finance, Energy, Technology, Healthcare, etc.
--- Date: 2026-01-19
+-- Date: 2026-01-22
 -- Database: PostgreSQL
 -- ============================================================================
 
@@ -1084,5 +1084,249 @@ WHERE d.value > 0
 GROUP BY donor.id
 ORDER BY total_donated DESC
 LIMIT 30;
+
+
+-- ============================================================================
+-- SECTION 16: MINISTERIAL MEETINGS BY SECTOR
+-- ============================================================================
+
+-- 16.1 Ministerial Meetings by Inferred Sector
+-- Categorize meeting actors into industry sectors
+WITH meeting_sectors AS (
+  SELECT
+    mm.id as meeting_id,
+    a.id as org_id,
+    a.name as org_name,
+    CASE
+      -- Financial Services
+      WHEN LOWER(a.name) LIKE '%bank%' OR LOWER(a.name) LIKE '%financial%'
+        OR LOWER(a.name) LIKE '%investment%' OR LOWER(a.name) LIKE '%insurance%'
+        OR LOWER(a.name) LIKE '%capital%' THEN 'Financial Services'
+
+      -- Technology & Telecom
+      WHEN LOWER(a.name) IN ('google', 'meta', 'microsoft', 'amazon', 'apple', 'openai', 'x', 'tiktok')
+        OR LOWER(a.name) LIKE '%tech%' OR LOWER(a.name) LIKE '%software%'
+        OR LOWER(a.name) LIKE '%digital%' OR LOWER(a.name) LIKE '%data%'
+        OR LOWER(a.name) LIKE '%telecom%' THEN 'Technology & Telecom'
+
+      -- Energy & Utilities
+      WHEN LOWER(a.name) LIKE '%energy%' OR LOWER(a.name) LIKE '%power%'
+        OR LOWER(a.name) LIKE '%electric%' OR LOWER(a.name) LIKE '%gas%'
+        OR LOWER(a.name) LIKE '%oil%' OR LOWER(a.name) LIKE '%renewable%' THEN 'Energy & Utilities'
+
+      -- Healthcare & Pharmaceuticals
+      WHEN LOWER(a.name) LIKE '%health%' OR LOWER(a.name) LIKE '%medical%'
+        OR LOWER(a.name) LIKE '%pharma%' OR LOWER(a.name) LIKE '%hospital%'
+        OR LOWER(a.name) LIKE '%nhs%' THEN 'Healthcare & Pharma'
+
+      -- Transport & Logistics
+      WHEN LOWER(a.name) LIKE '%transport%' OR LOWER(a.name) LIKE '%aviation%'
+        OR LOWER(a.name) LIKE '%airline%' OR LOWER(a.name) LIKE '%rail%'
+        OR LOWER(a.name) LIKE '%shipping%' THEN 'Transport & Logistics'
+
+      -- Defence & Aerospace
+      WHEN LOWER(a.name) LIKE '%defence%' OR LOWER(a.name) LIKE '%defense%'
+        OR LOWER(a.name) LIKE '%aerospace%' OR LOWER(a.name) LIKE '%military%'
+        OR LOWER(a.name) LIKE '%bae%' THEN 'Defence & Aerospace'
+
+      -- Real Estate & Construction
+      WHEN LOWER(a.name) LIKE '%property%' OR LOWER(a.name) LIKE '%construction%'
+        OR LOWER(a.name) LIKE '%building%' OR LOWER(a.name) LIKE '%housing%' THEN 'Real Estate & Construction'
+
+      -- Agriculture & Food
+      WHEN LOWER(a.name) LIKE '%farm%' OR LOWER(a.name) LIKE '%agricult%'
+        OR LOWER(a.name) LIKE '%food%' THEN 'Agriculture & Food'
+
+      -- Trade Unions
+      WHEN o.classification ILIKE '%union%' THEN 'Trade Unions'
+
+      -- Trade Associations
+      WHEN LOWER(a.name) LIKE '%association%' OR LOWER(a.name) LIKE '%federation%'
+        OR LOWER(a.name) LIKE '%council%' OR LOWER(a.name) LIKE '%institute%' THEN 'Trade Association'
+
+      ELSE 'Other'
+    END AS sector
+  FROM datafetch_ministerialmeeting mm
+  JOIN datafetch_actor a ON mm.external_actor_id = a.id
+  LEFT JOIN datafetch_organization o ON o.actor_ptr_id = a.id
+)
+SELECT
+  sector,
+  COUNT(*) as meetings,
+  COUNT(DISTINCT org_id) as unique_organizations,
+  STRING_AGG(DISTINCT org_name, ', ') FILTER (WHERE org_name IS NOT NULL) as sample_organizations
+FROM meeting_sectors
+GROUP BY sector
+ORDER BY meetings DESC;
+
+-- 16.2 Meeting Attendees by Sector
+-- Which sectors are represented in meeting attendee lists?
+WITH attendee_sectors AS (
+  SELECT
+    ma.id as attendee_id,
+    a.id as org_id,
+    a.name as org_name,
+    CASE
+      WHEN LOWER(a.name) LIKE '%bank%' OR LOWER(a.name) LIKE '%financial%'
+        OR LOWER(a.name) LIKE '%investment%' THEN 'Financial Services'
+      WHEN LOWER(a.name) IN ('google', 'meta', 'microsoft', 'amazon', 'apple', 'openai')
+        OR LOWER(a.name) LIKE '%tech%' OR LOWER(a.name) LIKE '%software%' THEN 'Technology'
+      WHEN LOWER(a.name) LIKE '%energy%' OR LOWER(a.name) LIKE '%power%'
+        OR LOWER(a.name) LIKE '%oil%' THEN 'Energy'
+      WHEN LOWER(a.name) LIKE '%health%' OR LOWER(a.name) LIKE '%pharma%' THEN 'Healthcare'
+      WHEN LOWER(a.name) LIKE '%transport%' OR LOWER(a.name) LIKE '%airline%' THEN 'Transport'
+      WHEN o.classification ILIKE '%union%' THEN 'Trade Unions'
+      ELSE 'Other'
+    END AS sector
+  FROM datafetch_meetingattendee ma
+  JOIN datafetch_actor a ON ma.actor_id = a.id
+  LEFT JOIN datafetch_organization o ON o.actor_ptr_id = a.id
+)
+SELECT
+  sector,
+  COUNT(*) as attendee_appearances,
+  COUNT(DISTINCT org_id) as unique_organizations
+FROM attendee_sectors
+GROUP BY sector
+ORDER BY attendee_appearances DESC;
+
+-- 16.3 Tech Sector - Full Ministerial Access Analysis
+SELECT
+    a.name as organization,
+    COUNT(DISTINCT mm.id) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers_met,
+    COUNT(DISTINCT mm.department_id) as departments,
+    (
+        SELECT COUNT(*)
+        FROM datafetch_meetingattendee ma2
+        WHERE ma2.actor_id = a.id
+    ) as attendee_appearances
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor a ON mm.external_actor_id = a.id
+WHERE LOWER(a.name) IN ('google', 'meta', 'microsoft', 'amazon', 'apple', 'openai', 'x', 'tiktok', 'uber')
+   OR LOWER(a.name) LIKE '%tech%'
+   OR LOWER(a.name) LIKE '%software%'
+GROUP BY a.id, a.name
+HAVING COUNT(*) >= 2
+ORDER BY meetings DESC
+LIMIT 30;
+
+-- 16.4 Energy Sector - Full Ministerial Access Analysis
+SELECT
+    a.name as organization,
+    COUNT(DISTINCT mm.id) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers_met,
+    COUNT(DISTINCT mm.department_id) as departments,
+    (
+        SELECT COUNT(*)
+        FROM datafetch_meetingattendee ma2
+        WHERE ma2.actor_id = a.id
+    ) as attendee_appearances
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor a ON mm.external_actor_id = a.id
+WHERE LOWER(a.name) LIKE '%energy%'
+   OR LOWER(a.name) LIKE '%power%'
+   OR LOWER(a.name) LIKE '%oil%'
+   OR LOWER(a.name) LIKE '%gas%'
+   OR LOWER(a.name) LIKE '%renewable%'
+   OR LOWER(a.name) LIKE '%electric%'
+GROUP BY a.id, a.name
+HAVING COUNT(*) >= 2
+ORDER BY meetings DESC
+LIMIT 30;
+
+
+-- ============================================================================
+-- SECTION 17: COMBINED SECTOR INFLUENCE (Donations + Meetings)
+-- ============================================================================
+
+-- 17.1 Sector Influence Summary - Donations AND Meetings Combined
+WITH donation_by_sector AS (
+  SELECT
+    CASE
+      WHEN LOWER(donor.name) LIKE '%bank%' OR LOWER(donor.name) LIKE '%financial%' THEN 'Financial Services'
+      WHEN LOWER(donor.name) LIKE '%tech%' OR LOWER(donor.name) LIKE '%software%' THEN 'Technology'
+      WHEN LOWER(donor.name) LIKE '%energy%' OR LOWER(donor.name) LIKE '%power%' THEN 'Energy'
+      WHEN LOWER(donor.name) LIKE '%health%' OR LOWER(donor.name) LIKE '%pharma%' THEN 'Healthcare'
+      WHEN o.classification ILIKE '%union%' THEN 'Trade Unions'
+      ELSE 'Other'
+    END AS sector,
+    SUM(d.value) as total_donated,
+    COUNT(*) as donation_count,
+    COUNT(DISTINCT d.donor_id) as unique_donors
+  FROM datafetch_donation d
+  JOIN datafetch_actor donor ON d.donor_id = donor.id
+  LEFT JOIN datafetch_organization o ON o.actor_ptr_id = donor.id
+  WHERE d.value > 0
+  GROUP BY sector
+),
+meetings_by_sector AS (
+  SELECT
+    CASE
+      WHEN LOWER(a.name) LIKE '%bank%' OR LOWER(a.name) LIKE '%financial%' THEN 'Financial Services'
+      WHEN LOWER(a.name) IN ('google', 'meta', 'microsoft', 'amazon', 'apple', 'openai')
+        OR LOWER(a.name) LIKE '%tech%' THEN 'Technology'
+      WHEN LOWER(a.name) LIKE '%energy%' OR LOWER(a.name) LIKE '%power%' THEN 'Energy'
+      WHEN LOWER(a.name) LIKE '%health%' OR LOWER(a.name) LIKE '%pharma%' THEN 'Healthcare'
+      WHEN o.classification ILIKE '%union%' THEN 'Trade Unions'
+      ELSE 'Other'
+    END AS sector,
+    COUNT(*) as meeting_count,
+    COUNT(DISTINCT mm.external_actor_id) as unique_orgs_met
+  FROM datafetch_ministerialmeeting mm
+  JOIN datafetch_actor a ON mm.external_actor_id = a.id
+  LEFT JOIN datafetch_organization o ON o.actor_ptr_id = a.id
+  GROUP BY sector
+)
+SELECT
+  COALESCE(d.sector, m.sector) as sector,
+  COALESCE(d.total_donated, 0) as total_donated,
+  COALESCE(d.donation_count, 0) as donations,
+  COALESCE(d.unique_donors, 0) as unique_donors,
+  COALESCE(m.meeting_count, 0) as meetings,
+  COALESCE(m.unique_orgs_met, 0) as unique_orgs_met
+FROM donation_by_sector d
+FULL OUTER JOIN meetings_by_sector m ON d.sector = m.sector
+ORDER BY COALESCE(d.total_donated, 0) DESC;
+
+-- 17.2 Top Organizations by Sector with BOTH Donations and Meetings
+WITH org_donations AS (
+  SELECT
+    donor_id as org_id,
+    SUM(value) as total_donated,
+    COUNT(*) as donation_count
+  FROM datafetch_donation
+  WHERE value > 0
+  GROUP BY donor_id
+),
+org_meetings AS (
+  SELECT
+    external_actor_id as org_id,
+    COUNT(*) as meeting_count,
+    COUNT(DISTINCT minister_id) as ministers_met
+  FROM datafetch_ministerialmeeting
+  GROUP BY external_actor_id
+)
+SELECT
+  a.name as organization,
+  CASE
+    WHEN LOWER(a.name) LIKE '%bank%' OR LOWER(a.name) LIKE '%financial%' THEN 'Financial Services'
+    WHEN LOWER(a.name) IN ('google', 'meta', 'microsoft', 'amazon', 'apple')
+      OR LOWER(a.name) LIKE '%tech%' THEN 'Technology'
+    WHEN LOWER(a.name) LIKE '%energy%' THEN 'Energy'
+    WHEN o.classification ILIKE '%union%' THEN 'Trade Unions'
+    ELSE 'Other'
+  END as sector,
+  COALESCE(od.total_donated, 0) as total_donated,
+  COALESCE(od.donation_count, 0) as donations,
+  COALESCE(om.meeting_count, 0) as meetings,
+  COALESCE(om.ministers_met, 0) as ministers_met
+FROM datafetch_actor a
+LEFT JOIN datafetch_organization o ON o.actor_ptr_id = a.id
+LEFT JOIN org_donations od ON od.org_id = a.id
+LEFT JOIN org_meetings om ON om.org_id = a.id
+WHERE (od.total_donated > 0 AND om.meeting_count > 0)
+ORDER BY od.total_donated DESC
+LIMIT 50;
 
 
