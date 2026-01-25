@@ -375,7 +375,7 @@ These imports are incomplete or untested:
 6. ✅ **import_appc_archive** - Historical lobbying registers (creates agencies & consultancies)
 7. ✅ **import_ministerial_meetings** - GOV.UK ministerial meetings (requires persons/ministers)
 8. ⏸️ **import_ec** - Donations (currently broken)
-9. ⏸️ **import_appc** - Modern lobbying (currently broken)
+9. ✅ **import_appc** - Modern lobbying (PRCA current register)
 
 ## Post-Import Tasks
 
@@ -489,10 +489,10 @@ docker compose exec api python manage.py import_parlparse --since 2015
 - **Status:** ⛔ Old CSV API defunct
 - **Fix Required:** Rewrite for new data portal
 
-### APPC Register (BROKEN)
-- **URL:** https://appc.org.uk/
-- **Status:** ⛔ Site defunct (merged with PRCA in 2018)
-- **Fix Required:** Rewrite for PRCA register
+### PRCA Lobbying Register
+- **URL:** https://www.prca.global/professional-lobbying-register
+- **Status:** ✅ Working (scrapes the current live register)
+- **Historical Data:** Use `import_appc_archive` for data from 2019-2025.
 
 ## Performance Tips
 

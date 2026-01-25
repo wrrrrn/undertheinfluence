@@ -530,12 +530,12 @@ Docker Compose automatically configures these for local development.
 
 ### Data Quality
 - **167,967 total data quality issues** identified (see `docs/DATA_QUALITY_REPORT.md`)
-  - 28,516 duplicate donations (fixable automatically)
-  - 637 orphaned donations
+  - 28,516 duplicate donations (fixed)
+  - 637 orphaned donations (fixed/reviewed)
   - 76 invalid donation dates
   - 116,542 memberships missing start_date (77.6%)
-- **Automated cleanup ready**: `clean_data --fix=all` command exists
-- **Manual review needed**: Invalid dates, orphaned donations with values
+- **Automated cleanup complete**: Phase 1 cleanup executed using `clean_data` and `cleanup_lobby_employees`
+- **Results documented**: See `docs/DATA_CLEANUP_RESULTS.md` for full metrics
 
 ### Import Commands
 - **Electoral Commission** (`import_ec`): CSV API endpoint changed, needs update
@@ -567,10 +567,10 @@ Docker Compose automatically configures these for local development.
    - `/api/v2/politicians/` endpoint
    - Basic server-rendered directory
    - Group by government/opposition → party
-2. **Data Quality Cleanup**
-   - Run automated cleanup (`clean_data --fix=all`)
-   - Manual review of invalid dates
-   - Document cleanup results
+2. **Data Quality Cleanup (Phase 1)**
+   - ✅ Run automated cleanup (`clean_data --fix=all`)
+   - ✅ Manual review of invalid dates
+   - ✅ Document cleanup results (`docs/DATA_CLEANUP_RESULTS.md`)
 
 ### Short-Term (This Month)
 3. **Network Visualization**

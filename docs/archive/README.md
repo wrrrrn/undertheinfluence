@@ -71,6 +71,13 @@ These archived documents reflect the **planning phase** (January 14-15, 2026) be
 - **Why Archived**: Point-in-time status, superseded by `data-import-testing.md`
 - **Still Useful For**: Historical validation results
 
+### Ministerial Meetings (January 2026)
+
+**MINISTERIAL_MEETINGS_IMPORT_SPEC.md**
+- Planning/specification document for ministerial meetings import
+- **Why Archived**: Implementation complete, superseded by `MINISTERIAL_MEETINGS_PHASE3_COMPLETE.md`
+- **Still Useful For**: Original planning and requirements analysis
+
 ---
 
 ## What Replaced These?
@@ -99,4 +106,6 @@ These archived documents reflect the **planning phase** (January 14-15, 2026) be
 
 ---
 
-**Archive Maintenance**: These documents are frozen as of January 19, 2026. They will not be updated going forward.
+**Archive Maintenance**: These documents are frozen. Last archive update: January 22, 2026.
+
+**Note**: `GUARDIAN_TECH_LOBBYING_ANALYSIS.md` was moved to `analysis/` (not archived) as it remains useful reference material for ministerial meetings analysis.
