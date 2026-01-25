@@ -31,7 +31,14 @@ import logging
 from datafetch import models, helpers
 from datafetch.services.ministerial_meetings_parser import MinisterialMeetingsParser
 from datafetch.services.gov_uk_scraper import GovUkScraper
+from datafetch.services.entity_resolution import EntityResolutionService
 from datafetch.utils.entity_matcher import EntityMatcher
+from datafetch.utils.data_cleanup import (
+    NameSplitter,
+    ActorClassifier,
+    EventDescriptionParser,
+)
+from datafetch.utils.normalization import normalize_actor_name
 from datafetch.management.commands.department_config import DEPARTMENTS, get_department_by_name
 
 logger = logging.getLogger(__name__)
@@ -236,26 +243,15 @@ class Command(BaseCommand):
                     skipped_count += 1
                     continue
 
-                # Match external actor (create if missing)
-                # For very large roundtables (20+ attendees), external_actor may be None
-                # In that case, we still create the meeting but rely on MeetingAttendee
-                # to track individual attendees
-                external_actor = matcher.match_external_actor(
-                    meeting_data['external_actor'],
-                    create_if_missing=True
-                )
-
-                # external_actor can be None for very large roundtables - that's OK
-                # The meeting will still be created with the raw name preserved
-
                 # Create meeting record
+                # Note: organisation_met_raw preserves the exact text from the CSV
+                # MeetingAttendee records (created below) handle entity resolution
                 meeting_dict = {
                     'minister': minister,
-                    'external_actor': external_actor,
                     'department': department,
                     'meeting_date': meeting_data['date'],
                     'purpose': meeting_data['purpose'],
-                    'external_actor_name_raw': meeting_data['external_actor'],
+                    'organisation_met_raw': meeting_data['external_actor'],
                     'source_url': source_url,
                     'source_quarter': source_quarter,
                 }
@@ -263,7 +259,7 @@ class Command(BaseCommand):
                 try:
                     meeting, created = models.MinisterialMeeting.objects.get_or_create(
                         minister=minister,
-                        external_actor_name_raw=meeting_data['external_actor'],
+                        organisation_met_raw=meeting_data['external_actor'],
                         meeting_date=meeting_data['date'],
                         department=department,
                         defaults=meeting_dict
@@ -496,56 +492,118 @@ class Command(BaseCommand):
         """
         Automatically create MeetingAttendee records for a meeting (Phase 2+).
 
-        Splits roundtable meetings (comma-separated) into individual attendees.
+        Phase 3.2 Enhancement:
+        - Uses NameSplitter for robust delimiter detection (semicolons, "and", "/", commas)
+        - Uses ActorClassifier to determine Person vs Organization
+        - Filters out event descriptions using EventDescriptionParser
+        - Integrates EntityResolutionService for canonical linking
+
+        Splits roundtable meetings into individual attendees.
         Creates single attendee for one-on-one meetings.
         """
-        # Check if roundtable (contains comma)
-        if ',' in meeting.external_actor_name_raw:
-            # Roundtable meeting
-            meeting.is_roundtable = True
-            meeting.save(update_fields=['is_roundtable'])
+        raw_org = meeting.organisation_met_raw
 
-            # Split by comma and create attendee for each
-            attendee_names = [
-                name.strip()
-                for name in meeting.external_actor_name_raw.split(',')
-                if name.strip()
-            ]
+        # Check if this is an event description, not an organization list
+        if EventDescriptionParser.is_event_description(raw_org):
+            # Try to extract actual attendees from the description
+            extracted = EventDescriptionParser.extract_attendees(raw_org)
+            if extracted:
+                attendee_names = extracted
+                meeting.is_roundtable = len(attendee_names) > 1
+            else:
+                # No parseable attendees - move description to purpose
+                if not meeting.purpose or meeting.purpose == 'Not specified':
+                    meeting.purpose = raw_org
+                    meeting.save(update_fields=['purpose'])
+                # Don't create garbage actor for event descriptions
+                return
+        else:
+            # Use NameSplitter for robust delimiter detection
+            # Handles: semicolons, " and ", " / ", commas
+            attendee_names = NameSplitter.split_attendee_list(raw_org)
+            meeting.is_roundtable = len(attendee_names) > 1
 
-            for attendee_name in attendee_names:
-                # Match or create actor
+        meeting.save(update_fields=['is_roundtable'])
+
+        # Initialize entity resolution service
+        entity_resolver = EntityResolutionService()
+
+        for attendee_name in attendee_names:
+            attendee_name = attendee_name.strip()
+            if not attendee_name:
+                continue
+
+            # Skip if this looks like an event description that slipped through
+            if EventDescriptionParser.is_event_description(attendee_name):
+                logger.debug(f"Skipping event description: {attendee_name}")
+                continue
+
+            # Determine if this is a Person or Organization using ActorClassifier
+            actor_type = ActorClassifier.classify(attendee_name)
+
+            if actor_type == 'person' or ActorClassifier.has_person_title(attendee_name):
+                # Create/match as Person
+                actor = self._get_or_create_person(attendee_name, matcher)
+            else:
+                # Create/match as Organization (default for unknown)
                 actor = matcher.match_external_actor(
                     attendee_name,
                     create_if_missing=True
                 )
 
-                # Create MeetingAttendee (idempotent)
-                models.MeetingAttendee.objects.get_or_create(
-                    meeting=meeting,
-                    actor_name_raw=attendee_name,
-                    defaults={
-                        'actor': actor,
-                        'canonical_actor': None,  # Phase 3
-                    }
-                )
-        else:
-            # One-on-one meeting
-            meeting.is_roundtable = False
-            meeting.save(update_fields=['is_roundtable'])
-
-            # Create single attendee
-            actor = meeting.external_actor
             if not actor:
-                actor = matcher.match_external_actor(
-                    meeting.external_actor_name_raw,
-                    create_if_missing=True
-                )
+                logger.warning(f"Could not create actor for: {attendee_name}")
+                continue
 
-            models.MeetingAttendee.objects.get_or_create(
+            # Create MeetingAttendee (idempotent)
+            attendee, created = models.MeetingAttendee.objects.get_or_create(
                 meeting=meeting,
-                actor_name_raw=meeting.external_actor_name_raw,
+                actor_name_raw=attendee_name,
                 defaults={
                     'actor': actor,
-                    'canonical_actor': None,  # Phase 3
+                    'canonical_actor': None,
                 }
             )
+
+            # Run entity resolution to set canonical_actor
+            if created:
+                entity_resolver.resolve_and_link(attendee, 'canonical_actor_id')
+
+    def _get_or_create_person(self, name, matcher):
+        """
+        Get or create a Person actor for a meeting attendee.
+
+        Uses EntityMatcher for existing person lookup, creates new if needed.
+        Normalizes name before creation to fix data quality issues at import time.
+        """
+        from datafetch.helpers import parse_name
+
+        # Normalize name first (fixes tabular columns, trailing punctuation, etc.)
+        normalized_name = normalize_actor_name(name, strength='strong')
+
+        # Try to find existing Person (check both original and normalized)
+        existing = models.Person.objects.filter(name__iexact=normalized_name).first()
+        if not existing:
+            existing = models.Person.objects.filter(name__iexact=name).first()
+        if existing:
+            return existing
+
+        # Try normalized match via matcher
+        existing_actor = matcher.match_external_actor(normalized_name, create_if_missing=False)
+        if existing_actor and hasattr(existing_actor, 'person'):
+            return existing_actor
+
+        # Create new Person with normalized name
+        person = models.Person.objects.create(name=normalized_name)
+
+        # Try to parse name into given_name, family_name
+        try:
+            _, person_dict = parse_name(name)
+            for key, value in person_dict.items():
+                if hasattr(person, key) and value:
+                    setattr(person, key, value)
+            person.save()
+        except Exception as e:
+            logger.warning(f"Could not parse person name '{name}': {e}")
+
+        return person

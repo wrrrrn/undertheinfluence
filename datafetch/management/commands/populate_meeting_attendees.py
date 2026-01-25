@@ -2,6 +2,15 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from datafetch import models
 from datafetch.utils.entity_matcher import EntityMatcher
+from datafetch.services.entity_resolution import EntityResolutionService
+from datafetch.utils.data_cleanup import (
+    NameSplitter,
+    ActorClassifier,
+    EventDescriptionParser,
+)
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -45,86 +54,96 @@ class Command(BaseCommand):
 
         matcher = EntityMatcher()
 
+        # Initialize entity resolution service
+        entity_resolver = EntityResolutionService()
+
         for meeting in meetings:
             try:
                 with transaction.atomic():
-                    # Check if external_actor_name_raw contains comma (roundtable)
-                    if ',' in meeting.external_actor_name_raw:
-                        # Roundtable meeting
+                    raw_org = meeting.organisation_met_raw
+
+                    # Check if this is an event description, not an organization
+                    if EventDescriptionParser.is_event_description(raw_org):
+                        # Try to extract actual attendees
+                        extracted = EventDescriptionParser.extract_attendees(raw_org)
+                        if extracted:
+                            attendee_names = extracted
+                        else:
+                            # Move description to purpose if empty
+                            if not dry_run:
+                                if not meeting.purpose or meeting.purpose == 'Not specified':
+                                    meeting.purpose = raw_org
+                                    meeting.save(update_fields=['purpose'])
+                            stats['one_on_one'] += 1  # Count as processed
+                            continue  # Skip creating garbage actor
+                    else:
+                        # Use NameSplitter for robust delimiter detection
+                        # Handles: semicolons, " and ", " / ", commas
+                        attendee_names = NameSplitter.split_attendee_list(raw_org)
+
+                    # Determine if roundtable
+                    is_roundtable = len(attendee_names) > 1
+                    if is_roundtable:
                         stats['roundtable'] += 1
+                    else:
+                        stats['one_on_one'] += 1
 
-                        if not dry_run:
-                            meeting.is_roundtable = True
-                            meeting.save(update_fields=['is_roundtable'])
+                    if not dry_run:
+                        meeting.is_roundtable = is_roundtable
+                        meeting.save(update_fields=['is_roundtable'])
 
-                        # Split by comma and create attendee for each
-                        attendee_names = [
-                            name.strip()
-                            for name in meeting.external_actor_name_raw.split(',')
-                            if name.strip()
-                        ]
-
-                        if dry_run:
+                    if dry_run:
+                        if is_roundtable:
                             self.stdout.write(
-                                f"[DRY RUN] Would split '{meeting.external_actor_name_raw}' "
+                                f"[DRY RUN] Would split '{raw_org}' "
                                 f"into {len(attendee_names)} attendees"
                             )
                         else:
-                            for attendee_name in attendee_names:
-                                # Match or create actor
+                            self.stdout.write(
+                                f"[DRY RUN] Would create 1 attendee for '{raw_org}'"
+                            )
+                    else:
+                        for attendee_name in attendee_names:
+                            attendee_name = attendee_name.strip()
+                            if not attendee_name:
+                                continue
+
+                            # Skip event descriptions that slipped through
+                            if EventDescriptionParser.is_event_description(attendee_name):
+                                logger.debug(f"Skipping event description: {attendee_name}")
+                                continue
+
+                            # Determine Person vs Organization
+                            actor_type = ActorClassifier.classify(attendee_name)
+
+                            if actor_type == 'person' or ActorClassifier.has_person_title(attendee_name):
+                                # Create/match as Person
+                                actor = self._get_or_create_person(attendee_name, matcher)
+                            else:
+                                # Create/match as Organization
                                 actor = matcher.match_external_actor(
                                     attendee_name,
                                     create_if_missing=True
                                 )
 
-                                # Create MeetingAttendee
-                                attendee, created = models.MeetingAttendee.objects.get_or_create(
-                                    meeting=meeting,
-                                    actor_name_raw=attendee_name,
-                                    defaults={
-                                        'actor': actor,
-                                        'canonical_actor': None,  # Phase 3
-                                    }
-                                )
-
-                                if created:
-                                    stats['attendees_created'] += 1
-                                else:
-                                    stats['attendees_skipped'] += 1
-
-                    else:
-                        # One-on-one meeting
-                        stats['one_on_one'] += 1
-
-                        if not dry_run:
-                            meeting.is_roundtable = False
-                            meeting.save(update_fields=['is_roundtable'])
-
-                        # Create single attendee matching external_actor
-                        if dry_run:
-                            self.stdout.write(
-                                f"[DRY RUN] Would create 1 attendee for '{meeting.external_actor_name_raw}'"
-                            )
-                        else:
-                            # Use existing external_actor if available
-                            actor = meeting.external_actor
                             if not actor:
-                                actor = matcher.match_external_actor(
-                                    meeting.external_actor_name_raw,
-                                    create_if_missing=True
-                                )
+                                logger.warning(f"Could not create actor: {attendee_name}")
+                                continue
 
+                            # Create MeetingAttendee
                             attendee, created = models.MeetingAttendee.objects.get_or_create(
                                 meeting=meeting,
-                                actor_name_raw=meeting.external_actor_name_raw,
+                                actor_name_raw=attendee_name,
                                 defaults={
                                     'actor': actor,
-                                    'canonical_actor': None,  # Phase 3
+                                    'canonical_actor': None,
                                 }
                             )
 
                             if created:
                                 stats['attendees_created'] += 1
+                                # Run entity resolution
+                                entity_resolver.resolve_and_link(attendee, 'canonical_actor_id')
                             else:
                                 stats['attendees_skipped'] += 1
 
@@ -134,6 +153,34 @@ class Command(BaseCommand):
                     f"Error processing meeting {meeting.id} "
                     f"({meeting.minister.name} on {meeting.meeting_date}): {e}"
                 )
+
+    def _get_or_create_person(self, name, matcher):
+        """Get or create a Person actor."""
+        from datafetch.helpers import parse_name
+
+        # Try to find existing
+        existing = models.Person.objects.filter(name__iexact=name).first()
+        if existing:
+            return existing
+
+        # Try via matcher
+        existing_actor = matcher.match_external_actor(name, create_if_missing=False)
+        if existing_actor and hasattr(existing_actor, 'person'):
+            return existing_actor
+
+        # Create new Person
+        person = models.Person.objects.create(name=name)
+
+        try:
+            _, person_dict = parse_name(name)
+            for key, value in person_dict.items():
+                if hasattr(person, key) and value:
+                    setattr(person, key, value)
+            person.save()
+        except Exception as e:
+            logger.warning(f"Could not parse person name '{name}': {e}")
+
+        return person
 
         # Print summary
         self.stdout.write("\n" + "=" * 60)
