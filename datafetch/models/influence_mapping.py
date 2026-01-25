@@ -385,33 +385,27 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
     Data source: GOV.UK ministerial transparency publications (quarterly CSV/XLSX files)
     from all government departments (2010-present).
 
-    Roundtable Meetings:
-    -------------------
-    Meetings with multiple attendees are tracked via MeetingAttendee junction table.
-    - is_roundtable=True: Meeting has multiple attendees
-    - is_roundtable=False: One-on-one meeting
-    - external_actor: Primary/first attendee (for backwards compatibility)
-    - attendees: All individual attendees (via MeetingAttendee)
+    Data Model (Simplified):
+    -----------------------
+    - organisation_met_raw: The exact text from GOV.UK "Organisation Met" column
+    - attendees: All parsed attendees (via MeetingAttendee junction table)
+    - is_roundtable: True if meeting has multiple attendees
 
-    Entity Resolution Pattern (Phase 3):
-    ------------------------------------
-    Follows the same non-destructive canonical pattern as Donation/Consultancy:
-    - external_actor: Original actor from data source (never modified)
-    - canonical_external_actor: Resolved canonical actor (set by entity resolution)
-    - Use effective_external_actor property in queries for accuracy
+    The MeetingAttendee table is the canonical source for organization access.
+    Each attendee has its own entity resolution (actor → canonical_actor).
 
     Example Usage:
-        # Query meetings by canonical actor (handles duplicates correctly)
-        meetings = MinisterialMeeting.objects.filter(
-            canonical_external_actor=google_canonical
-        )
-
-        # Count meetings by effective external actor (including roundtable attendees)
+        # Count meetings by organization (proper entity resolution)
         top_actors = MeetingAttendee.objects.values(
             'canonical_actor__name'
         ).annotate(
             meeting_count=Count('meeting', distinct=True)
         ).order_by('-meeting_count')
+
+        # Get all meetings with a specific organization
+        meetings = MinisterialMeeting.objects.filter(
+            attendees__canonical_actor=google_canonical
+        ).distinct()
     """
     # Minister (always Person, not polymorphic Actor)
     minister = models.ForeignKey(
@@ -419,25 +413,6 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
         related_name='ministerial_meetings_as_minister',
         on_delete=models.CASCADE,
         help_text="The minister who attended the meeting"
-    )
-
-    # External actor (polymorphic - can be Person or Organization)
-    external_actor = models.ForeignKey(
-        popolo_models.Actor,
-        related_name='ministerial_meetings_as_external',
-        null=True,
-        on_delete=models.SET_NULL,
-        help_text="Original external actor from data source (never modified)"
-    )
-
-    # Phase 3: Canonical field for entity resolution (same pattern as Donation)
-    canonical_external_actor = models.ForeignKey(
-        popolo_models.Actor,
-        related_name='canonical_ministerial_meetings',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        help_text="Resolved canonical actor (set by entity resolution system)"
     )
 
     # Department
@@ -456,10 +431,14 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
         blank=True,
         help_text="Purpose or subject of the meeting"
     )
-    external_actor_name_raw = models.CharField(
+
+    # Raw organization name from source (matches GOV.UK "Organisation Met" column)
+    # Note: DB column was renamed from external_actor_name_raw in migration 0017
+    organisation_met_raw = models.CharField(
         max_length=2048,
-        help_text="Preserve original external actor name exactly as published"
+        help_text="Exact text from GOV.UK 'Organisation Met' column (for audit/dedup)"
     )
+
     source_url = models.URLField(
         blank=True,
         null=True,
@@ -477,14 +456,6 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
         help_text="True if meeting has multiple attendees (comma-separated in source)"
     )
 
-    @property
-    def effective_external_actor(self):
-        """
-        Returns the canonical external actor if resolved, otherwise the original.
-        Use this property in queries and templates for accurate entity references.
-        """
-        return self.canonical_external_actor or self.external_actor
-
     class Meta:
         ordering = ['-meeting_date']
         verbose_name = "Ministerial Meeting"
@@ -492,9 +463,7 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
         indexes = [
             # Query patterns for aggregate endpoints
             models.Index(fields=['minister', '-meeting_date'], name='meeting_minister_idx'),
-            models.Index(fields=['external_actor', '-meeting_date'], name='meeting_external_idx'),
             models.Index(fields=['department', '-meeting_date'], name='meeting_dept_idx'),
-            models.Index(fields=['canonical_external_actor', '-meeting_date'], name='meeting_canon_idx'),
 
             # Date range filtering
             models.Index(fields=['meeting_date'], name='meeting_date_idx'),
@@ -505,13 +474,13 @@ class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
         constraints = [
             # Prevent exact duplicates from same data source
             models.UniqueConstraint(
-                fields=['minister', 'external_actor_name_raw', 'meeting_date', 'department'],
-                name='unique_ministerial_meeting'
+                fields=['minister', 'organisation_met_raw', 'meeting_date', 'department'],
+                name='unique_ministerial_meeting_v2'
             )
         ]
 
     def __str__(self):
-        return f"{self.minister.name} met {self.external_actor_name_raw} on {self.meeting_date}"
+        return f"{self.minister.name} met {self.organisation_met_raw} on {self.meeting_date}"
 
 
 class MeetingAttendee(Timestampable, models.Model):
@@ -523,7 +492,7 @@ class MeetingAttendee(Timestampable, models.Model):
     Accurately tracks individual organization access to ministers, especially
     for roundtable meetings where multiple organizations attend.
 
-    For one-on-one meetings: Single attendee (same as external_actor)
+    For one-on-one meetings: Single attendee
     For roundtables: Multiple attendees (split from comma-separated list)
 
     Entity Resolution:
@@ -817,9 +786,9 @@ class CompaniesHouseMatch(Timestampable, models.Model):
     5. Approved matches trigger enrichment (add identifier, founding_date, etc.)
 
     Confidence Thresholds:
-    - ≥ 0.85: auto_approve - Enrich immediately
-    - 0.75-0.84: review - Store for admin review
-    - < 0.75: ignore - Don't store
+    - ≥ 0.90: auto_approve - Enrich immediately
+    - 0.85-0.89: review - Store for admin review
+    - < 0.85: ignore - Don't store
 
     Example:
         match = CompaniesHouseMatch.objects.create(
@@ -836,6 +805,24 @@ class CompaniesHouseMatch(Timestampable, models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('auto_approved', 'Auto-Approved (High Confidence)'),
+        ('not_found', 'Not Found in Companies House'),
+        ('not_applicable', 'Not Applicable (Not CH Registrable)'),
+    ]
+
+    NOT_APPLICABLE_REASON_CHOICES = [
+        ('government_dept', 'Government Department'),
+        ('local_authority', 'Local Authority/Council'),
+        ('university', 'University/College'),
+        ('nhs', 'NHS/Health Trust'),
+        ('police', 'Police Force'),
+        ('trade_union', 'Trade Union'),
+        ('trade_body', 'Trade Association/Federation'),
+        ('foreign_entity', 'Foreign Company/Government'),
+        ('embassy', 'Embassy/Consulate'),
+        ('parliamentary', 'Parliamentary Body/APPG'),
+        ('person', 'Individual Person'),
+        ('concatenated', 'Concatenated Names (Data Quality Issue)'),
+        ('other', 'Other Non-Registrable Entity'),
     ]
 
     MATCH_REASON_CHOICES = [
@@ -851,6 +838,9 @@ class CompaniesHouseMatch(Timestampable, models.Model):
         ('first_word_match', 'First Word Match'),
         ('prefix_match', 'Prefix Match'),
         ('fuzzy', 'Fuzzy Levenshtein Match'),
+        ('not_found', 'No Match Found'),
+        ('name_too_long', 'Name Too Long (Likely Concatenated)'),
+        ('concatenated_name', 'Concatenated Name Detected'),
     ]
 
     # The organization being matched
@@ -901,10 +891,17 @@ class CompaniesHouseMatch(Timestampable, models.Model):
 
     # Review status
     status = models.CharField(
-        max_length=15,
+        max_length=20,
         choices=STATUS_CHOICES,
         default='pending',
         help_text="Review status"
+    )
+
+    not_applicable_reason = models.CharField(
+        max_length=20,
+        choices=NOT_APPLICABLE_REASON_CHOICES,
+        blank=True,
+        help_text="Why this org is not CH registrable (only for status='not_applicable')"
     )
 
     reviewed_by = models.ForeignKey(
@@ -938,6 +935,18 @@ class CompaniesHouseMatch(Timestampable, models.Model):
         help_text="When enrichment was applied"
     )
 
+    # Tie detection - when multiple results have same confidence
+    has_tie = models.BooleanField(
+        default=False,
+        help_text="True if multiple CH results had same top confidence (needs manual review)"
+    )
+
+    tie_alternatives = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Alternative matches when there's a tie. Format: [{company_number, company_name, confidence}, ...]"
+    )
+
     class Meta:
         ordering = ['-confidence', '-created_at']
         verbose_name = "Companies House Match"
@@ -960,7 +969,11 @@ class CompaniesHouseMatch(Timestampable, models.Model):
             'approved': '✅',
             'rejected': '❌',
             'auto_approved': '🤖',
+            'not_found': '🔍',
         }.get(self.status, '?')
+
+        if self.status == 'not_found':
+            return f"{status_icon} {self.organization.name} (Not Found)"
 
         return (
             f"{status_icon} {self.organization.name} → {self.company_name} "
