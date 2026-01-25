@@ -19,9 +19,9 @@ Usage:
     python manage.py enrich_companies_house --org-id 12345 --refresh
 
 Confidence Workflow:
-    - >= 0.85: Auto-approved and enriched immediately
-    - 0.75-0.94: Queued for review in CompaniesHouseMatch table
-    - < 0.75: Skipped (no match)
+    - >= 0.90: Auto-approved and enriched immediately
+    - 0.85-0.89: Queued for review in CompaniesHouseMatch table
+    - < 0.85: Skipped (no match)
 
 Data Storage:
     - Company number: Identifier (scheme='uk.gov.companieshouse')
@@ -34,6 +34,7 @@ Data Storage:
 """
 
 import logging
+import re
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
@@ -103,19 +104,25 @@ class Command(BaseCommand):
         parser.add_argument(
             '--min-confidence',
             type=float,
-            default=0.75,
-            help='Minimum confidence score for matches (0.0-1.0, default: 0.75)'
+            default=0.85,
+            help='Minimum confidence score for matches (0.0-1.0, default: 0.85)'
         )
         parser.add_argument(
             '--auto-approve-threshold',
             type=float,
-            default=0.85,
-            help='Confidence threshold for auto-approval (default: 0.85). Matches below this go to review queue.'
+            default=0.90,
+            help='Confidence threshold for auto-approval (default: 0.90). Matches below this go to review queue.'
         )
         parser.add_argument(
             '--force',
             action='store_true',
             help='Re-process orgs with existing CH ID and overwrite field values'
+        )
+        parser.add_argument(
+            '--retry-not-found',
+            action='store_true',
+            help='Retry organizations that previously had no CH match (status=not_found). '
+                 'Useful after data cleanup when names have been improved.'
         )
         parser.add_argument(
             '--auto-approve-all',
@@ -170,6 +177,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Include resigned directors/ceased PSCs'
         )
+        parser.add_argument(
+            '--auto-approved-only',
+            action='store_true',
+            help='Only fetch directors/PSCs for auto-approved (high confidence) matches, skip manually approved'
+        )
 
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
@@ -177,6 +189,7 @@ class Command(BaseCommand):
         self.debug = options['debug']
         self.refresh = options['refresh']
         self.force = options['force']
+        self.retry_not_found = options.get('retry_not_found', False)
         self.auto_approve_threshold = options['auto_approve_threshold']
         self.auto_approve_all = options['auto_approve_all']
 
@@ -185,6 +198,7 @@ class Command(BaseCommand):
         self.fetch_pscs = options.get('fetch_pscs', False) or options.get('fetch_all', False)
         self.all_officers = options.get('all_officers', False)
         self.include_resigned = options.get('include_resigned', False)
+        self.auto_approved_only = options.get('auto_approved_only', False)
 
         # Debug implies verbose
         if self.debug:
@@ -250,7 +264,8 @@ class Command(BaseCommand):
         else:
             orgs = self._get_organizations(
                 category=options['category'],
-                include_matched=self.force
+                include_matched=self.force,
+                retry_not_found=self.retry_not_found
             )
 
         # Apply limit and offset
@@ -371,13 +386,19 @@ class Command(BaseCommand):
             self.stdout.write('')
             self.stdout.write(self.style.WARNING('DRY RUN - no changes were made'))
         else:
-            # Show total pending review
+            # Show totals by status
             total_pending = models.CompaniesHouseMatch.objects.filter(status='pending').count()
+            total_not_found = models.CompaniesHouseMatch.objects.filter(status='not_found').count()
+
+            self.stdout.write('')
+            self.stdout.write('Database totals:')
+            self.stdout.write(f'  Pending review: {total_pending}')
+            self.stdout.write(f'  Not found: {total_not_found}')
+
             if total_pending > 0:
                 self.stdout.write('')
                 self.stdout.write(self.style.WARNING(
-                    f'Total pending review: {total_pending} matches\n'
-                    f'Review in Django admin or run: manage.py review_ch_matches'
+                    f'Review pending matches in Django admin or run: manage.py review_ch_matches'
                 ))
 
     def _get_single_org(self, org_id):
@@ -389,7 +410,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'Organization {org_id} not found'))
             return []
 
-    def _get_organizations(self, category, include_matched):
+    def _get_organizations(self, category, include_matched, retry_not_found=False):
         """
         Get organizations to process based on category(s).
 
@@ -399,6 +420,11 @@ class Command(BaseCommand):
         - meeting_attendee: Ministerial meeting attendees (~17,037)
         - lobbying_client: PRCA lobbying clients
         - all: All organizations
+
+        Args:
+            category: Category or list of categories to process
+            include_matched: If True, include orgs that already have CH matches (--force)
+            retry_not_found: If True, include orgs with status=not_found (--retry-not-found)
         """
         categories = category if isinstance(category, list) else [category]
 
@@ -413,19 +439,31 @@ class Command(BaseCommand):
                 scheme='uk.gov.companieshouse'
             ).values_list('object_id', flat=True))
 
-            # Also skip orgs with pending/approved CH matches
+            # Also skip orgs with existing CH matches
+            # Build status list - exclude 'not_found' from skip if retry_not_found is True
+            skip_statuses = ['pending', 'approved', 'auto_approved', 'not_applicable']
+            if not retry_not_found:
+                skip_statuses.append('not_found')
+
             pending_ids = set(models.CompaniesHouseMatch.objects.filter(
-                status__in=['pending', 'approved', 'auto_approved']
+                status__in=skip_statuses
             ).values_list('organization_id', flat=True))
             matched_ids = matched_ids | pending_ids
+
+        # Show retry info
+        if retry_not_found:
+            not_found_count = models.CompaniesHouseMatch.objects.filter(status='not_found').count()
+            self.stdout.write(self.style.WARNING(
+                f'--retry-not-found: Will retry {not_found_count} organizations with status=not_found'
+            ))
 
         # Pre-compute category membership
         agency_ids = set(models.Consultancy.objects.values_list('agency_id', flat=True).distinct())
         client_ids = set(models.Consultancy.objects.values_list('client_id', flat=True).distinct())
         donor_ids = set(models.Donation.objects.values_list('donor_id', flat=True).distinct())
-        meeting_attendee_ids = set(models.MinisterialMeeting.objects.filter(
-            external_actor__isnull=False
-        ).values_list('external_actor_id', flat=True).distinct())
+        meeting_attendee_ids = set(models.MeetingAttendee.objects.filter(
+            actor__isnull=False
+        ).values_list('actor_id', flat=True).distinct())
         all_org_ids = set(models.Organization.objects.values_list('pk', flat=True))
         other_ids = all_org_ids - agency_ids - client_ids - donor_ids - meeting_attendee_ids
 
@@ -492,6 +530,84 @@ class Command(BaseCommand):
                 self.stdout.write(f'  Already has match: {existing_match.company_number} ({existing_match.status})')
             return None
 
+        # Check for very long names (likely attendee lists from ministerial meetings)
+        MAX_NAME_LENGTH = 150
+        if len(org.name) > MAX_NAME_LENGTH:
+            if self.verbose:
+                self.stdout.write(self.style.WARNING(
+                    f'  Name too long ({len(org.name)} chars), likely attendee list - skipping'
+                ))
+            # Flag for data quality review but don't create CH match
+            if not self.dry_run:
+                models.CompaniesHouseMatch.objects.update_or_create(
+                    organization=org,
+                    defaults={
+                        'company_number': '',
+                        'company_name': '',
+                        'confidence': 0.0,
+                        'match_reason': 'name_too_long',
+                        'match_details': {'note': f'Name is {len(org.name)} chars, likely multiple entities concatenated'},
+                        'status': 'rejected',
+                        'notes': f'Name too long ({len(org.name)} chars). Likely ministerial meeting attendee list.',
+                    }
+                )
+            return None
+
+        # Check for concatenated names (data quality issue)
+        if self._is_concatenated_name(org.name):
+            if self.verbose:
+                self.stdout.write(self.style.WARNING(f'  Concatenated name detected, flagging for review'))
+            # Create a not_applicable match record
+            if not self.dry_run:
+                models.CompaniesHouseMatch.objects.update_or_create(
+                    organization=org,
+                    defaults={
+                        'company_number': '',
+                        'company_name': '',
+                        'confidence': 0.0,
+                        'match_reason': 'concatenated_name',
+                        'match_details': {'note': 'Name appears to contain multiple companies concatenated'},
+                        'status': 'not_applicable',
+                        'not_applicable_reason': 'concatenated',
+                        'notes': f'Concatenated name detected: "{org.name}".',
+                    }
+                )
+            return {
+                'org_id': org.pk,
+                'company_number': None,
+                'confidence': 0.0,
+                'match_reason': 'concatenated_name',
+                'status': 'not_applicable',
+            }
+
+        # Check for non-CH registrable organization types (government, councils, etc.)
+        non_ch_reason = self._detect_non_ch_org_type(org.name)
+        if non_ch_reason:
+            if self.verbose:
+                self.stdout.write(self.style.WARNING(f'  Non-CH org detected ({non_ch_reason}), skipping API search'))
+            # Create a not_applicable match record
+            if not self.dry_run:
+                models.CompaniesHouseMatch.objects.update_or_create(
+                    organization=org,
+                    defaults={
+                        'company_number': '',
+                        'company_name': '',
+                        'confidence': 0.0,
+                        'match_reason': 'not_found',
+                        'match_details': {'note': f'Organization type ({non_ch_reason}) not registrable on Companies House'},
+                        'status': 'not_applicable',
+                        'not_applicable_reason': non_ch_reason,
+                        'notes': f'Auto-detected as {non_ch_reason}',
+                    }
+                )
+            return {
+                'org_id': org.pk,
+                'company_number': None,
+                'confidence': 0.0,
+                'match_reason': non_ch_reason,
+                'status': 'not_applicable',
+            }
+
         # Debug: Show search details
         if self.debug:
             self._debug_search(org)
@@ -504,22 +620,52 @@ class Command(BaseCommand):
                 self.stdout.write(f'  No match: {match_result.matched_on}')
                 if self.debug:
                     self.stdout.write(f'    Search returned {match_result.search_results_count} results')
+
+            # Create not_found record to prevent re-processing
+            if not self.dry_run:
+                models.CompaniesHouseMatch.objects.update_or_create(
+                    organization=org,
+                    company_number='',  # Empty for not_found
+                    defaults={
+                        'company_name': '',
+                        'company_status': '',
+                        'company_type': '',
+                        'confidence': 0.0,
+                        'match_reason': 'not_found',
+                        'match_details': {
+                            'search_results_count': match_result.search_results_count,
+                            'reason': match_result.matched_on,
+                        },
+                        'status': 'not_found',
+                        'notes': f'No match found. Search returned {match_result.search_results_count} results.',
+                    }
+                )
             return None
 
         confidence = match_result.confidence
         company_number = match_result.company_number
         match_reason = match_result.match_reason
+        has_tie = match_result.has_tie
+        tie_count = match_result.tie_count
+        tie_companies = match_result.tie_companies
 
         if self.verbose:
             self.stdout.write(
                 f'  Match: {company_number} '
                 f'(confidence: {confidence:.2f}, reason: {match_reason})'
             )
+            if has_tie:
+                self.stdout.write(self.style.WARNING(
+                    f'  ⚠ TIE DETECTED: {tie_count} results with same confidence'
+                ))
+                for tie_info in (tie_companies or [])[:5]:
+                    self.stdout.write(f'    - {tie_info["company_name"]} ({tie_info["company_number"]})')
 
         # Determine action based on confidence
+        # IMPORTANT: Don't auto-approve if there's a tie - needs human review
         should_auto_approve = (
             self.auto_approve_all or
-            confidence >= self.auto_approve_threshold
+            (confidence >= self.auto_approve_threshold and not has_tie)
         )
 
         if self.dry_run:
@@ -535,6 +681,15 @@ class Command(BaseCommand):
                 'status': status,
             }
 
+        # Remove any existing not_found record for this org (if re-processing)
+        models.CompaniesHouseMatch.objects.filter(
+            organization=org,
+            status='not_found'
+        ).delete()
+
+        # Build tie_alternatives data for storage (already has full info from matcher)
+        tie_alternatives = tie_companies if has_tie else None
+
         # Create or update CompaniesHouseMatch record
         ch_match, created = models.CompaniesHouseMatch.objects.update_or_create(
             organization=org,
@@ -547,22 +702,39 @@ class Command(BaseCommand):
                 'match_reason': match_reason,
                 'match_details': match_result.matched_on,
                 'status': 'pending',  # Will be updated below if auto-approved
+                'has_tie': has_tie,
+                'tie_alternatives': tie_alternatives,
             }
         )
+
+        directors_count = 0
+        pscs_count = 0
+        status = 'pending'
 
         if should_auto_approve:
             # Auto-approve and enrich
             ch_match.approve(user=None, auto=True)
+            status = 'auto_approved'
             # Also do full enrichment with profile data
             if match_result.company_profile:
                 self._enrich_organization(org, match_result)
 
             if self.verbose:
                 self.stdout.write(self.style.SUCCESS(f'  Auto-approved and enriched'))
+        else:
+            # Queue for review
+            if self.verbose:
+                if has_tie:
+                    self.stdout.write(self.style.WARNING(
+                        f'  Queued for review (TIE: {tie_count} matches at {confidence:.2f})'
+                    ))
+                else:
+                    self.stdout.write(self.style.WARNING(f'  Queued for review (confidence: {confidence:.2f})'))
 
-            # Import directors and/or PSCs if requested
-            directors_count = 0
-            pscs_count = 0
+        # Import directors and/or PSCs if requested
+        # Skip if --auto-approved-only and this wasn't auto-approved
+        should_fetch = should_auto_approve or not self.auto_approved_only
+        if should_fetch:
             if self.fetch_directors:
                 directors_count = self._import_directors(org, company_number, options)
                 if self.verbose and directors_count:
@@ -571,28 +743,100 @@ class Command(BaseCommand):
                 pscs_count = self._import_pscs(org, company_number, options)
                 if self.verbose and pscs_count:
                     self.stdout.write(f'    Imported {pscs_count} PSCs')
+        elif self.verbose and (self.fetch_directors or self.fetch_pscs):
+            self.stdout.write(f'    Skipping directors/PSCs (--auto-approved-only, confidence: {confidence:.2f})')
 
-            return {
-                'org_id': org.pk,
-                'company_number': company_number,
-                'confidence': confidence,
-                'match_reason': match_reason,
-                'status': 'auto_approved',
-                'directors_imported': directors_count,
-                'pscs_imported': pscs_count,
-            }
-        else:
-            # Queue for review
-            if self.verbose:
-                self.stdout.write(self.style.WARNING(f'  Queued for review (confidence: {confidence:.2f})'))
+        return {
+            'org_id': org.pk,
+            'company_number': company_number,
+            'confidence': confidence,
+            'match_reason': match_reason,
+            'status': status,
+            'directors_imported': directors_count,
+            'pscs_imported': pscs_count,
+        }
 
-            return {
-                'org_id': org.pk,
-                'company_number': company_number,
-                'confidence': confidence,
-                'match_reason': match_reason,
-                'status': 'pending',
-            }
+    # Pattern: Company suffix followed by space and capital letter
+    # Excludes: Limited Partnership, Limited Company, T/A, C/o patterns
+    CONCAT_PATTERN = re.compile(
+        r'^(.+?(?:Ltd|Limited|PLC|Inc|LLP)\.?)\s+([A-Z].+)$',
+        re.IGNORECASE
+    )
+
+    # Patterns that should NOT be split (false positives)
+    EXCLUDE_PATTERNS = [
+        re.compile(r'Limited\s+(Partnership|Company|Liability)$', re.IGNORECASE),
+        re.compile(r'Ltd\s+(T/?A|C/?o)\s+', re.IGNORECASE),  # Trading As, Care of
+        re.compile(r'Limited\s+(T/?A|C/?o)\s+', re.IGNORECASE),
+        re.compile(r'PLC\s+Ltd$', re.IGNORECASE),  # "PLC Ltd" is one entity
+        re.compile(r'(Ltd|Limited|PLC)\s+(Co|Company)$', re.IGNORECASE),  # ends in Co/Company
+    ]
+
+    def _is_concatenated_name(self, name):
+        """
+        Detect if an organization name appears to be two companies concatenated.
+        Using logic from split_concatenated_orgs command.
+        """
+        # Check exclusion patterns first
+        for pattern in self.EXCLUDE_PATTERNS:
+            if pattern.search(name):
+                return False
+
+        # Check concat pattern
+        return bool(self.CONCAT_PATTERN.match(name))
+
+    # Patterns for detecting non-CH registrable organizations
+    NON_CH_PATTERNS = {
+        'government_dept': [
+            r'\bdepartment\b', r'\bministry\b', r'\bcabinet office\b',
+            r'\btreasury\b', r'\bhm government\b',
+            r'\bdefra\b', r'\bdhsc\b', r'\bdfe\b', r'\bdwp\b', r'\bmoj\b',
+            r'\bfco\b', r'\bfcdo\b', r'\bmod\b', r'\bhome office\b',
+        ],
+        'local_authority': [
+            r'\bcouncil\b', r'\bborough\b', r'\bcity of\b',
+            r'\blocal authority\b', r'\bmetropolitan\b',
+        ],
+        'university': [
+            r'\buniversity\b', r'\bcollege\b(?!.*ltd)',
+            r'\bschool of\b', r'\bacademy\b',
+        ],
+        'nhs': [
+            r'\bnhs\b', r'\bhospital\b', r'\bhealth trust\b',
+            r'\bclinical commissioning\b', r'\bintegrated care\b', r'\bambulance\b',
+        ],
+        'police': [r'\bpolice\b', r'\bconstabulary\b'],
+        'trade_union': [r'\bunion\b(?!.*credit)', r'\btuc\b', r'\bunite\b', r'\bunison\b', r'\bgmb\b'],
+        'trade_body': [
+            r'\bassociation\b(?!.*ltd)', r'\bfederation\b(?!.*ltd)',
+            r'\binstitute\b(?!.*ltd)', r'\bsociety\b(?!.*ltd)',
+            r'\balliance\b', r'\bcoalition\b',
+        ],
+        'foreign_entity': [
+            r'\bgovernment of\b', r'\binc\.\s*$', r'\b(gmbh|ag|sa|bv|nv)\b',
+        ],
+        'embassy': [r'\bembassy\b', r'\bconsulate\b', r'\bhigh commission\b'],
+        'parliamentary': [
+            r'\bappg\b', r'\ball[- ]party\b', r'\bparliamentary\b',
+            r'\bcommons\b', r'\blords\b', r'\bwestminster\b',
+            r'\bni assembly\b', r'\bwelsh assembly\b', r'\bscottish parliament\b',
+            r'\bselect committee\b',
+        ],
+    }
+
+    def _detect_non_ch_org_type(self, name):
+        """
+        Detect if organization is inherently not CH registrable.
+        Returns (reason, None) if not registrable, (None, None) if potentially registrable.
+        """
+        name_lower = name.lower()
+
+        for reason, patterns in self.NON_CH_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, name_lower, re.IGNORECASE):
+                    return reason
+
+        return None
 
     def _debug_search(self, org):
         """
@@ -713,14 +957,21 @@ class Command(BaseCommand):
 
             if address_parts:
                 address_str = ', '.join(address_parts)
-                contact, created = models.ContactDetail.objects.get_or_create(
+                # Use filter().first() to handle duplicate records in database
+                existing_contact = models.ContactDetail.objects.filter(
                     content_type=org_content_type,
                     object_id=org.pk,
                     contact_type='address',
                     value=address_str,
-                    defaults={'label': 'Registered Office'}
-                )
-                if created:
+                ).first()
+                if not existing_contact:
+                    models.ContactDetail.objects.create(
+                        content_type=org_content_type,
+                        object_id=org.pk,
+                        contact_type='address',
+                        value=address_str,
+                        label='Registered Office'
+                    )
                     changes.append('Added registered address')
 
         # 6. Add SIC Codes as Notes

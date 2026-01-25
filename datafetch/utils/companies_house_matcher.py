@@ -44,6 +44,7 @@ CH_LEGAL_SUFFIXES = [
     r'\bcorporation\b',
     r'\bco\b',
     r'\bcompany\b',
+    r'^the\s+',  # Leading "THE " - very common difference
 ]
 
 # Common business words that can be stripped for core name matching
@@ -165,7 +166,7 @@ def calculate_ch_similarity(query_name: str, ch_name: str) -> Tuple[float, str]:
     if not query_name or not ch_name:
         return 0.0, 'empty'
 
-    # Level 1: Normalize with legal suffixes stripped
+    # Level 1: Normalize with legal suffixes stripped (includes THE prefix)
     query_norm = normalize_company_name(query_name, strip_legal=True, strip_common=False)
     ch_norm = normalize_company_name(ch_name, strip_legal=True, strip_common=False)
 
@@ -179,6 +180,13 @@ def calculate_ch_similarity(query_name: str, ch_name: str) -> Tuple[float, str]:
     # Try camelCase version
     if query_camel == ch_norm:
         return 0.95, 'exact_camelcase'
+
+    # Level 1.5: Handle THE prefix separately (belt and suspenders)
+    # "Trussell Trust" vs "THE TRUSSELL TRUST" should be 0.95
+    query_no_the = re.sub(r'^the\s+', '', query_norm, flags=re.IGNORECASE)
+    ch_no_the = re.sub(r'^the\s+', '', ch_norm, flags=re.IGNORECASE)
+    if query_no_the == ch_no_the and query_no_the:
+        return 0.95, 'exact_the_variant'
 
     # Level 2: Normalize with common business words stripped
     query_core = normalize_company_name(query_name, strip_legal=True, strip_common=True)
@@ -246,6 +254,61 @@ def calculate_ch_similarity(query_name: str, ch_name: str) -> Tuple[float, str]:
     # No good match found
     return jaccard * 0.6, f'low_jaccard_{jaccard:.0%}'
 
+
+def detect_partial_match(org_name: str, ch_name: str) -> Tuple[bool, float]:
+    """
+    Detect if this appears to be a partial match to a concatenated org name.
+
+    Returns:
+        Tuple of (is_partial, penalty_factor)
+        - is_partial: True if match appears to be partial
+        - penalty_factor: Multiplier to apply to confidence (0.0-1.0)
+    """
+    # Normalize names for comparison
+    org_norm = normalize_company_name(org_name, strip_legal=True, strip_common=False).lower()
+    ch_norm = normalize_company_name(ch_name, strip_legal=True, strip_common=False).lower()
+
+    # Get significant words (length >= 3, not common filler words)
+    filler_words = {'the', 'and', 'for', 'of', 'ltd', 'plc', 'llp', 'inc', 'limited', 'uk', 'group'}
+    org_words = [w for w in org_norm.split() if len(w) >= 3 and w not in filler_words]
+    ch_words = [w for w in ch_norm.split() if len(w) >= 3 and w not in filler_words]
+
+    if len(org_words) < 2 or len(ch_words) < 1:
+        return False, 1.0
+
+    # Count how many org words appear in CH name
+    org_words_in_ch = sum(1 for w in org_words if w in ch_norm)
+    match_ratio = org_words_in_ch / len(org_words)
+    unmatched_count = len(org_words) - org_words_in_ch
+
+    # Check for 2+ unmatched words (key indicator of partial match per data quality report)
+    if unmatched_count >= 2:
+        return True, 0.7  # Significant penalty
+
+    # If less than 60% of org words are in CH name, likely partial match
+    if match_ratio < 0.6 and len(org_words) >= 4:
+        # Severe penalty for very low match ratio
+        return True, 0.7  # 30% penalty
+    elif match_ratio < 0.75 and len(org_words) >= 3:
+        # Moderate penalty
+        return True, 0.85  # 15% penalty
+
+    # Check for specific concatenation patterns
+    # Pattern: First half of words match OR second half of words match (but not both)
+    first_half = org_words[:len(org_words)//2]
+    second_half = org_words[len(org_words)//2:]
+
+    first_half_matches = sum(1 for w in first_half if w in ch_norm) / max(len(first_half), 1)
+    second_half_matches = sum(1 for w in second_half if w in ch_norm) / max(len(second_half), 1)
+
+    # If one half matches well but other doesn't, likely concatenated
+    if (first_half_matches > 0.8 and second_half_matches < 0.3) or \
+       (second_half_matches > 0.8 and first_half_matches < 0.3):
+        return True, 0.75  # 25% penalty
+
+    return False, 1.0
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -259,6 +322,9 @@ class MatchResult:
     match_reason: str
     matched_on: str  # What we matched on (exact name, normalized name, etc.)
     search_results_count: int = 0
+    has_tie: bool = False  # True if multiple results had same top confidence
+    tie_count: int = 1  # Number of results with same top confidence
+    tie_companies: Optional[List[dict]] = None  # Tied results: [{company_number, company_name, confidence}, ...]
 
     @property
     def is_match(self) -> bool:
@@ -382,7 +448,8 @@ class CompaniesHouseMatcher:
         match = self._find_best_match(org_name, search_results)
 
         if match:
-            company_number, confidence, match_reason, matched_on = match
+            (company_number, confidence, match_reason, matched_on,
+             has_tie, tie_count, tie_companies) = match
 
             # Update stats
             if match_reason == 'exact':
@@ -408,7 +475,10 @@ class CompaniesHouseMatcher:
                 confidence=confidence,
                 match_reason=match_reason,
                 matched_on=matched_on,
-                search_results_count=len(search_results)
+                search_results_count=len(search_results),
+                has_tie=has_tie,
+                tie_count=tie_count,
+                tie_companies=tie_companies
             )
 
         self.stats['no_match'] += 1
@@ -437,7 +507,7 @@ class CompaniesHouseMatcher:
 
     def _find_best_match(self, org_name: str,
                         results: List[CompanySearchResult]
-                        ) -> Optional[Tuple[str, float, str, str]]:
+                        ) -> Optional[Tuple[str, float, str, str, bool, int, List[str]]]:
         """
         Find the best match from search results.
 
@@ -447,13 +517,14 @@ class CompaniesHouseMatcher:
         - Common business words (UK, International, Group, Holdings)
 
         Returns:
-            Tuple of (company_number, confidence, match_reason, matched_on) or None
+            Tuple of (company_number, confidence, match_reason, matched_on,
+                     has_tie, tie_count, tie_companies) or None
         """
         org_name_normalized = normalize_actor_name(org_name, strength='strong')
         org_name_weak = normalize_actor_name(org_name, strength='weak')
 
-        best_match = None
-        best_confidence = 0.0
+        # Track all matches with their scores
+        all_matches = []
 
         for result in results:
             # Skip dissolved companies unless explicitly looking for them
@@ -464,53 +535,100 @@ class CompaniesHouseMatcher:
             result_name_normalized = normalize_actor_name(result_name, strength='strong')
             result_name_weak = normalize_actor_name(result_name, strength='weak')
 
+            match_info = None
+
             # Strategy 2: Exact match (case-insensitive)
             if org_name_normalized.lower() == result_name_normalized.lower():
                 confidence = 0.95
-                if confidence > best_confidence:
-                    best_match = (result.company_number, confidence, 'exact',
-                                 f"Exact: '{org_name}' == '{result_name}'")
-                    best_confidence = confidence
-                continue
+                match_info = (result.company_number, confidence, 'exact',
+                             f"Exact: '{org_name}' == '{result_name}'", result_name)
 
             # Strategy 3: Normalized match (weak normalization)
-            if org_name_weak == result_name_weak:
+            elif org_name_weak == result_name_weak:
                 confidence = 0.85
-                if confidence > best_confidence:
-                    best_match = (result.company_number, confidence, 'normalized',
-                                 f"Normalized: '{org_name_weak}'")
-                    best_confidence = confidence
-                continue
+                match_info = (result.company_number, confidence, 'normalized',
+                             f"Normalized: '{org_name_weak}'", result_name)
 
             # Strategy 4: CH-specific similarity (handles trading names)
-            ch_similarity, ch_reason = calculate_ch_similarity(org_name, result_name)
-            if ch_similarity >= self.min_confidence:
-                if ch_similarity > best_confidence:
-                    best_match = (result.company_number, ch_similarity, 'ch_match',
-                                 f"CH ({ch_reason}): '{org_name}' → '{result_name}'")
-                    best_confidence = ch_similarity
-                continue
+            else:
+                ch_similarity, ch_reason = calculate_ch_similarity(org_name, result_name)
+                if ch_similarity >= self.min_confidence:
+                    match_info = (result.company_number, ch_similarity, 'ch_match',
+                                 f"CH ({ch_reason}): '{org_name}' → '{result_name}'", result_name)
+                else:
+                    # Strategy 5: Generic fuzzy match (fallback)
+                    similarity = calculate_name_similarity(org_name, result_name)
+                    if similarity >= self.min_confidence:
+                        confidence = min(0.80, similarity * 0.85)  # Cap at 0.80 for fuzzy
+                        match_info = (result.company_number, confidence, 'fuzzy',
+                                     f"Fuzzy ({similarity:.2f}): '{org_name}' ~ '{result_name}'", result_name)
 
-            # Strategy 5: Generic fuzzy match (fallback)
-            similarity = calculate_name_similarity(org_name, result_name)
-            if similarity >= self.min_confidence:
-                confidence = min(0.80, similarity * 0.85)  # Cap at 0.80 for fuzzy
-                if confidence > best_confidence:
-                    best_match = (result.company_number, confidence, 'fuzzy',
-                                 f"Fuzzy ({similarity:.2f}): '{org_name}' ~ '{result_name}'")
-                    best_confidence = confidence
+            if match_info:
+                all_matches.append(match_info)
 
-        if best_match and best_confidence >= self.min_confidence:
-            return best_match
+        if not all_matches:
+            return None
 
-        return None
+        # Find the best confidence score
+        best_confidence = max(m[1] for m in all_matches)
+
+        if best_confidence < self.min_confidence:
+            return None
+
+        # For TIE DETECTION, use CH similarity to get CONSISTENT scoring
+        # (Different matching strategies may assign different scores for equivalent matches)
+        # Re-compute CH similarity for all matches to detect true ties
+        ch_scores = []
+        for m in all_matches:
+            company_number, conf, reason, matched_on, ch_name = m
+            ch_sim, _ = calculate_ch_similarity(org_name, ch_name)
+            ch_scores.append((m, ch_sim))
+
+        # Find best CH similarity score
+        best_ch_score = max(cs[1] for cs in ch_scores)
+
+        # Find all matches at the best CH similarity level (ties)
+        # Use a small tolerance (0.01) to catch near-ties
+        tie_tolerance = 0.01
+        tie_candidates = [cs for cs in ch_scores if cs[1] >= best_ch_score - tie_tolerance]
+
+        # Sort by original confidence descending, then by company number for consistency
+        all_matches.sort(key=lambda m: (-m[1], m[0]))
+
+        best_match = all_matches[0]
+        company_number, confidence, match_reason, matched_on, ch_name = best_match
+
+        # Check for ties using CH similarity scores
+        has_tie = len(tie_candidates) > 1
+        tie_count = len(tie_candidates)
+        tie_companies = [
+            {
+                'company_number': cs[0][0],
+                'company_name': cs[0][4],
+                'confidence': cs[1],  # Use CH similarity score for display
+                'match_reason': cs[0][2],
+            }
+            for cs in sorted(tie_candidates, key=lambda x: (-x[1], x[0][0]))
+        ] if has_tie else None
+
+        # Apply partial match penalty for concatenated names
+        is_partial, penalty = detect_partial_match(org_name, ch_name)
+        if is_partial:
+            confidence *= penalty
+            match_reason = f"{match_reason}_partial"
+            matched_on = f"{matched_on} [PARTIAL: {penalty:.0%}]"
+
+        return (company_number, confidence, match_reason, matched_on,
+                has_tie, tie_count, tie_companies)
 
     def _check_for_duplicates(self, org: 'models.Organization',
                              company_number: str, confidence: float) -> None:
         """
         Check if another org already has this company number.
 
-        If so, create an ActorResolution record for deduplication.
+        If so, create or update an ActorResolution record for deduplication.
+        Uses get_or_create with consistent ordering (lower ID first) to avoid
+        duplicate key errors.
         """
         # Find other orgs with this company number
         existing = models.Identifier.objects.filter(
@@ -526,34 +644,34 @@ class CompaniesHouseMatcher:
                 if not other_org or not isinstance(other_org, models.Organization):
                     continue
 
-                # Check if resolution already exists
-                existing_resolution = models.ActorResolution.objects.filter(
-                    actor1__in=[org, other_org],
-                    actor2__in=[org, other_org]
-                ).exists()
-
-                if existing_resolution:
-                    continue
+                # Ensure consistent ordering (lower ID first) to match unique constraint
+                if org.pk < other_org.pk:
+                    actor1, actor2 = org, other_org
+                else:
+                    actor1, actor2 = other_org, org
 
                 # Determine which should be canonical (more data = better)
                 canonical = self._choose_canonical(org, other_org)
 
-                # Create ActorResolution
-                resolution = models.ActorResolution.objects.create(
-                    actor1=org,
-                    actor2=other_org,
-                    canonical_actor=canonical,
-                    confidence=1.0,  # Identifier match = highest confidence
-                    decision='auto_merge',
-                    match_reason='identifier',
-                    notes=f"Same Companies House number: {company_number}"
+                # Use get_or_create to avoid duplicate key errors
+                resolution, created = models.ActorResolution.objects.get_or_create(
+                    actor1=actor1,
+                    actor2=actor2,
+                    defaults={
+                        'canonical_actor': canonical,
+                        'confidence': 1.0,  # Identifier match = highest confidence
+                        'decision': 'auto_merge',
+                        'match_reason': 'identifier',
+                        'notes': f"Same Companies House number: {company_number}"
+                    }
                 )
 
-                self.stats['duplicates_found'] += 1
-                logger.info(
-                    f"Found duplicate: {org.name} <-> {other_org.name} "
-                    f"(CH: {company_number})"
-                )
+                if created:
+                    self.stats['duplicates_found'] += 1
+                    logger.info(
+                        f"Found duplicate: {org.name} <-> {other_org.name} "
+                        f"(CH: {company_number})"
+                    )
 
             except Exception as e:
                 logger.error(f"Error creating resolution: {e}")
