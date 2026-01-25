@@ -13,6 +13,7 @@ Strategy:
 
 Phase 1: Basic matching with create-if-missing
 Phase 3: Enhanced with canonical actor resolution
+Phase 3.2: Uses ActorClassifier from shared data_cleanup module
 """
 
 from typing import Optional
@@ -20,6 +21,7 @@ import logging
 
 from datafetch import models
 from datafetch.utils.normalization import normalize_actor_name
+from datafetch.utils.data_cleanup import ActorClassifier
 from datafetch.helpers import parse_name
 
 logger = logging.getLogger(__name__)
@@ -245,44 +247,33 @@ class EntityMatcher:
         """
         Heuristic: is this name an organization vs person?
 
+        Phase 3.2: Uses ActorClassifier from shared data_cleanup module
+        for consistent classification across the application.
+
         Args:
             name: Actor name to classify
 
         Returns:
             True if likely an organization, False if likely a person
         """
-        org_keywords = [
-            # Legal entities
-            'ltd', 'limited', 'plc', 'llc', 'inc', 'corp', 'corporation',
-            'gmbh', 'ag', 'sa', 'nv', 'bv', 'pty',
+        # Check for person titles first (MP, Lord, Sir, etc.)
+        # If it's clearly a person, return False
+        if ActorClassifier.has_person_title(name):
+            return False
 
-            # Organization types
-            'group', 'holdings', 'partners', 'partnership',
-            'association', 'society', 'institute', 'foundation',
-            'trust', 'charity', 'council', 'committee',
-            'union', 'federation', 'alliance', 'coalition',
-            'company', 'companies', 'firm',
-            'organization', 'organisation',
+        # Use shared ActorClassifier for consistent classification
+        actor_type = ActorClassifier.classify(name)
 
-            # Government/Public sector
-            'department', 'ministry', 'authority', 'agency',
-            'office', 'commission', 'board', 'service',
-
-            # Business types
-            'studio', 'studios', 'productions', 'media',
-            'consulting', 'consultants', 'advisors',
-            'capital', 'ventures', 'investments',
-
-            # Educational/Research
-            'university', 'college', 'school', 'academy',
-            'research', 'laboratory', 'labs',
-        ]
-
-        name_lower = name.lower()
-
-        # Check for org keywords
-        if any(kw in name_lower for kw in org_keywords):
+        # If classified as organization, return True
+        if actor_type == 'organization':
             return True
+
+        # If classified as person, return False
+        if actor_type == 'person':
+            return False
+
+        # For 'unknown', use original heuristics as fallback
+        name_lower = name.lower()
 
         # All caps acronym (e.g., "BBC", "ACME", "GCHQ")
         if name.isupper() and len(name) >= 2 and ' ' not in name.strip():
@@ -292,11 +283,12 @@ class EntityMatcher:
         if name.startswith('The '):
             return True
 
-        # Contains "&" or "and" between words (e.g., "Smith & Jones", "Deloitte and Touche")
-        if ' & ' in name or ' and ' in name_lower:
+        # Contains "&" between words (but be careful with law firms)
+        # Only count as org if there are other org indicators
+        if ' & ' in name and len(name.split()) >= 3:
             return True
 
-        # Otherwise assume person
+        # Otherwise assume person (safer default for meetings data)
         return False
 
     def get_stats(self) -> dict:
