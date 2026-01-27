@@ -75,12 +75,37 @@ def normalize_actor_name(name: str, strength: str = 'weak') -> str:
         # Aggressive normalization - fuzzy matching
         # Convert to lowercase
         normalized = normalized.lower()
+
         # Remove punctuation (except spaces initially)
         normalized = re.sub(r'[^\w\s]', '', normalized)
-        # Remove common legal suffixes
-        normalized = re.sub(r'\b(ltd|limited|plc|llc|inc|corp|co)\b', '', normalized)
+
+        # Remove leading "THE " - very common variant
+        # "THE TRUSSELL TRUST" -> "TRUSSELL TRUST"
+        normalized = re.sub(r'^the\s+', '', normalized)
+
+        # Remove common legal suffixes (expanded list matching CH matcher)
+        legal_suffixes = [
+            r'\b(limited|ltd)\b',
+            r'\b(public limited company|plc)\b',
+            r'\b(llp)\b',
+            r'\b(llc)\b',
+            r'\b(incorporated|inc)\b',
+            r'\b(corporation|corp)\b',
+            r'\b(company|co)\b',
+            r'\b(uk|gb)\b',  # Geographic suffixes
+            r'\b(holdings?)\b',
+            r'\b(group)\b',
+            r'\b(international|intl)\b',
+            r'\b(services?)\b',
+            r'\b(solutions?)\b',
+            r'\b(partners?|partnership)\b',
+        ]
+        for suffix in legal_suffixes:
+            normalized = re.sub(suffix, '', normalized)
+
         # Remove common words that add no meaning
-        normalized = re.sub(r'\b(the|and|of|for)\b', '', normalized)
+        normalized = re.sub(r'\b(the|and|of|for|in|at|on)\b', '', normalized)
+
         # Collapse whitespace
         normalized = re.sub(r'\s+', ' ', normalized)
         # Final trim

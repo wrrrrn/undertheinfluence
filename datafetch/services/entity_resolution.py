@@ -65,24 +65,138 @@ class EntityResolutionService:
 
     # Confidence thresholds
     CONFIDENCE_IDENTIFIER = 1.0  # External ID match
+    CONFIDENCE_EC_DONOR = 0.95   # Electoral Commission donor ID match
     CONFIDENCE_EXACT = 0.95      # Exact name match
+    CONFIDENCE_OTHERNAME_STRONG = 0.90  # Strong alias (abbreviation, trade name)
     CONFIDENCE_STRONG = 0.85     # Strong normalization
+    CONFIDENCE_OTHERNAME_WEAK = 0.75    # Weak alias (former name, nickname)
     CONFIDENCE_WEAK = 0.70       # Weak normalization
 
     # Minimum confidence to auto-link
     MIN_CONFIDENCE_AUTO = 0.85
 
-    def __init__(self):
-        """Initialize the service."""
+    def __init__(self, fast_mode: bool = False, skip_scoring: bool = False):
+        """
+        Initialize the service.
+
+        Args:
+            fast_mode: If True, only do identifier + exact name matching (skip slow fuzzy)
+            skip_scoring: If True, skip expensive entity scoring (take first match)
+        """
         self._cache: Dict[str, 'models.Actor'] = {}
+        self._score_cache: Dict[int, int] = {}
+        self._name_index: Dict[str, List['models.Actor']] = {}
+        self._id_index: Dict[Tuple[str, str], 'models.Actor'] = {}
+        self._actor_by_id: Dict[int, 'models.Actor'] = {}  # pk -> Actor for O(1) lookups
+        # Phase 3.2 indexes for improved resolution
+        self._othername_index: Dict[str, List[Tuple[int, str]]] = {}  # name.lower() -> [(actor_id, alias_type)]
+        self._ch_index: Dict[str, int] = {}  # company_number -> canonical_org_id (lowest ID)
+        self._ec_actor_index: Dict[str, List[int]] = {}  # ec_ref -> [actor_ids]
+        self.fast_mode = fast_mode
+        self.skip_scoring = skip_scoring or fast_mode  # fast mode implies skip scoring
         self.stats = {
             'identifier_matches': 0,
+            'ec_id_matches': 0,
             'exact_matches': 0,
+            'othername_strong_matches': 0,
             'strong_matches': 0,
+            'othername_weak_matches': 0,
             'weak_matches': 0,
             'no_match': 0,
             'cache_hits': 0,
         }
+
+    def prefetch_all_actors(self):
+        """
+        Build an in-memory index of all actors for lightning-fast resolution.
+
+        This avoids thousands of individual database queries during batch processing.
+        Builds multiple indexes:
+        - _name_index: name.lower() -> [actors]
+        - _othername_index: alias.lower() -> [(actor_id, alias_type)]
+        - _ch_index: company_number -> canonical_org_id (lowest ID)
+        - _ec_actor_index: ec_ref -> [actor_ids]
+        """
+        from datafetch.models import Actor, Identifier, CompaniesHouseMatch, OtherName, Person, Organization
+        from django.contrib.contenttypes.models import ContentType
+        from collections import defaultdict
+
+        logger.info("Building in-memory actor indexes...")
+
+        # Get content types for Person and Organization
+        person_ct = ContentType.objects.get_for_model(Person)
+        org_ct = ContentType.objects.get_for_model(Organization)
+        actor_content_types = [person_ct, org_ct]
+
+        # 1. Fetch all actors and build ID lookup
+        all_actors = list(Actor.objects.all().only('id', 'name', 'polymorphic_ctype_id'))
+        self._actor_by_id = {a.pk: a for a in all_actors}
+
+        # 2. Build name index (for exact name matching)
+        self._name_index = defaultdict(list)
+        self._normalized_strong_index = defaultdict(list)
+        self._normalized_weak_index = defaultdict(list)
+
+        for actor in all_actors:
+            self._name_index[actor.name.lower()].append(actor)
+            
+            # Build normalized indexes
+            norm_strong = normalize_actor_name(actor.name, strength='strong')
+            if norm_strong:
+                self._normalized_strong_index[norm_strong].append(actor)
+                
+            norm_weak = normalize_actor_name(actor.name, strength='weak')
+            if norm_weak:
+                self._normalized_weak_index[norm_weak].append(actor)
+
+        logger.info(f"  Name index: {len(all_actors)} actors")
+        logger.info(f"  Normalized indexes: {len(self._normalized_strong_index)} strong, {len(self._normalized_weak_index)} weak")
+
+        # 3. Build OtherName index (for alias matching)
+        self._othername_index = defaultdict(list)
+        othername_count = 0
+        for on in OtherName.objects.filter(content_type__in=actor_content_types).values_list('name', 'object_id', 'note'):
+            name_lower = on[0].lower() if on[0] else ''
+            if name_lower:
+                # Determine alias type from note field
+                note = (on[2] or '').lower()
+                if 'abbreviation' in note or 'trade' in note or 'trading' in note or 'aka' in note:
+                    alias_type = 'strong'
+                else:
+                    alias_type = 'weak'  # former name, nickname, merged name
+                self._othername_index[name_lower].append((on[1], alias_type))
+                othername_count += 1
+        logger.info(f"  OtherName index: {othername_count} aliases")
+
+        # 4. Build Companies House index (canonical = lowest org_id for each CH number)
+        self._ch_index = {}
+        ch_matches = CompaniesHouseMatch.objects.filter(
+            status__in=['approved', 'auto_approved']
+        ).values_list('company_number', 'organization_id').order_by('organization_id')
+        for company_number, org_id in ch_matches:
+            # Keep the lowest org_id (first seen due to order_by) as canonical
+            if company_number not in self._ch_index:
+                self._ch_index[company_number] = org_id
+        logger.info(f"  CH index: {len(self._ch_index)} unique company numbers")
+
+        # 5. Build Electoral Commission actor index (for donor matching)
+        self._ec_actor_index = defaultdict(list)
+        ec_idents = Identifier.objects.filter(
+            scheme='electoralcommission',
+            content_type__in=actor_content_types
+        ).values_list('identifier', 'object_id')
+        for ec_ref, actor_id in ec_idents:
+            self._ec_actor_index[ec_ref].append(actor_id)
+        logger.info(f"  EC index: {len(self._ec_actor_index)} unique EC refs")
+
+        logger.info("In-memory indexes built successfully.")
+
+    def _get_actor_by_id(self, actor_id: int) -> Optional['models.Actor']:
+        """Get actor by ID, using cache if available."""
+        if self._actor_by_id:
+            return self._actor_by_id.get(actor_id)
+        from datafetch.models import Actor
+        return Actor.objects.filter(pk=actor_id).first()
 
     def resolve(self, actor: 'models.Actor') -> Optional['models.Actor']:
         """
@@ -127,28 +241,54 @@ class EntityResolutionService:
                 'cache_hit'
             )
 
-        # Pass 1: Identifier-based resolution
+        # Pass 1: Identifier-based resolution (1.0 confidence)
         result = self._resolve_by_identifier(actor)
         if result.is_resolved:
             self._cache[cache_key] = result.canonical
             self.stats['identifier_matches'] += 1
             return result
 
-        # Pass 2: Exact name match
+        # Pass 2: EC Donor ID resolution (0.95 confidence)
+        result = self._resolve_by_ec_id(actor)
+        if result.is_resolved:
+            self._cache[cache_key] = result.canonical
+            self.stats['ec_id_matches'] += 1
+            return result
+
+        # Pass 3: Exact name match (0.95 confidence)
         result = self._resolve_by_exact_name(actor)
         if result.is_resolved:
             self._cache[cache_key] = result.canonical
             self.stats['exact_matches'] += 1
             return result
 
-        # Pass 3: Strong normalization match
+        # Pass 4: Strong OtherName alias match (0.90 confidence)
+        result = self._resolve_by_othername(actor, alias_type='strong')
+        if result.is_resolved:
+            self._cache[cache_key] = result.canonical
+            self.stats['othername_strong_matches'] += 1
+            return result
+
+        # Fast mode stops here (skip slow fuzzy matching)
+        if self.fast_mode:
+            self.stats['no_match'] += 1
+            return ResolutionResult(None, 0.0, 'no_match_fast', f'No exact match (fast mode): {actor.name}')
+
+        # Pass 5: Strong normalization match (0.85 confidence)
         result = self._resolve_by_normalized_name(actor, strength='strong')
         if result.is_resolved:
             self._cache[cache_key] = result.canonical
             self.stats['strong_matches'] += 1
             return result
 
-        # Pass 4: Weak normalization match
+        # Pass 6: Weak OtherName alias match (0.75 confidence)
+        result = self._resolve_by_othername(actor, alias_type='weak')
+        if result.is_resolved:
+            self._cache[cache_key] = result.canonical
+            self.stats['othername_weak_matches'] += 1
+            return result
+
+        # Pass 7: Weak normalization match (0.70 confidence)
         result = self._resolve_by_normalized_name(actor, strength='weak')
         if result.is_resolved:
             self._cache[cache_key] = result.canonical
@@ -214,6 +354,7 @@ class EntityResolutionService:
         - Has meeting attendances: +10 per attendance
         - Has consultancy relationships: +15 per relationship
         - Has Membership records: +10 per membership
+        - Organization type bonus: +100 (for org names typed as Org)
 
         Args:
             actor: Actor to score
@@ -221,11 +362,24 @@ class EntityResolutionService:
         Returns:
             Integer score (higher = richer data)
         """
+        if actor.pk in self._score_cache:
+            return self._score_cache[actor.pk]
+
         from datafetch.models import (
-            Identifier, Donation, MeetingAttendee, Consultancy, Membership
+            Identifier, Donation, MeetingAttendee, Consultancy, Membership, Organization
         )
 
         score = 0
+
+        # Quality bonus: If it's correctly typed as an Organization and contains
+        # organization keywords, give it a massive boost so it's preferred over
+        # misclassified "Person" records with the same name.
+        is_org = hasattr(actor, 'organization') or isinstance(actor, Organization)
+        if is_org:
+            org_keywords = ['party', 'union', 'ltd', 'limited', 'plc', 'llp', 'council', 'group', 'association', 'federation']
+            name_lower = actor.name.lower()
+            if any(kw in name_lower for kw in org_keywords):
+                score += 100
 
         # Check identifiers
         identifiers = Identifier.objects.filter(
@@ -260,6 +414,7 @@ class EntityResolutionService:
             memberships = Membership.objects.filter(person=actor.person).count()
             score += memberships * 10
 
+        self._score_cache[actor.pk] = score
         return score
 
     def merge_actors(self, source: 'models.Actor', target: 'models.Actor',
@@ -441,9 +596,150 @@ class EntityResolutionService:
         results.sort(key=lambda r: -r.confidence)
         return results
 
+    def _resolve_by_ec_id(self, actor: 'models.Actor') -> ResolutionResult:
+        """
+        Resolve by Electoral Commission donor ID.
+
+        Uses prefetched _ec_actor_index for O(1) lookup when available.
+
+        Args:
+            actor: Actor to resolve
+
+        Returns:
+            ResolutionResult with canonical if found
+        """
+        from datafetch.models import Actor, Identifier
+
+        # Get actor's EC identifiers
+        actor_ct = ContentType.objects.get_for_model(actor.__class__)
+        ec_idents = Identifier.objects.filter(
+            content_type=actor_ct,
+            object_id=actor.pk,
+            scheme='electoralcommission'
+        ).values_list('identifier', flat=True)
+
+        for ec_ref in ec_idents:
+            # Use index if available (O(1) lookup)
+            if self._ec_actor_index:
+                other_actor_ids = [
+                    aid for aid in self._ec_actor_index.get(ec_ref, [])
+                    if aid != actor.pk
+                ]
+                if other_actor_ids:
+                    # Return the canonical (lowest ID)
+                    canonical_id = min(other_actor_ids)
+                    if canonical_id < actor.pk:
+                        canonical = self._get_actor_by_id(canonical_id)
+                        if canonical:
+                            return ResolutionResult(
+                                canonical=canonical,
+                                confidence=self.CONFIDENCE_EC_DONOR,
+                                match_reason='ec_donor_id_match',
+                                details=f'EC: {ec_ref}'
+                            )
+            else:
+                # Fall back to database query
+                other_idents = Identifier.objects.filter(
+                    scheme='electoralcommission',
+                    identifier=ec_ref
+                ).exclude(
+                    content_type=actor_ct,
+                    object_id=actor.pk
+                ).values_list('object_id', flat=True)
+
+                for other_id in other_idents:
+                    if other_id < actor.pk:
+                        canonical = self._get_actor_by_id(other_id)
+                        if canonical:
+                            return ResolutionResult(
+                                canonical=canonical,
+                                confidence=self.CONFIDENCE_EC_DONOR,
+                                match_reason='ec_donor_id_match',
+                                details=f'EC: {ec_ref}'
+                            )
+
+        return ResolutionResult(None, 0.0, 'no_ec_id', 'No EC ID match')
+
+    def _resolve_by_othername(self, actor: 'models.Actor', alias_type: str = 'strong') -> ResolutionResult:
+        """
+        Resolve by OtherName (alias) matching.
+
+        Looks up the actor's name in the OtherName index to find actors
+        that have this name as an alias.
+
+        Args:
+            actor: Actor to resolve
+            alias_type: 'strong' for abbreviations/trade names (0.90),
+                       'weak' for former names/nicknames (0.75)
+
+        Returns:
+            ResolutionResult with canonical if found
+        """
+        from datafetch.models import Actor
+
+        confidence = (
+            self.CONFIDENCE_OTHERNAME_STRONG if alias_type == 'strong'
+            else self.CONFIDENCE_OTHERNAME_WEAK
+        )
+
+        actor_name_lower = actor.name.lower()
+
+        # Use index if available
+        if self._othername_index:
+            matches = self._othername_index.get(actor_name_lower, [])
+            # Filter by alias type and exclude self
+            candidate_ids = [
+                aid for aid, atype in matches
+                if atype == alias_type and aid != actor.pk
+            ]
+
+            if candidate_ids:
+                # Return canonical (lowest ID)
+                canonical_id = min(candidate_ids)
+                if canonical_id < actor.pk:
+                    canonical = self._get_actor_by_id(canonical_id)
+                    if canonical:
+                        return ResolutionResult(
+                            canonical=canonical,
+                            confidence=confidence,
+                            match_reason=f'othername_{alias_type}_match',
+                            details=f'Alias: "{actor.name}" -> actor #{canonical_id}'
+                        )
+        else:
+            # Fall back to database query (slow)
+            from datafetch.models import OtherName, Person, Organization
+            person_ct = ContentType.objects.get_for_model(Person)
+            org_ct = ContentType.objects.get_for_model(Organization)
+
+            matches = OtherName.objects.filter(
+                name__iexact=actor.name,
+                content_type__in=[person_ct, org_ct]
+            ).exclude(object_id=actor.pk).values_list('object_id', 'note')
+
+            for obj_id, note in matches:
+                note_lower = (note or '').lower()
+                if alias_type == 'strong':
+                    is_match = any(kw in note_lower for kw in ['abbreviation', 'trade', 'trading', 'aka'])
+                else:
+                    is_match = not any(kw in note_lower for kw in ['abbreviation', 'trade', 'trading', 'aka'])
+
+                if is_match and obj_id < actor.pk:
+                    canonical = self._get_actor_by_id(obj_id)
+                    if canonical:
+                        return ResolutionResult(
+                            canonical=canonical,
+                            confidence=confidence,
+                            match_reason=f'othername_{alias_type}_match',
+                            details=f'Alias: "{actor.name}" -> actor #{obj_id}'
+                        )
+
+        return ResolutionResult(None, 0.0, f'no_othername_{alias_type}', f'No OtherName {alias_type} match')
+
     def _resolve_by_identifier(self, actor: 'models.Actor') -> ResolutionResult:
         """
         Resolve by external identifier (Companies House, Electoral Commission, etc.).
+
+        Uses prefetched _ch_index for O(1) Company House lookups when available.
 
         Args:
             actor: Actor to resolve
@@ -453,7 +749,7 @@ class EntityResolutionService:
         """
         from datafetch.models import Actor, Identifier, CompaniesHouseMatch
 
-        # Check Companies House matches
+        # Check Companies House matches (use index if available)
         if hasattr(actor, 'organization'):
             ch_matches = CompaniesHouseMatch.objects.filter(
                 organization=actor.organization,
@@ -461,21 +757,34 @@ class EntityResolutionService:
             ).values_list('company_number', flat=True)
 
             for company_number in ch_matches:
-                # Find other orgs with same CH number
-                other_matches = CompaniesHouseMatch.objects.filter(
-                    company_number=company_number,
-                    status__in=['approved', 'auto_approved']
-                ).exclude(
-                    organization=actor.organization
-                ).select_related('organization')
+                # Use index for O(1) lookup
+                if self._ch_index:
+                    canonical_org_id = self._ch_index.get(company_number)
+                    if canonical_org_id and canonical_org_id != actor.pk:
+                        canonical = self._get_actor_by_id(canonical_org_id)
+                        if canonical:
+                            return ResolutionResult(
+                                canonical=canonical,
+                                confidence=self.CONFIDENCE_IDENTIFIER,
+                                match_reason='companies_house_match',
+                                details=f'CH: {company_number}'
+                            )
+                else:
+                    # Fall back to database query
+                    other_matches = CompaniesHouseMatch.objects.filter(
+                        company_number=company_number,
+                        status__in=['approved', 'auto_approved']
+                    ).exclude(
+                        organization=actor.organization
+                    ).select_related('organization')
 
-                for match in other_matches:
-                    return ResolutionResult(
-                        canonical=match.organization.actor_ptr,
-                        confidence=self.CONFIDENCE_IDENTIFIER,
-                        match_reason='companies_house_match',
-                        details=f'CH: {company_number}'
-                    )
+                    for match in other_matches:
+                        return ResolutionResult(
+                            canonical=match.organization.actor_ptr,
+                            confidence=self.CONFIDENCE_IDENTIFIER,
+                            match_reason='companies_house_match',
+                            details=f'CH: {company_number}'
+                        )
 
         # Check Identifiers
         actor_ct = ContentType.objects.get_for_model(actor.__class__)
@@ -510,7 +819,7 @@ class EntityResolutionService:
         """
         Resolve by exact name match (case-insensitive).
 
-        Prefers actors with more relationships (richer data).
+        Prefers actors with more relationships (richer data), unless skip_scoring is set.
 
         Args:
             actor: Actor to resolve
@@ -520,28 +829,75 @@ class EntityResolutionService:
         """
         from datafetch.models import Actor
 
-        # Find actors with same name
-        candidates = Actor.objects.filter(
-            name__iexact=actor.name
-        ).exclude(pk=actor.pk)
+        # Use index if available
+        if self._name_index:
+            candidates = [
+                c for c in self._name_index.get(actor.name.lower(), [])
+                if c.pk != actor.pk
+            ]
+            if not candidates:
+                return ResolutionResult(None, 0.0, 'no_exact_match', 'No exact name match')
+        else:
+            # Find actors with same name
+            candidates = Actor.objects.filter(
+                name__iexact=actor.name
+            ).exclude(pk=actor.pk)
 
-        if not candidates.exists():
-            return ResolutionResult(None, 0.0, 'no_exact_match', 'No exact name match')
+            if not candidates.exists():
+                return ResolutionResult(None, 0.0, 'no_exact_match', 'No exact name match')
 
-        # Find the best candidate (highest entity score)
+        # Fast path: skip scoring, just take first match with lower ID (older = canonical)
+        if self.skip_scoring:
+            if isinstance(candidates, list):
+                # Sort in-memory list by PK
+                sorted_candidates = sorted(candidates, key=lambda x: x.pk)
+                best_candidate = sorted_candidates[0] if sorted_candidates else None
+            else:
+                # Use QuerySet method
+                best_candidate = candidates.order_by('pk').first()
+                
+            if best_candidate and best_candidate.pk < actor.pk:
+                return ResolutionResult(
+                    canonical=best_candidate,
+                    confidence=self.CONFIDENCE_EXACT,
+                    match_reason='exact_name_match',
+                    details=f'First match (ID: {best_candidate.pk})'
+                )
+            return ResolutionResult(None, 0.0, 'no_older_match', 'No older exact match')
+
+        # Full scoring path: find the best candidate (highest entity score)
         best_candidate = None
         best_score = -1
+        
+        from datafetch.models import Organization
+        org_keywords = ['party', 'union', 'ltd', 'limited', 'plc', 'llp', 'council', 'group', 'association', 'federation']
+        name_lower = actor.name.lower()
+        should_be_org = any(kw in name_lower for kw in org_keywords)
 
         for candidate in candidates:
             score = self.calculate_entity_score(candidate)
+            
+            # Polymorphic Safety: If name suggests an Organization, prioritize
+            # candidates that are actually typed as Organization.
+            candidate_is_org = hasattr(candidate, 'organization') or isinstance(candidate, Organization)
+            if should_be_org and candidate_is_org:
+                score += 1000000  # Massive priority for correctly typed orgs
+
             if score > best_score:
                 best_score = score
                 best_candidate = candidate
 
         if best_candidate:
-            # Only return if the candidate has more data than the source
+            # Only return if the candidate has more data than the source,
+            # OR if scores are equal and candidate has lower ID (older = canonical)
             source_score = self.calculate_entity_score(actor)
-            if best_score > source_score:
+            
+            # Adjust source score if it's misclassified
+            actor_is_org = hasattr(actor, 'organization') or isinstance(actor, Organization)
+            if should_be_org and not actor_is_org:
+                source_score -= 1000000  # Penalize misclassified source
+
+            if best_score > source_score or (best_score == source_score and best_candidate.pk < actor.pk):
                 return ResolutionResult(
                     canonical=best_candidate,
                     confidence=self.CONFIDENCE_EXACT,
@@ -556,6 +912,8 @@ class EntityResolutionService:
         """
         Resolve by normalized name match.
 
+        Uses prefix filtering to reduce search space before fuzzy matching.
+
         Args:
             actor: Actor to resolve
             strength: 'strong' or 'weak' normalization
@@ -567,27 +925,115 @@ class EntityResolutionService:
 
         normalized = normalize_actor_name(actor.name, strength=strength)
 
-        if not normalized:
-            return ResolutionResult(None, 0.0, 'empty_normalized', 'Normalized name is empty')
+        if not normalized or len(normalized) < 3:
+            return ResolutionResult(None, 0.0, 'empty_normalized', 'Normalized name too short')
 
-        # Find candidates by scanning (expensive but thorough)
-        # In production, this should use a precomputed search index
+        candidates = []
+        
+        # Optimization: Use pre-built normalized indexes if available (O(1) lookup)
+        if strength == 'strong' and hasattr(self, '_normalized_strong_index') and self._normalized_strong_index:
+            candidates = [c for c in self._normalized_strong_index.get(normalized, []) if c.pk != actor.pk]
+        elif strength == 'weak' and hasattr(self, '_normalized_weak_index') and self._normalized_weak_index:
+            candidates = [c for c in self._normalized_weak_index.get(normalized, []) if c.pk != actor.pk]
+        else:
+            # Fallback to slower search if indexes not available
+            
+            # Smart filtering: use first word or prefix to narrow search
+            # This reduces 155k actors to typically <1000
+            first_word = normalized.split()[0] if ' ' in normalized else normalized[:8]
+
+            if self._name_index:
+                # Search the index keys (still faster than DB istartswith in many cases)
+                # but even better, if we have a direct match on keys we should use it.
+                # For now, let's just use the index to get candidates by prefix
+                prefix = first_word[:4].lower()
+                candidates_raw = []
+                for name_key, actor_list in self._name_index.items():
+                    if name_key.startswith(prefix):
+                        for a in actor_list:
+                            if a.pk != actor.pk:
+                                candidates_raw.append(a)
+                    if len(candidates_raw) >= 500:
+                        break
+                
+                # Filter candidates manually since we didn't use the exact lookup index
+                for candidate in candidates_raw:
+                     candidate_normalized = normalize_actor_name(candidate.name, strength=strength)
+                     if candidate_normalized == normalized:
+                         candidates.append(candidate)
+                         
+            else:
+                # Find candidates with similar starting characters (case-insensitive)
+                # Note: This is the slowest path (DB query per record)
+                candidates_qs = Actor.objects.exclude(pk=actor.pk).filter(
+                    name__istartswith=first_word[:4]  # First 4 chars of first word
+                )[:500]  # Limit to 500 candidates max
+                
+                # If no prefix matches, try contains on first word
+                if not candidates_qs.exists() and len(first_word) >= 4:
+                    candidates_qs = Actor.objects.exclude(pk=actor.pk).filter(
+                        name__icontains=first_word
+                    )[:500]
+
+                # Filter DB candidates
+                for candidate in candidates_qs:
+                    candidate_normalized = normalize_actor_name(candidate.name, strength=strength)
+                    if candidate_normalized == normalized:
+                        candidates.append(candidate)
+
+        # Common logic: Select best candidate from matches
         best_candidate = None
         best_score = -1
-
-        # Limit search scope for performance
-        candidates = Actor.objects.exclude(pk=actor.pk)[:10000]
+        
+        from datafetch.models import Organization
+        org_keywords = ['party', 'union', 'ltd', 'limited', 'plc', 'llp', 'council', 'group', 'association', 'federation']
+        name_lower = actor.name.lower()
+        should_be_org = any(kw in name_lower for kw in org_keywords)
 
         for candidate in candidates:
-            candidate_normalized = normalize_actor_name(candidate.name, strength=strength)
-            if candidate_normalized == normalized:
+            # Candidates are already verified to match normalized name
+            
+            # Fast path: take first match with lower ID
+            if self.skip_scoring:
+                # Still prioritize org if needed
+                candidate_is_org = hasattr(candidate, 'organization') or isinstance(candidate, Organization)
+                actor_is_org = hasattr(actor, 'organization') or isinstance(actor, Organization)
+                
+                # If we're an org and they aren't, they can't be our canonical
+                if should_be_org and actor_is_org and not candidate_is_org:
+                    continue
+                
+                if candidate.pk < actor.pk:
+                    confidence = (
+                        self.CONFIDENCE_STRONG if strength == 'strong'
+                        else self.CONFIDENCE_WEAK
+                    )
+                    return ResolutionResult(
+                        canonical=candidate,
+                        confidence=confidence,
+                        match_reason=f'{strength}_normalization_match',
+                        details=f'Normalized: "{normalized}"'
+                    )
+            else:
                 score = self.calculate_entity_score(candidate)
+                
+                # Polymorphic Safety
+                candidate_is_org = hasattr(candidate, 'organization') or isinstance(candidate, Organization)
+                if should_be_org and candidate_is_org:
+                    score += 1000000
+
                 if score > best_score:
                     best_score = score
                     best_candidate = candidate
 
-        if best_candidate:
+        if best_candidate and not self.skip_scoring:
             source_score = self.calculate_entity_score(actor)
+            
+            # Adjust source score if it's misclassified
+            actor_is_org = hasattr(actor, 'organization') or isinstance(actor, Organization)
+            if should_be_org and not actor_is_org:
+                source_score -= 1000000
+
             if best_score > source_score:
                 confidence = (
                     self.CONFIDENCE_STRONG if strength == 'strong'
@@ -612,13 +1058,17 @@ class EntityResolutionService:
     def clear_cache(self):
         """Clear the resolution cache."""
         self._cache.clear()
+        self._score_cache.clear()
 
     def log_stats(self):
         """Log resolution statistics."""
         logger.info("=== Entity Resolution Statistics ===")
         logger.info(f"  Identifier matches: {self.stats['identifier_matches']}")
+        logger.info(f"  EC ID matches: {self.stats.get('ec_id_matches', 0)}")
         logger.info(f"  Exact matches: {self.stats['exact_matches']}")
+        logger.info(f"  OtherName strong: {self.stats.get('othername_strong_matches', 0)}")
         logger.info(f"  Strong matches: {self.stats['strong_matches']}")
+        logger.info(f"  OtherName weak: {self.stats.get('othername_weak_matches', 0)}")
         logger.info(f"  Weak matches: {self.stats['weak_matches']}")
         logger.info(f"  No match: {self.stats['no_match']}")
         logger.info(f"  Cache hits: {self.stats['cache_hits']}")

@@ -30,7 +30,10 @@ Phase 3.2 Implementation - Entity Resolution Bootstrap
 """
 
 import sys
+import time
 import logging
+from typing import List, Dict, Any
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
@@ -44,7 +47,29 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Populate canonical_* fields using EntityResolutionService'
+    help = 'Populate canonical_* fields using EntityResolutionService (Optimized)'
+
+    def _format_duration(self, seconds):
+        """Format seconds into human-readable duration."""
+        if seconds < 60:
+            return f'{seconds:.1f}s'
+        elif seconds < 3600:
+            mins = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f'{mins}m {secs}s'
+        else:
+            hours = int(seconds // 3600)
+            mins = int((seconds % 3600) // 60)
+            return f'{hours}h {mins}m'
+
+    def _calculate_eta(self, batch_times, current_batch, total_batches):
+        """Calculate ETA based on average batch time."""
+        if not batch_times:
+            return 'calculating...'
+        avg_time = sum(batch_times) / len(batch_times)
+        remaining_batches = total_batches - current_batch
+        eta_seconds = avg_time * remaining_batches
+        return self._format_duration(eta_seconds)
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -81,6 +106,17 @@ class Command(BaseCommand):
             default=True,
             help='Skip records that already have canonical set (default: True)'
         )
+        parser.add_argument(
+            '--limit',
+            type=int,
+            default=0,
+            help='Limit total records to process (for testing, 0 = unlimited)'
+        )
+        parser.add_argument(
+            '--fast',
+            action='store_true',
+            help='Fast mode: only identifier + exact name matching (skip slow fuzzy matching)'
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
@@ -89,20 +125,39 @@ class Command(BaseCommand):
         min_confidence = options['min_confidence']
         verbose = options['verbose']
         skip_existing = options['skip_existing']
+        limit = options['limit']
+        fast_mode = options['fast']
 
         if dry_run:
             self.stdout.write(self.style.WARNING('\n[DRY RUN MODE] No changes will be made\n'))
 
         self.stdout.write(self.style.SUCCESS('=' * 70))
-        self.stdout.write(self.style.SUCCESS('Entity Resolution Bootstrap'))
+        self.stdout.write(self.style.SUCCESS('Entity Resolution Bootstrap (Optimized)'))
         self.stdout.write(self.style.SUCCESS('=' * 70))
         self.stdout.write(f'Dataset: {dataset}')
         self.stdout.write(f'Batch size: {batch_size}')
         self.stdout.write(f'Min confidence: {min_confidence}')
+        self.stdout.write(f'Verbose: {verbose}')
+        self.stdout.write(f'Skip existing: {skip_existing}')
+        self.stdout.write(f'Fast mode: {fast_mode}')
+        if fast_mode:
+            self.stdout.write(self.style.WARNING('  (identifier + exact name only, skipping slow fuzzy matching)'))
+        else:
+            self.stdout.write(self.style.HTTP_INFO('  (Full mode with score caching enabled)'))
         self.stdout.write('')
 
+        # Show database counts first
+        self._show_database_counts()
+
+        # Track total time
+        total_start_time = time.time()
+
         # Initialize service
-        service = EntityResolutionService()
+        service = EntityResolutionService(fast_mode=fast_mode)
+        
+        # Prefetch for speed if processing all or large datasets
+        if limit == 0 or limit > 1000:
+            service.prefetch_all_actors()
 
         # Track totals
         totals = {
@@ -110,35 +165,45 @@ class Command(BaseCommand):
             'resolved': 0,
             'skipped': 0,
             'errors': 0,
+            'samples': [],  # Store sample resolutions to show
         }
 
+        # Track remaining limit across datasets
+        remaining_limit = limit if limit > 0 else float('inf')
+
         # Process each dataset
-        if dataset in ['meetings', 'all']:
-            self._process_meeting_attendees(
+        if dataset in ['meetings', 'all'] and remaining_limit > 0:
+            processed = self._process_meeting_attendees(
                 service, dry_run, batch_size, min_confidence,
-                verbose, skip_existing, totals
+                verbose, skip_existing, totals, int(remaining_limit) if remaining_limit != float('inf') else 0
             )
+            remaining_limit -= processed
 
-        if dataset in ['donations', 'all']:
-            self._process_donations(
+        if dataset in ['donations', 'all'] and remaining_limit > 0:
+            processed = self._process_donations(
                 service, dry_run, batch_size, min_confidence,
-                verbose, skip_existing, totals
+                verbose, skip_existing, totals, int(remaining_limit) if remaining_limit != float('inf') else 0
             )
+            remaining_limit -= processed
 
-        if dataset in ['consultancies', 'all']:
+        if dataset in ['consultancies', 'all'] and remaining_limit > 0:
             self._process_consultancies(
                 service, dry_run, batch_size, min_confidence,
-                verbose, skip_existing, totals
+                verbose, skip_existing, totals, int(remaining_limit) if remaining_limit != float('inf') else 0
             )
+
+        # Calculate total elapsed time
+        total_elapsed = time.time() - total_start_time
 
         # Print summary
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS('=' * 70))
         self.stdout.write(self.style.SUCCESS('Summary'))
         self.stdout.write(self.style.SUCCESS('=' * 70))
-        self.stdout.write(f'Total processed: {totals["processed"]}')
-        self.stdout.write(f'Total resolved: {totals["resolved"]}')
-        self.stdout.write(f'Total skipped: {totals["skipped"]}')
+        self.stdout.write(f'Total processed: {totals["processed"]:,}')
+        self.stdout.write(f'Total resolved: {totals["resolved"]:,}')
+        self.stdout.write(f'Total skipped: {totals["skipped"]:,}')
+        self.stdout.write(f'Total time: {self._format_duration(total_elapsed)}')
 
         if totals['errors'] > 0:
             self.stdout.write(self.style.WARNING(f'Errors: {totals["errors"]}'))
@@ -152,45 +217,124 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write('Entity Resolution Statistics:')
         self.stdout.write(f'  Identifier matches: {stats["identifier_matches"]}')
+        self.stdout.write(f'  EC ID matches: {stats.get("ec_id_matches", 0)}')
         self.stdout.write(f'  Exact matches: {stats["exact_matches"]}')
+        self.stdout.write(f'  OtherName strong: {stats.get("othername_strong_matches", 0)}')
         self.stdout.write(f'  Strong matches: {stats["strong_matches"]}')
+        self.stdout.write(f'  OtherName weak: {stats.get("othername_weak_matches", 0)}')
         self.stdout.write(f'  Weak matches: {stats["weak_matches"]}')
         self.stdout.write(f'  Cache hits: {stats["cache_hits"]}')
+        
+        # New stats if available
+        if hasattr(service, '_score_cache'):
+            self.stdout.write(f'  Score cache size: {len(service._score_cache)}')
+
+        # Show sample resolutions
+        if totals['samples']:
+            self.stdout.write('')
+            self.stdout.write(self.style.HTTP_INFO('Sample Resolutions (first 20):'))
+            self.stdout.write(self.style.HTTP_INFO('-' * 70))
+            for sample in totals['samples'][:20]:
+                self.stdout.write(
+                    f"  {sample['source'][:40]:<40} -> "
+                    f"{sample['target'][:30]:<30} ({sample['confidence']:.2f}, {sample['match_reason']})"
+                )
 
         if dry_run:
             self.stdout.write(self.style.WARNING('\n[DRY RUN] No changes were made'))
         else:
             self.stdout.write(self.style.SUCCESS('\nBootstrap complete!'))
 
+    def _show_database_counts(self):
+        """Show current database counts for context."""
+        self.stdout.write(self.style.HTTP_INFO('Current Database State:'))
+        self.stdout.write(self.style.HTTP_INFO('-' * 70))
+
+        # Meeting attendees
+        total_attendees = MeetingAttendee.objects.count()
+        linked_attendees = MeetingAttendee.objects.filter(canonical_actor__isnull=False).count()
+        unlinked_attendees = total_attendees - linked_attendees
+
+        # Donations
+        total_donations = Donation.objects.count()
+        linked_donors = Donation.objects.filter(canonical_donor__isnull=False).count()
+        linked_recipients = Donation.objects.filter(canonical_recipient__isnull=False).count()
+
+        # Consultancies
+        total_consultancies = Consultancy.objects.count()
+        linked_clients = Consultancy.objects.filter(canonical_client__isnull=False).count()
+        linked_agencies = Consultancy.objects.filter(canonical_agency__isnull=False).count()
+
+        self.stdout.write(f'  Meeting Attendees: {total_attendees:,} total, {linked_attendees:,} linked, {unlinked_attendees:,} unlinked')
+        self.stdout.write(f'  Donations: {total_donations:,} total')
+        self.stdout.write(f'    - Donors linked: {linked_donors:,}')
+        self.stdout.write(f'    - Recipients linked: {linked_recipients:,}')
+        self.stdout.write(f'  Consultancies: {total_consultancies:,} total')
+        self.stdout.write(f'    - Clients linked: {linked_clients:,}')
+        self.stdout.write(f'    - Agencies linked: {linked_agencies:,}')
+        self.stdout.write('')
+
     def _process_meeting_attendees(self, service, dry_run, batch_size,
-                                   min_confidence, verbose, skip_existing, totals):
+                                   min_confidence, verbose, skip_existing, totals, limit=0):
         """Process MeetingAttendee records."""
         self.stdout.write(self.style.HTTP_INFO('\n## Processing MeetingAttendees'))
         self.stdout.write(self.style.HTTP_INFO('-' * 70))
 
-        # Build queryset
-        queryset = MeetingAttendee.objects.select_related('actor')
+        # Build queryset ordered by ID for stable cursor-based pagination
+        queryset = MeetingAttendee.objects.select_related('actor').order_by('id')
 
         if skip_existing:
             queryset = queryset.filter(canonical_actor__isnull=True)
 
         total = queryset.count()
-        self.stdout.write(f'Found {total} records to process')
+        if limit > 0:
+            total = min(total, limit)
+        self.stdout.write(f'Found {queryset.count()} records, processing {total}')
 
         if total == 0:
-            return
+            return 0
 
         processed = 0
         resolved = 0
         errors = 0
+        batch_times = []
+        total_batches = (total + batch_size - 1) // batch_size
+        last_id = 0  # Cursor for stable pagination
 
-        # Process in batches
-        for i in range(0, total, batch_size):
-            batch = list(queryset[i:i + batch_size])
+        # Process in batches using cursor-based pagination (id > last_id)
+        batch_num = 0
+        while processed < total:
+            batch_start = time.time()
+            # Cursor-based query: get next batch where id > last_id
+            batch = list(queryset.filter(id__gt=last_id)[:batch_size])
+            if not batch:
+                break
+            last_id = batch[-1].id  # Update cursor to last ID in batch
+            updates = []
+            batch_num += 1
 
+            self.stdout.write(f'  Processing batch {batch_num}... ', ending='')
+            self.stdout.flush()
+
+            # Pre-resolve unique actors for this batch to reduce service calls
+            unique_actors = {}
             for attendee in batch:
+                if attendee.actor_id and attendee.actor_id not in unique_actors:
+                    unique_actors[attendee.actor_id] = attendee.actor
+
+            batch_resolutions = {}
+            for actor_id, actor in unique_actors.items():
+                batch_resolutions[actor_id] = service.resolve_with_confidence(actor)
+
+            for idx, attendee in enumerate(batch):
+                if (idx + 1) % 50 == 0:
+                    self.stdout.write('.', ending='')
+                    self.stdout.flush()
                 try:
-                    result = service.resolve_with_confidence(attendee.actor)
+                    # Use pre-resolved result
+                    result = batch_resolutions.get(attendee.actor_id)
+                    if not result:
+                        result = service.resolve_with_confidence(attendee.actor)
 
                     if result.is_resolved and result.confidence >= min_confidence:
                         # Don't link to self
@@ -198,12 +342,21 @@ class Command(BaseCommand):
                             if verbose:
                                 self.stdout.write(
                                     f'  {attendee.actor.name} -> '
-                                    f'{result.canonical.name} ({result.confidence:.2f})'
+                                    f'{result.canonical.name} ({result.confidence:.2f}, {result.match_reason})'
                                 )
+
+                            # Store sample for summary
+                            if len(totals['samples']) < 50:
+                                totals['samples'].append({
+                                    'source': attendee.actor.name,
+                                    'target': result.canonical.name,
+                                    'confidence': result.confidence,
+                                    'match_reason': result.match_reason,
+                                })
 
                             if not dry_run:
                                 attendee.canonical_actor_id = result.canonical.pk
-                                attendee.save(update_fields=['canonical_actor_id'])
+                                updates.append(attendee)
 
                             resolved += 1
                         else:
@@ -217,26 +370,39 @@ class Command(BaseCommand):
                     errors += 1
                     logger.error(f'Error processing attendee {attendee.pk}: {e}')
 
-            # Progress update
-            self.stdout.write(
-                f'  Processed {min(i + batch_size, total)}/{total} '
-                f'({resolved} resolved)',
-                ending='\r'
-            )
-            sys.stdout.flush()
+            # Bulk update for this batch
+            if updates and not dry_run:
+                MeetingAttendee.objects.bulk_update(updates, ['canonical_actor'])
 
-        self.stdout.write('')  # New line after progress
-        self.stdout.write(f'  Completed: {processed} processed, {resolved} resolved')
+            # Calculate timing
+            batch_elapsed = time.time() - batch_start
+            batch_times.append(batch_elapsed)
+            eta = self._calculate_eta(batch_times, batch_num, total_batches)
+
+            # Progress update every batch
+            pct = (processed / total) * 100 if total > 0 else 0
+            self.stdout.write(
+                f'  [{pct:5.1f}%] Batch {batch_num}/{total_batches}: {processed:,}/{total:,} '
+                f'| Resolved: {resolved:,} | {self._format_duration(batch_elapsed)}/batch | ETA: {eta}'
+            )
+            self.stdout.flush()
+
+        self.stdout.write(f'\n  ✓ MeetingAttendees complete: {processed:,} processed, {resolved:,} resolved')
+        self.stdout.flush()
 
         totals['processed'] += processed
         totals['resolved'] += resolved
         totals['errors'] += errors
 
+        return processed
+
     def _process_donations(self, service, dry_run, batch_size,
-                           min_confidence, verbose, skip_existing, totals):
+                           min_confidence, verbose, skip_existing, totals, limit=0):
         """Process Donation records (donor and recipient fields)."""
         self.stdout.write(self.style.HTTP_INFO('\n## Processing Donations'))
         self.stdout.write(self.style.HTTP_INFO('-' * 70))
+
+        processed_count = 0
 
         # Process donor field
         self.stdout.write('\nProcessing donor field...')
@@ -249,13 +415,22 @@ class Command(BaseCommand):
             )
 
         donor_total = donor_queryset.count()
-        self.stdout.write(f'Found {donor_total} donor records to process')
+        if limit > 0:
+            donor_total = min(donor_total, limit)
+        self.stdout.write(f'Found {donor_queryset.count()} donor records to process (limit: {donor_total})')
 
         if donor_total > 0:
-            self._process_donation_field(
-                service, donor_queryset, 'donor', 'canonical_donor_id',
-                dry_run, batch_size, min_confidence, verbose, totals
+            p = self._process_donation_field(
+                service, donor_queryset, 'donor', 'canonical_donor',
+                dry_run, batch_size, min_confidence, verbose, totals, donor_total
             )
+            processed_count += p
+            
+            # Reduce limit for next pass if needed
+            if limit > 0:
+                limit -= p
+                if limit <= 0:
+                    return processed_count
 
         # Process recipient field
         self.stdout.write('\nProcessing recipient field...')
@@ -268,27 +443,63 @@ class Command(BaseCommand):
             )
 
         recipient_total = recipient_queryset.count()
-        self.stdout.write(f'Found {recipient_total} recipient records to process')
+        if limit > 0:
+            recipient_total = min(recipient_total, limit)
+        self.stdout.write(f'Found {recipient_queryset.count()} recipient records to process (limit: {recipient_total})')
 
         if recipient_total > 0:
-            self._process_donation_field(
-                service, recipient_queryset, 'recipient', 'canonical_recipient_id',
-                dry_run, batch_size, min_confidence, verbose, totals
+            p = self._process_donation_field(
+                service, recipient_queryset, 'recipient', 'canonical_recipient',
+                dry_run, batch_size, min_confidence, verbose, totals, recipient_total
             )
+            processed_count += p
+
+        return processed_count
 
     def _process_donation_field(self, service, queryset, source_field,
                                 target_field, dry_run, batch_size,
-                                min_confidence, verbose, totals):
+                                min_confidence, verbose, totals, limit):
         """Process a single field on Donation records."""
-        total = queryset.count()
+        # Order by ID for stable cursor-based pagination
+        queryset = queryset.order_by('id')
+        total = min(queryset.count(), limit) if limit > 0 else queryset.count()
         processed = 0
         resolved = 0
         errors = 0
+        batch_times = []
+        total_batches = (total + batch_size - 1) // batch_size
+        last_id = 0  # Cursor for stable pagination
 
-        for i in range(0, total, batch_size):
-            batch = list(queryset[i:i + batch_size])
+        batch_num = 0
+        while processed < total:
+            batch_start = time.time()
+            remaining = total - processed
+            batch_limit = min(batch_size, remaining)
+            batch = list(queryset.filter(id__gt=last_id)[:batch_limit])
+            if not batch:
+                break
+            last_id = batch[-1].id
+            updates = []
+            batch_num += 1
 
+            self.stdout.write(f'  Processing batch {batch_num}... ', ending='')
+            self.stdout.flush()
+
+            # Pre-resolve unique actors for this batch to reduce service calls
+            unique_actors = {}
             for donation in batch:
+                actor = getattr(donation, source_field)
+                if actor and actor.pk not in unique_actors:
+                    unique_actors[actor.pk] = actor
+
+            batch_resolutions = {}
+            for actor_id, actor in unique_actors.items():
+                batch_resolutions[actor_id] = service.resolve_with_confidence(actor)
+
+            for idx, donation in enumerate(batch):
+                if (idx + 1) % 50 == 0:
+                    self.stdout.write('.', ending='')
+                    self.stdout.flush()
                 try:
                     actor = getattr(donation, source_field)
                     if not actor:
@@ -296,19 +507,31 @@ class Command(BaseCommand):
                         processed += 1
                         continue
 
-                    result = service.resolve_with_confidence(actor)
+                    # Use pre-resolved result
+                    result = batch_resolutions.get(actor.pk)
+                    if not result:
+                        result = service.resolve_with_confidence(actor)
 
                     if result.is_resolved and result.confidence >= min_confidence:
                         if result.canonical.pk != actor.pk:
                             if verbose:
                                 self.stdout.write(
                                     f'  {actor.name} -> '
-                                    f'{result.canonical.name} ({result.confidence:.2f})'
+                                    f'{result.canonical.name} ({result.confidence:.2f}, {result.match_reason})'
                                 )
 
+                            # Store sample for summary
+                            if len(totals['samples']) < 50:
+                                totals['samples'].append({
+                                    'source': actor.name,
+                                    'target': result.canonical.name,
+                                    'confidence': result.confidence,
+                                    'match_reason': result.match_reason,
+                                })
+
                             if not dry_run:
-                                setattr(donation, target_field, result.canonical.pk)
-                                donation.save(update_fields=[target_field])
+                                setattr(donation, target_field, result.canonical)
+                                updates.append(donation)
 
                             resolved += 1
                         else:
@@ -322,26 +545,39 @@ class Command(BaseCommand):
                     errors += 1
                     logger.error(f'Error processing donation {donation.pk}: {e}')
 
-            # Progress update
-            self.stdout.write(
-                f'  Processed {min(i + batch_size, total)}/{total} '
-                f'({resolved} resolved)',
-                ending='\r'
-            )
-            sys.stdout.flush()
+            # Bulk update
+            if updates and not dry_run:
+                Donation.objects.bulk_update(updates, [target_field])
 
-        self.stdout.write('')
-        self.stdout.write(f'  Completed: {processed} processed, {resolved} resolved')
+            # Calculate timing
+            batch_elapsed = time.time() - batch_start
+            batch_times.append(batch_elapsed)
+            eta = self._calculate_eta(batch_times, batch_num, total_batches)
+
+            # Progress update every batch
+            pct = (processed / total) * 100 if total > 0 else 0
+            self.stdout.write(
+                f'  [{pct:5.1f}%] Batch {batch_num}/{total_batches}: {processed:,}/{total:,} '
+                f'| Resolved: {resolved:,} | {self._format_duration(batch_elapsed)}/batch | ETA: {eta}'
+            )
+            self.stdout.flush()
+
+        self.stdout.write(f'\n  ✓ Donations field complete: {processed:,} processed, {resolved:,} resolved')
+        self.stdout.flush()
 
         totals['processed'] += processed
         totals['resolved'] += resolved
         totals['errors'] += errors
+        
+        return processed
 
     def _process_consultancies(self, service, dry_run, batch_size,
-                               min_confidence, verbose, skip_existing, totals):
+                               min_confidence, verbose, skip_existing, totals, limit=0):
         """Process Consultancy records (client and agency fields)."""
         self.stdout.write(self.style.HTTP_INFO('\n## Processing Consultancies'))
         self.stdout.write(self.style.HTTP_INFO('-' * 70))
+
+        processed_count = 0
 
         # Process client field
         self.stdout.write('\nProcessing client field...')
@@ -354,13 +590,21 @@ class Command(BaseCommand):
             )
 
         client_total = client_queryset.count()
-        self.stdout.write(f'Found {client_total} client records to process')
+        if limit > 0:
+            client_total = min(client_total, limit)
+        self.stdout.write(f'Found {client_queryset.count()} client records to process (limit: {client_total})')
 
         if client_total > 0:
-            self._process_consultancy_field(
-                service, client_queryset, 'client', 'canonical_client_id',
-                dry_run, batch_size, min_confidence, verbose, totals
+            p = self._process_consultancy_field(
+                service, client_queryset, 'client', 'canonical_client',
+                dry_run, batch_size, min_confidence, verbose, totals, client_total
             )
+            processed_count += p
+            
+            if limit > 0:
+                limit -= p
+                if limit <= 0:
+                    return processed_count
 
         # Process agency field
         self.stdout.write('\nProcessing agency field...')
@@ -373,27 +617,63 @@ class Command(BaseCommand):
             )
 
         agency_total = agency_queryset.count()
-        self.stdout.write(f'Found {agency_total} agency records to process')
+        if limit > 0:
+            agency_total = min(agency_total, limit)
+        self.stdout.write(f'Found {agency_queryset.count()} agency records to process (limit: {agency_total})')
 
         if agency_total > 0:
-            self._process_consultancy_field(
-                service, agency_queryset, 'agency', 'canonical_agency_id',
-                dry_run, batch_size, min_confidence, verbose, totals
+            p = self._process_consultancy_field(
+                service, agency_queryset, 'agency', 'canonical_agency',
+                dry_run, batch_size, min_confidence, verbose, totals, agency_total
             )
+            processed_count += p
+            
+        return processed_count
 
     def _process_consultancy_field(self, service, queryset, source_field,
                                    target_field, dry_run, batch_size,
-                                   min_confidence, verbose, totals):
+                                   min_confidence, verbose, totals, limit):
         """Process a single field on Consultancy records."""
-        total = queryset.count()
+        # Order by ID for stable cursor-based pagination
+        queryset = queryset.order_by('id')
+        total = min(queryset.count(), limit) if limit > 0 else queryset.count()
         processed = 0
         resolved = 0
         errors = 0
+        batch_times = []
+        total_batches = (total + batch_size - 1) // batch_size
+        last_id = 0  # Cursor for stable pagination
 
-        for i in range(0, total, batch_size):
-            batch = list(queryset[i:i + batch_size])
+        batch_num = 0
+        while processed < total:
+            batch_start = time.time()
+            remaining = total - processed
+            batch_limit = min(batch_size, remaining)
+            batch = list(queryset.filter(id__gt=last_id)[:batch_limit])
+            if not batch:
+                break
+            last_id = batch[-1].id
+            updates = []
+            batch_num += 1
 
+            self.stdout.write(f'  Processing batch {batch_num}... ', ending='')
+            self.stdout.flush()
+
+            # Pre-resolve unique actors for this batch to reduce service calls
+            unique_actors = {}
             for consultancy in batch:
+                actor = getattr(consultancy, source_field)
+                if actor and actor.pk not in unique_actors:
+                    unique_actors[actor.pk] = actor
+
+            batch_resolutions = {}
+            for actor_id, actor in unique_actors.items():
+                batch_resolutions[actor_id] = service.resolve_with_confidence(actor)
+
+            for idx, consultancy in enumerate(batch):
+                if (idx + 1) % 50 == 0:
+                    self.stdout.write('.', ending='')
+                    self.stdout.flush()
                 try:
                     actor = getattr(consultancy, source_field)
                     if not actor:
@@ -401,19 +681,31 @@ class Command(BaseCommand):
                         processed += 1
                         continue
 
-                    result = service.resolve_with_confidence(actor)
+                    # Use pre-resolved result
+                    result = batch_resolutions.get(actor.pk)
+                    if not result:
+                        result = service.resolve_with_confidence(actor)
 
                     if result.is_resolved and result.confidence >= min_confidence:
                         if result.canonical.pk != actor.pk:
                             if verbose:
                                 self.stdout.write(
                                     f'  {actor.name} -> '
-                                    f'{result.canonical.name} ({result.confidence:.2f})'
+                                    f'{result.canonical.name} ({result.confidence:.2f}, {result.match_reason})'
                                 )
 
+                            # Store sample for summary
+                            if len(totals['samples']) < 50:
+                                totals['samples'].append({
+                                    'source': actor.name,
+                                    'target': result.canonical.name,
+                                    'confidence': result.confidence,
+                                    'match_reason': result.match_reason,
+                                })
+
                             if not dry_run:
-                                setattr(consultancy, target_field, result.canonical.pk)
-                                consultancy.save(update_fields=[target_field])
+                                setattr(consultancy, target_field, result.canonical)
+                                updates.append(consultancy)
 
                             resolved += 1
                         else:
@@ -427,17 +719,28 @@ class Command(BaseCommand):
                     errors += 1
                     logger.error(f'Error processing consultancy {consultancy.pk}: {e}')
 
-            # Progress update
-            self.stdout.write(
-                f'  Processed {min(i + batch_size, total)}/{total} '
-                f'({resolved} resolved)',
-                ending='\r'
-            )
-            sys.stdout.flush()
+            # Bulk update
+            if updates and not dry_run:
+                Consultancy.objects.bulk_update(updates, [target_field])
 
-        self.stdout.write('')
-        self.stdout.write(f'  Completed: {processed} processed, {resolved} resolved')
+            # Calculate timing
+            batch_elapsed = time.time() - batch_start
+            batch_times.append(batch_elapsed)
+            eta = self._calculate_eta(batch_times, batch_num, total_batches)
+
+            # Progress update every batch
+            pct = (processed / total) * 100 if total > 0 else 0
+            self.stdout.write(
+                f'  [{pct:5.1f}%] Batch {batch_num}/{total_batches}: {processed:,}/{total:,} '
+                f'| Resolved: {resolved:,} | {self._format_duration(batch_elapsed)}/batch | ETA: {eta}'
+            )
+            self.stdout.flush()
+
+        self.stdout.write(f'\n  ✓ Consultancies field complete: {processed:,} processed, {resolved:,} resolved')
+        self.stdout.flush()
 
         totals['processed'] += processed
         totals['resolved'] += resolved
         totals['errors'] += errors
+        
+        return processed
