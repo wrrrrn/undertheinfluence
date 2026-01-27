@@ -40,6 +40,16 @@ export function parseUrlParams(): FilterState {
   const hasLobbying = params.get(URL_PARAM_MAP.hasLobbying);
   if (hasLobbying) state.hasLobbying = hasLobbying === 'true';
 
+  // Politician filters
+  const roleType = params.get(URL_PARAM_MAP.roleType);
+  if (roleType) state.roleType = roleType as FilterState['roleType'];
+
+  const partyId = params.get(URL_PARAM_MAP.partyId);
+  if (partyId) state.partyId = Number(partyId);
+
+  const govtStatus = params.get(URL_PARAM_MAP.govtStatus);
+  if (govtStatus) state.govtStatus = govtStatus as FilterState['govtStatus'];
+
   // Pagination
   const page = params.get(URL_PARAM_MAP.page);
   if (page) state.page = Number(page);
@@ -66,9 +76,13 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
   if (state.minValue !== undefined) params.set(URL_PARAM_MAP.minValue, String(state.minValue));
   if (state.maxValue !== undefined) params.set(URL_PARAM_MAP.maxValue, String(state.maxValue));
   if (state.donorType) params.set(URL_PARAM_MAP.donorType, state.donorType);
-  if (state.excludeDonorType) params.set(URL_PARAM_MAP.excludeDonorType, state.excludeDonorType);
   if (state.recipientType) params.set(URL_PARAM_MAP.recipientType, state.recipientType);
   if (state.hasLobbying !== undefined) params.set(URL_PARAM_MAP.hasLobbying, String(state.hasLobbying));
+  
+  if (state.roleType) params.set(URL_PARAM_MAP.roleType, state.roleType);
+  if (state.partyId) params.set(URL_PARAM_MAP.partyId, String(state.partyId));
+  if (state.govtStatus) params.set(URL_PARAM_MAP.govtStatus, state.govtStatus);
+
   if (state.page !== 1) params.set(URL_PARAM_MAP.page, String(state.page));
   if (state.limit !== 20) params.set(URL_PARAM_MAP.limit, String(state.limit));
   if (state.query) params.set(URL_PARAM_MAP.query, state.query);
@@ -83,9 +97,13 @@ export function serializeFilterState(state: FilterState): URLSearchParams {
  */
 export function updateUrl(state: FilterState, replace: boolean = false): void {
   const params = serializeFilterState(state);
+  
+  // Ensure pathname doesn't start with // which browsers interpret as protocol-relative
+  let pathname = window.location.pathname.replace(/^\/+/, '/');
+  
   const url = params.toString()
-    ? `${window.location.pathname}?${params.toString()}`
-    : window.location.pathname;
+    ? `${pathname}?${params.toString()}`
+    : pathname;
 
   if (replace) {
     window.history.replaceState({}, '', url);

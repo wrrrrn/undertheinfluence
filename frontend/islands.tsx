@@ -3,6 +3,7 @@
 
 import { createRoot } from 'react-dom/client';
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initializeFilterStore } from './store/filterStore';
 
 // TypeScript declarations for React Fast Refresh globals
@@ -12,6 +13,16 @@ declare global {
     $RefreshSig$?: any;
   }
 }
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 /**
  * Error Boundary component for island hydration failures
@@ -51,13 +62,16 @@ class IslandErrorBoundary extends Component<
  * Island registry (lazy-loaded for code splitting)
  * Add new islands here as we build them
  */
-const islands: Record<string, () => Promise<{ default: React.ComponentType<any> }>> = {
-  'ActorCard': () => import('./components/ActorCard'),
-  'FilterPanel': () => import('./islands/FilterPanel'),
-  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
-  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
+const islands = {
   'StatsGrid': () => import('./islands/StatsGrid'),
   'PartyBreakdown': () => import('./islands/PartyBreakdown'),
+  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
+  'FilterPanel': () => import('./islands/FilterPanel'),
+  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
+  'PoliticianDirectory': () => import('./islands/PoliticianDirectory'),
+  'DonationTable': () => import('./islands/DonationTable'),
+  'MeetingsTable': () => import('./islands/MeetingsTable'),
+  'PoliticianProfile': () => import('./islands/PoliticianProfile'),
 };
 
 /**
@@ -138,9 +152,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Hydrate the island with error boundary
       const root = createRoot(el);
       root.render(
-        <IslandErrorBoundary islandName={islandName}>
-          <Component {...props} />
-        </IslandErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <IslandErrorBoundary islandName={islandName}>
+            <Component {...props} />
+          </IslandErrorBoundary>
+        </QueryClientProvider>
       );
 
       console.log(`✓ Hydrated island: ${islandName}`);

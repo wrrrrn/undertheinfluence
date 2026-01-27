@@ -1,3 +1,30 @@
-{% extends "single.html" %}
-
+{% extends "base.html" %}
 {% load static %}
+
+{% block title %}{{ actor.name }} - UnderTheInfluence{% endblock %}
+
+{% block content %}
+    <div id="politician-profile-root"
+         data-island="PoliticianProfile"
+         data-actor-id="{{ actor.id }}"
+         data-actor-name="{{ actor.name }}"
+         data-actor-role="{% if memberships %}{{ memberships.0.role }}{% else %}Politician{% endif %}"
+         data-actor-party="{% if memberships and memberships.0.on_behalf_of %}{{ memberships.0.on_behalf_of.name }}{% elif memberships and memberships.0.organization %}{{ memberships.0.organization.name }}{% endif %}"
+         data-total-donations="{{ relationships.total_received_value }}">
+         
+         <!-- Server-rendered fallback / Loading state -->
+         <div class="container py-5">
+             <div class="d-flex align-items-center mb-5 border-bottom pb-4">
+                 <div class="flex-grow-1">
+                     <h1 class="display-4 fw-bold">{{ actor.name }}</h1>
+                     <p class="text-muted">Loading profile data...</p>
+                 </div>
+             </div>
+             <div class="d-flex justify-content-center py-5">
+                 <div class="spinner-border text-primary" role="status">
+                     <span class="visually-hidden">Loading...</span>
+                 </div>
+             </div>
+         </div>
+    </div>
+{% endblock %}
