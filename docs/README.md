@@ -1,6 +1,6 @@
 # UnderTheInfluence Documentation
 
-**Last Updated**: January 19, 2026
+**Last Updated**: January 26, 2026
 
 This directory contains all project documentation for UnderTheInfluence, a Django-based web application tracking political influence in UK politics.
 
@@ -62,14 +62,48 @@ This directory contains all project documentation for UnderTheInfluence, a Djang
 - State management strategy
 - Performance considerations
 
+### API
+
+**`API_REFERENCE.md`**
+- REST API v2 endpoint reference
+- Aggregate endpoints (top donors, party donations, network stats)
+- Actor detail endpoints
+- Query parameters and response formats
+- Interactive documentation links (Swagger/ReDoc)
+
 ### Data Quality & Import
 
+**`DATA_CLEANUP_GUIDE.md`** ⭐ Start here for cleanup
+- Step-by-step cleanup workflow
+- Fix types by phase (correct execution order)
+- Command options and examples
+- Understanding output (before/after stats)
+- Troubleshooting guide
+
+**`DATA_CLEANUP_RESULTS.md`**
+- Summary of all automated cleanup operations
+- Statistics on resolved issues (duplicates, concatenations, garbage data)
+- Before/After metrics for Companies House and Lobbying data
+- Remaining issues and Phase 2 plan
+
+**`MINISTERIAL_MEETINGS_CLEANUP_DEEP_DIVE.md`**
+- Detailed analysis of Ministerial Meetings data quality
+- Investigation of concatenated attendee names (9,000+ records)
+- "Semicolon actors" and roundtable parsing issues
+- Remediation plan for complex string splitting
+
+**`ADDITIONAL_CLEANUP_COMMANDS_ANALYSIS.md`**
+- Evaluation of 5 specialized cleanup commands
+- Impact analysis for splitting concatenated orgs/attendees
+- Statistics on target records (160-1,800 affected per command)
+- Recommended execution order
+
 **`DATA_QUALITY_REPORT.md`**
-- Comprehensive data quality analysis
-- 167,967 issues identified across 26,000 actors
-- Automated cleanup recommendations
-- Issue breakdowns (duplicates, missing dates, orphaned records)
-- Entity resolution strategy
+- Comprehensive data quality analysis (post-cleanup)
+- Major improvements achieved: 99.98% duplicate reduction, 83% orphaned donations fixed
+- Companies House enrichment status (51,157 matches)
+- Entity resolution status and remaining work
+- Cleanup command reference
 
 **`DATA_IMPORT_GUIDE.md`**
 - Complete guide for importing political data
@@ -126,6 +160,9 @@ These documents are preserved for reference but no longer actively maintained.
 **Understand the database schema**
 → Read `data-models.md`
 
+**Use the API**
+→ Read `API_REFERENCE.md` or visit `/api/v2/docs/` for interactive docs
+
 **Import data**
 → Read `DATA_IMPORT_GUIDE.md`
 
@@ -133,7 +170,7 @@ These documents are preserved for reference but no longer actively maintained.
 → Read `FRONTEND_DESIGN.md` (design system) + `FRONTEND_IMPLEMENTATION.md` (patterns)
 
 **Fix data quality issues**
-→ Read `DATA_QUALITY_REPORT.md`
+→ Read `DATA_CLEANUP_GUIDE.md` (step-by-step workflow), `DATA_QUALITY_REPORT.md` (analysis), `DATA_CLEANUP_RESULTS.md` (past results)
 
 **Understand why a design decision was made**
 → Check "Key Design Decisions" in `systems-architecture.md` or `data-models.md`
@@ -196,4 +233,4 @@ All documentation is maintained by the development team. When making significant
 
 ---
 
-**Last Major Update**: January 19, 2026 (documentation cleanup and reorganization)
+**Last Major Update**: January 26, 2026 (data quality improvements, entity resolution, Companies House enrichment)

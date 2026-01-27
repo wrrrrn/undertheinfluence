@@ -77,6 +77,34 @@ class ConsultancySerializer(serializers.ModelSerializer):
         ]
 
 
+class MeetingAttendeeSerializer(serializers.ModelSerializer):
+    """
+    Serializer for attendees of ministerial meetings.
+    """
+    actor = ActorSummarySerializer(source='effective_actor', read_only=True)
+
+    class Meta:
+        model = models.MeetingAttendee
+        fields = ['id', 'actor', 'actor_name_raw']
+
+
+class MinisterialMeetingSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ministerial meetings.
+    """
+    minister = ActorSummarySerializer(read_only=True)
+    department = ActorSummarySerializer(read_only=True)
+    attendees = MeetingAttendeeSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = models.MinisterialMeeting
+        fields = [
+            'id', 'minister', 'department', 'meeting_date',
+            'purpose', 'organisation_met_raw', 'is_roundtable',
+            'attendees', 'source_url'
+        ]
+
+
 class TopDonorSerializer(serializers.Serializer):
     """
     Serializer for top donor aggregate results.
@@ -203,6 +231,7 @@ class DonationDetailSerializer(serializers.ModelSerializer):
     """
     donor = ActorSummarySerializer(read_only=True)
     recipient = ActorSummarySerializer(read_only=True)
+    donor_key_people = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Donation
@@ -213,6 +242,39 @@ class DonationDetailSerializer(serializers.ModelSerializer):
             'accounting_unit_name', 'accounting_units_as_central_party',
             'purpose_of_visit',
             'is_bequest', 'is_aggregation', 'is_sponsorship',
+            'donor_key_people'
+        ]
+
+    def get_donor_key_people(self, obj):
+        """Fetch up to 3 key people (Directors/PSCs) for the donor organization."""
+        if not obj.donor_id:
+            return []
+            
+        # Only relevant if donor is an Organization
+        if obj.donor.polymorphic_ctype.model != 'organization':
+            return []
+
+        # Find key memberships: Directors and Beneficial Owners
+        from django.db.models import Q
+        from datafetch.models import Membership
+        
+        # We query Membership directly using organization_id=donor_id
+        # This works because Organization inherits from Actor (shared PK)
+        key_memberships = Membership.objects.filter(
+            organization_id=obj.donor_id
+        ).filter(
+            Q(role__iexact='Director') | 
+            Q(role__icontains='Beneficial Owner') |
+            Q(role__icontains='Secretary')
+        ).select_related('person').order_by('role')[:4]
+
+        return [
+            {
+                'id': m.person.id,
+                'name': m.person.name,
+                'role': m.role
+            }
+            for m in key_memberships
         ]
 
 
@@ -290,3 +352,86 @@ class HomepageStatsSerializer(serializers.Serializer):
     concentration_donors_count = serializers.IntegerField()
     dual_influence_count = serializers.IntegerField()
     timestamp = serializers.DateTimeField()
+
+
+class PoliticalPartySerializer(serializers.ModelSerializer):
+    """
+    Serializer for political parties.
+    """
+    is_governing = serializers.SerializerMethodField()
+    mp_count = serializers.IntegerField(read_only=True)
+    lord_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = models.Organization
+        fields = ['id', 'name', 'is_governing', 'mp_count', 'lord_count']
+
+    def get_is_governing(self, obj):
+        # TODO: Move to settings
+        GOVERNING_PARTIES = ['Labour Party', 'Labour', 'Labour/Co-operative']
+        return obj.name in GOVERNING_PARTIES
+
+
+class PoliticianSerializer(serializers.ModelSerializer):
+    """
+    Serializer for politicians with current status annotations.
+    """
+    image = serializers.SerializerMethodField()
+    current_party = serializers.SerializerMethodField()
+    current_role = serializers.SerializerMethodField()
+    is_minister = serializers.SerializerMethodField()
+    ministerial_role = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = models.Person
+        fields = [
+            'id', 'name', 'image', 
+            'current_party', 'current_role', 
+            'is_minister', 'ministerial_role'
+        ]
+
+    def get_image(self, obj):
+        return obj.image
+
+    def get_current_party(self, obj):
+        # Look for active party membership
+        if hasattr(obj, 'active_memberships'):
+            for m in obj.active_memberships:
+                if m.on_behalf_of and m.on_behalf_of.classification == 'Political Party':
+                    return ActorSummarySerializer(m.on_behalf_of).data
+        return None
+
+    def get_current_role(self, obj):
+        if hasattr(obj, 'active_memberships'):
+            # Prefer MP role
+            for m in obj.active_memberships:
+                if 'Member of Parliament' in (m.role or ''):
+                    return {
+                        'title': m.label or m.role,
+                        'start_date': m.start_date,
+                        'type': 'Member of Parliament'
+                    }
+            # Fallback to Lord/Peer
+            for m in obj.active_memberships:
+                role = m.role or ''
+                if 'Lord' in role or 'Peer' in role or 'Baron' in role:
+                    return {
+                        'title': m.label or m.role,
+                        'start_date': m.start_date,
+                        'type': 'Peer'
+                    }
+        return None
+
+    def get_is_minister(self, obj):
+        if hasattr(obj, 'active_memberships'):
+            for m in obj.active_memberships:
+                if m.organization and m.organization.classification == 'Executive':
+                    return True
+        return False
+
+    def get_ministerial_role(self, obj):
+        if hasattr(obj, 'active_memberships'):
+            for m in obj.active_memberships:
+                if m.organization and m.organization.classification == 'Executive':
+                    return m.role
+        return None

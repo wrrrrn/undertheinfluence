@@ -283,3 +283,182 @@ class MembershipFilterSet(django_filters.FilterSet):
             'end_after', 'end_before',
             'role', 'organization_name',
         ]
+
+
+class MinisterialMeetingFilterSet(django_filters.FilterSet):
+    """
+    Filter ministerial meetings by date, department, minister, etc.
+    """
+    # Date range filters
+    date_after = django_filters.DateFilter(
+        field_name='meeting_date',
+        lookup_expr='gte',
+        help_text='Filter meetings on or after this date (YYYY-MM-DD)'
+    )
+    date_before = django_filters.DateFilter(
+        field_name='meeting_date',
+        lookup_expr='lte',
+        help_text='Filter meetings on or before this date (YYYY-MM-DD)'
+    )
+
+    # Entity filters
+    department = django_filters.NumberFilter(
+        field_name='department__id',
+        help_text='Filter by department ID'
+    )
+    minister = django_filters.NumberFilter(
+        field_name='minister__id',
+        help_text='Filter by minister (person ID)'
+    )
+    external_actor = django_filters.NumberFilter(
+        method='filter_external_actor',
+        help_text='Filter by external actor ID (via attendees)'
+    )
+
+    # Text search
+    organisation_search = django_filters.CharFilter(
+        field_name='organisation_met_raw',
+        lookup_expr='icontains',
+        help_text='Search raw organisation name'
+    )
+    purpose_search = django_filters.CharFilter(
+        field_name='purpose',
+        lookup_expr='icontains',
+        help_text='Search meeting purpose'
+    )
+
+    # Roundtable filter
+    is_roundtable = django_filters.BooleanFilter(
+        field_name='is_roundtable',
+        help_text='Filter by roundtable status'
+    )
+
+    def filter_external_actor(self, queryset, name, value):
+        """
+        Filter meetings where a specific actor (or its canonical version) attended.
+        """
+        if not value:
+            return queryset
+        
+        # Find meetings where this actor attended
+        # Note: MeetingAttendee has 'actor' and 'canonical_actor'
+        # We should check both to be comprehensive, or rely on effective_actor logic in queries
+        return queryset.filter(
+            Q(attendees__actor_id=value) | 
+            Q(attendees__canonical_actor_id=value)
+        ).distinct()
+
+    class Meta:
+        model = models.MinisterialMeeting
+        fields = [
+            'date_after', 'date_before',
+            'department', 'minister', 'external_actor',
+            'is_roundtable'
+        ]
+
+
+class PoliticianFilter(django_filters.FilterSet):
+    """
+    Filter politicians by party, role, and government status.
+    """
+    search = django_filters.CharFilter(
+        field_name='name',
+        lookup_expr='icontains',
+        help_text='Search by name'
+    )
+    party = django_filters.NumberFilter(
+        method='filter_party',
+        help_text='Filter by current party ID'
+    )
+    role_type = django_filters.ChoiceFilter(
+        method='filter_role_type',
+        choices=[
+            ('mp', 'MP'),
+            ('lord', 'Peer'),
+            ('minister', 'Minister'),
+        ],
+        help_text='Filter by role type'
+    )
+    is_current = django_filters.BooleanFilter(
+        method='filter_is_current',
+        help_text='Show only currently serving politicians'
+    )
+    govt_status = django_filters.ChoiceFilter(
+        method='filter_govt_status',
+        choices=[
+            ('government', 'Government'),
+            ('opposition', 'Opposition'),
+            ('other', 'Other'),
+        ],
+        help_text='Filter by government status'
+    )
+
+    def filter_party(self, queryset, name, value):
+        # Filter by active party membership
+        # Note: This is an approximation until we denormalize current_party
+        from django.utils import timezone
+        today = timezone.now().date().isoformat()
+        
+        return queryset.filter(
+            memberships__on_behalf_of_id=value,
+            memberships__start_date__lte=today,
+            memberships__end_date__isnull=True
+        ).distinct()
+
+    def filter_role_type(self, queryset, name, value):
+        from django.utils import timezone
+        today = timezone.now().date().isoformat()
+        
+        if value == 'mp':
+            return queryset.filter(
+                memberships__role__icontains='Member of Parliament',
+                memberships__end_date__isnull=True  # Simplification for "current"
+            ).distinct()
+        elif value == 'lord':
+            return queryset.filter(
+                memberships__role__icontains='Lord',
+                memberships__end_date__isnull=True
+            ).distinct()
+        elif value == 'minister':
+            return queryset.filter(
+                memberships__organization__classification='Executive',
+                memberships__end_date__isnull=True
+            ).distinct()
+        return queryset
+
+    def filter_is_current(self, queryset, name, value):
+        if not value:
+            return queryset
+            
+        from django.utils import timezone
+        today = timezone.now().date().isoformat()
+        
+        return queryset.filter(
+            Q(memberships__end_date__isnull=True) | 
+            Q(memberships__end_date__gte=today)
+        ).distinct()
+
+    def filter_govt_status(self, queryset, name, value):
+        # Hardcoded for now - should come from settings
+        GOVERNING_PARTIES = ['Labour Party', 'Labour', 'Labour/Co-operative']
+        MAJOR_OPPOSITION = ['Conservative Party', 'Liberal Democrats', 'Scottish National Party', 'Reform UK', 'Green Party']
+        
+        if value == 'government':
+            return queryset.filter(
+                memberships__on_behalf_of__name__in=GOVERNING_PARTIES,
+                memberships__end_date__isnull=True
+            ).distinct()
+        elif value == 'opposition':
+            return queryset.filter(
+                memberships__on_behalf_of__name__in=MAJOR_OPPOSITION,
+                memberships__end_date__isnull=True
+            ).distinct()
+        elif value == 'other':
+            return queryset.exclude(
+                memberships__on_behalf_of__name__in=GOVERNING_PARTIES + MAJOR_OPPOSITION
+            ).distinct()
+        return queryset
+
+    class Meta:
+        model = models.Person
+        fields = ['search']

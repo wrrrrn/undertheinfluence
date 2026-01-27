@@ -282,7 +282,8 @@ class AppcPDFParser:
         cleaned = []
         for p_line in practitioners:
             p_line = re.sub(r'\(i\):.*', '', p_line).strip()
-            names = re.findall(r'([A-Z][a-z]+(?: [A-Z][a-z]+)*)', p_line)
+            # Allow internal capitals (McMillan), apostrophes (O'Connor), hyphens (Smith-Jones)
+            names = re.findall(r"([A-Z][a-zA-Z\'-]+(?: [A-Z][a-zA-Z\'-]+)*)", p_line)
             cleaned.extend([n for n in names if n not in self.SECTION_KEYWORDS and n.lower() not in ['advisory', 'role', 'party', 'officer']])
         return cleaned
 

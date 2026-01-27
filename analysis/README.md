@@ -10,13 +10,19 @@ The queries have been organized into focused files based on analytical perspecti
 |------|-------|----------------------|
 | `01_donor_analysis.sql` | **Who gives** | Donor concentration, whale donors, repeat donors, Gini coefficient |
 | `02_party_funding.sql` | **Party financing** | Which parties get most funding, from whom, donor concentration by party |
-| `03_mp_ministerial_funding.sql` | **MPs & ministers** | Individual MP funding, ministerial portfolios, government departments |
-| `04_committee_funding.sql` | **Parliamentary committees** | Select committee member donations, industry-specific committees |
+| `03_ministerial_influence.sql` | **MPs & ministers** | Individual MP funding, ministerial portfolios, government departments |
+| `04_department_committee_analysis.sql` | **Parliamentary committees** | Select committee member donations, industry-specific committees |
 | `05_sector_analysis.sql` | **Industry sectors** | Who is lobbying whom in agriculture, finance, energy, healthcare, etc. |
-| `06_lobbying_overlap.sql` | **Lobbying + donations** | Organizations that both lobby AND donate, influence triangles |
+| `06_influence_triangle.sql` | **Lobbying + donations** | Organizations that both lobby AND donate, influence triangles |
 | `07_organizational_flows.sql` | **Org-to-org flows** | Organizational donation patterns, bidirectional flows |
-| `08_summary_stats.sql` | **Database overview** | Record counts, data quality, classification statistics |
+| `08_summary_stats.sql` | **Database overview** | Record counts, data quality, ministerial meetings statistics |
 | `09_grassroots_funding.sql` | **Grassroots funding** | Analysis EXCLUDING whale donors (£500K+) and trade unions |
+| `10_mp_lobbying_connections.sql` | **MP-lobbying links** | MPs connected to lobbying clients |
+| `12_lobby_employee_analysis.sql` | **Lobbying practitioners** | Staff analysis, former MPs/SPADs, practitioner networks |
+| `13_director_psc_analysis.sql` | **Corporate ownership** | Directors, beneficial owners, corporate consolidation, revolving door |
+| `14_companies_house_progress.sql` | **CH enrichment progress** | Track Companies House matching by category (agencies, clients, donors, meetings) |
+
+**Note:** `data_analysis_queries.sql` is a legacy file containing older query versions - use numbered files above instead.
 
 ## Quick Start
 
@@ -99,7 +105,7 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 
 ---
 
-### 03 - MP & Ministerial Funding
+### 03 - Ministerial Influence
 
 **Focus**: Individual MPs and government ministers from funding perspective
 
@@ -127,7 +133,7 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 
 ---
 
-### 04 - Committee Funding
+### 04 - Department & Committee Analysis
 
 **Focus**: Parliamentary committee member donations
 
@@ -232,7 +238,7 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 
 ---
 
-### 06 - Lobbying Overlap
+### 06 - Influence Triangle
 
 **Focus**: Intersection of lobbying activity and political donations
 
@@ -298,7 +304,7 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 
 ### 08 - Summary Stats
 
-**Focus**: Database overview, data quality, and aggregate statistics
+**Focus**: Database overview, data quality, aggregate statistics, and ministerial meetings
 
 **Sections**:
 1. Database Overview - Record counts
@@ -306,6 +312,8 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 3. Sector & Classification Analysis
 4. Data Quality Checks (Null Analysis)
 5. Time-Based Analysis (Donations by Year)
+6. Ministerial Meetings Overview (Section 10)
+7. Cross-Dataset Influence Overview (Section 11)
 
 **Key Queries**:
 - `9.1` - Database overview (total persons, orgs, donations, consultancies, etc.)
@@ -313,12 +321,17 @@ psql -U uti -d uti -f analysis/02_party_funding.sql --csv -o results_party.csv
 - `7.1` - Donations by donor classification
 - `7.2` - Lobbying clients by classification
 - `8.1` - Null donor analysis by donation type
-- `A.1` - Donations by year (lobbying clients only)
+- `10.1` - Ministerial meetings summary statistics
+- `10.2` - Meetings by department
+- `11.1` - Full database influence summary
+- `11.2` - Top 10 most influential organizations (all channels)
 
 **Use Cases**:
 - Get high-level database statistics
 - Check data quality and completeness
 - Understand temporal coverage
+- See ministerial meeting distributions
+- Identify organizations using multiple influence channels
 
 ---
 
@@ -368,6 +381,92 @@ Whale donors and trade unions can dominate donation statistics, masking patterns
 
 **Example Insight**:
 Query `2.3` shows which parties would lose most funding if whales/unions withdrew - revealing strategic funding vulnerabilities.
+
+---
+
+### 12 - Lobby Employee Analysis
+
+**Focus**: Lobbying agency staff analysis
+
+**Sections**:
+1. Employee counts by agency
+2. Multi-agency employees (working at multiple firms)
+3. Notable names search (former politicians)
+
+**Key Queries**:
+- Agency employee headcounts
+- Employees at multiple agencies
+- Search for notable political names
+
+**Data Quality**: See `LOBBY_EMPLOYEE_DATA_QUALITY.md` for known issues with duplicate records.
+
+---
+
+### 13 - Director & PSC (Beneficial Owner) Analysis
+
+**Focus**: Companies House director and beneficial owner data for lobbying agencies
+
+**Data Source**: Companies House Officers API and PSC API via `enrich_companies_house --fetch-all`
+
+**Sections**:
+1. Multi-Agency Directors - People directing multiple lobbying agencies
+2. Largest Boards - Agencies with most directors
+3. Beneficial Ownership Concentration - Breakdown of ownership stakes
+4. Owner-Operators - Directors who also own significant stakes
+5. Corporate Ownership (Holding Companies) - Agencies owned by corporate entities
+6. Parent Companies - Holding companies owning multiple agencies
+7. Revolving Door - Former MPs who became lobbying agency directors
+8. Lobbying Agencies in Ministerial Meetings - Overlap analysis
+9. Ministers Meeting Lobbying Agencies - Which ministers meet lobbied agencies
+10. Meeting Details - Full meeting records with lobbying agencies
+11. Summary Statistics - High-level counts for director/PSC data
+12. Director Network - Shared directorships between agencies
+
+**Key Queries**:
+- `1` - People directing multiple lobbying agencies (potential coordination)
+- `2` - Agencies with largest boards (>3 directors)
+- `3` - Beneficial ownership breakdown (25-50%, 50-75%, 75-100% stakes)
+- `4` - Owner-operators (directors who also own significant stakes)
+- `5-6` - Corporate ownership chains and holding company networks
+- `7` - Former MPs who became lobbying directors (revolving door)
+- `8-10` - Ministerial meeting overlap with lobbying agencies
+- `11` - Summary statistics (396 directors, 231 PSCs as of Jan 2026)
+- `12` - Shared directorship network (agencies connected by common directors)
+
+**Key Findings** (from Jan 2026 import):
+- **396 directors** imported across 196 lobbying agencies
+- **231 beneficial owners** (PSCs) identified
+- **2 former MPs** now directing lobbying agencies (revolving door)
+- **Corporate consolidation** patterns identified via holding companies
+
+**Use Cases**:
+- Identify corporate consolidation in lobbying industry
+- Track the "revolving door" between Parliament and lobbying
+- Map ownership structures and hidden connections
+- Find shared directorship networks suggesting coordination
+- Correlate ownership with ministerial access
+
+---
+
+### 14 - Companies House Progress
+
+**Focus**: Track Companies House enrichment progress across organization categories
+
+**Categories Tracked**:
+- `lobbying_agency` - PRCA lobbying agencies
+- `lobbying_client` - Lobbying clients
+- `donor` - Donation donors
+- `meeting_attendee` - All meeting attendees (includes Persons who can't match CH)
+
+**Key Queries**:
+- Main progress query - Shows total, auto_approved, pending, rejected, not_found, remaining per category
+- Summary totals - Overall CompaniesHouseMatch status breakdown
+- Meeting attendee breakdown - Orgs vs Persons (only orgs can match CH)
+
+**Use Cases**:
+- Monitor enrichment pipeline progress
+- Identify which categories need more processing
+- Track how many orgs are confirmed "not found" vs not yet searched
 
 ---
 
@@ -491,4 +590,4 @@ When adding new queries:
 
 ---
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-22

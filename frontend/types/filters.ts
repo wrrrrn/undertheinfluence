@@ -18,19 +18,16 @@ export interface FilterState {
 
   // Type filters
   donorType?: DonorType;
-  recipientType?: ActorType;
-
-  // Exclusion filters
-  excludeDonorType?: DonorType;
-
-  // Special filters
-  hasLobbying?: boolean; // Show only donors who also lobby
-
-  // Pagination
+  recipientType?: 'person' | 'party' | 'organization';
+  hasLobbying?: boolean;
+  
+  // Politician Directory specific
+  roleType?: 'mp' | 'lord' | 'minister';
+  partyId?: number;
+  govtStatus?: 'government' | 'opposition' | 'other';
+  
   page: number;
   limit: number;
-
-  // Search
   query?: string;
 }
 
@@ -52,6 +49,9 @@ export const URL_PARAM_MAP = {
   excludeDonorType: 'exclude_donor_type',
   recipientType: 'recipient_type',
   hasLobbying: 'has_lobbying',
+  roleType: 'role_type',
+  partyId: 'party',
+  govtStatus: 'govt_status',
   page: 'page',
   limit: 'limit',
   query: 'q',

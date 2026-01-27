@@ -51,11 +51,24 @@ class ActorView(TemplateView):
 
         context['memberships'] = actor.memberships.order_by('-end_date', '-start_date')[:10]
 
+        from django.db.models import Sum
+        
         context['relationships'] = {
             'donations_from': actor.received_donations_from.count(),
             'donations_to': actor.donated_to.count(),
             'consulting_clients': actor.consulting_clients.count(),
             'consulting_agencies': actor.consulting_agencies.count(),
+            'meetings_count': (
+                getattr(actor, 'ministerial_meetings_as_minister', models.MinisterialMeeting.objects.none()).count() + 
+                actor.meeting_attendances.count()
+            ),
+            'total_received_value': actor.received_donations_from.aggregate(Sum('value'))['value__sum'] or 0,
+            'total_donated_value': actor.donated_to.aggregate(Sum('value'))['value__sum'] or 0,
         }
 
         return context
+
+
+class PoliticiansView(TemplateView):
+    template_name = 'politicians.html'
+

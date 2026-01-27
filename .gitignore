@@ -8,4 +8,7 @@ __pycache__/
 .claude/
 .env
 .env.local
+**/.DS_Store
+.DS_Store
+.coverage
 CLAUDE.md

@@ -1,90 +1,114 @@
 # UnderTheInfluence
 
-UnderTheInfluence is a web application developed to help track the influence of lobbying in politics.
+UnderTheInfluence is a web application that tracks lobbying influence in UK politics. It aggregates data from multiple sources into a unified database based on the [Popolo open government data specification](http://www.popoloproject.com/).
 
-We use data from:
+## Current Status (January 2026)
 
- * [ParlParse](parser.theyworkforyou.com) (MPs’ interests; politician metadata)
- * [The Electoral Commission](http://search.electoralcommission.org.uk) (registered donations)
- * [data.parliament](http://www.data.parliament.uk) (Lords’ interests)
- * [gov.uk](https://www.gov.uk) (ministerial meetings)
- * [APPC](http://www.appc.org.uk/members/register/) (register of lobbyists)
- * [EveryPolitician](http://everypolitician.org) (MP metadata)
- * [TheyWorkForYou](http://www.theyworkforyou.com) (politician metadata)
- * [Companies House](http://www.companieshouse.gov.uk) (company metadata)
- * [Powerbase](http://powerbase.info) (company and politician biographies)
+| Component | Version |
+|-----------|---------|
+| Django | 6.0.1 |
+| Python | 3.12 |
+| Wagtail CMS | 7.2.x |
+| PostgreSQL | 15 |
+| Frontend | React 18 + Vite 5 (Islands Architecture) |
 
-We don’t currently import from [wikidata](https://www.wikidata.org) (only indirectly via EveryPolitician) but we should because it’s brilliant.
+**Database**:
+- 155,065 actors (90,728 persons + 64,337 organizations)
+- 91,513 donations
+- 62,798 lobbying consultancies
+- 41,362 ministerial meetings (119,793 attendees)
+- 51,157 Companies House matches
 
-This project is built in [Django 1.8](https://www.djangoproject.com) and uses [Wagtail CMS](https://wagtail.io), [Django REST Framework](http://www.django-rest-framework.org) and other cool open source products.
+## Data Sources
 
-## Dependencies
+| Source | Status | Description |
+|--------|--------|-------------|
+| [ParlParse](http://parser.theyworkforyou.com) | Working | MPs, Lords, ministerial appointments |
+| [GOV.UK](https://www.gov.uk) | Working | Ministerial meetings transparency data |
+| [MPs' Register of Interests](https://publications.parliament.uk) | Working | Financial interests |
+| [Companies House](https://www.companieshouse.gov.uk) | Working | Company data enrichment |
+| [Electoral Commission](http://search.electoralcommission.org.uk) | Broken | API changed, needs fixing |
+| [APPC](http://www.appc.org.uk) | Broken | Site defunct (merged with PRCA 2018) |
 
-UnderTheInfluence requires:
+## Quick Start (Docker)
 
- * [python 3.4](https://www.python.org)
- * [npm](https://www.npmjs.com)
- * [node.js](https://nodejs.org)
- * [bower](http://bower.io)
- * [elasticsearch](https://www.elastic.co/products/elasticsearch)
+```bash
+# Clone the repository
+git clone https://github.com/whoslobbying/undertheinfluence.git
+cd undertheinfluence
 
-## Installation
+# Copy environment template
+cp .env.example .env
 
- * Fetch this repo and all submodules
+# Start all services
+docker compose up -d
 
-   ```
-   git clone --recursive https://github.com/whoslobbying/undertheinfluence.git
-   ```
+# Run migrations
+docker compose exec api python manage.py migrate
 
- * Install the required python packages
+# Create admin user
+docker compose exec api python manage.py createsuperuser
 
-   ```
-   pip install -r requirements.txt
-   ```
-
- * Copy the example config; update it as required
-
-   ```
-   cp conf/general.example.yml conf/general.yml
-   ```
-
- * Fetch javascript dependencies with bower
-
-   ```
-   python manage.py bower_install
-   ```
-
- * Migrate the database
-
-   ```
-   python manage.py migrate
-   ```
-
-## Importing data
-
-This is a manual process at the moment :( Check the various management commands in `datafetch/management/commands`. Roughly you should run:
-
-```
-python manage.py import_parlparse --since 2010
-
-python manage.py import_ministers --since 2010
-
-# this is slow because it downloads lots of big images
-python manage.py import_everypolitician
-
-# electoral commission data
-python manage.py import_ec
-
-# current APPC register
-python manage.py import_appc
+# Access the application
+open http://localhost:8000
 ```
 
-## Running a local server
+## Import Data
 
+```bash
+# Import politicians (MPs and Lords)
+docker compose exec api python manage.py import_parlparse --since 2010
+
+# Import ministerial appointments
+docker compose exec api python manage.py import_ministers --since 2010
+
+# Import MPs' Register of Interests
+docker compose exec api python manage.py import_mpsinterests --since 1996
+
+# Import ministerial meetings
+docker compose exec api python manage.py import_ministerial_meetings --department all --since 2024
+
+# Enrich with Companies House data
+docker compose exec api python manage.py enrich_companies_house --category lobbying_agency
+
+# Data quality cleanup
+docker compose exec api python manage.py clean_data --fix=all
+
+# Entity resolution (link records to canonical actors)
+docker compose exec api python manage.py populate_canonical --fast --batch-size 500
 ```
-python manage.py runserver
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [CLAUDE.md](CLAUDE.md) | Project setup and Claude Code instructions |
+| [docs/README.md](docs/README.md) | Documentation index |
+| [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md) | Feature inventory and status |
+| [docs/systems-architecture.md](docs/systems-architecture.md) | Architecture reference |
+| [docs/data-models.md](docs/data-models.md) | Data model reference |
+| [docs/DATA_IMPORT_GUIDE.md](docs/DATA_IMPORT_GUIDE.md) | Import procedures |
+
+## Development
+
+```bash
+# View logs
+docker compose logs -f api
+
+# Run Django shell
+docker compose exec api python manage.py shell
+
+# Run management commands
+docker compose exec api python manage.py <command>
+
+# Restart after code changes
+docker compose restart api
 ```
 
 ## Deployment
 
-See: http://github.com/spudmind/uti-deploy
+See: https://github.com/spudmind/uti-deploy
+
+## License
+
+This project is open source.

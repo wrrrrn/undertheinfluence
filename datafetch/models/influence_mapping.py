@@ -378,6 +378,206 @@ class PartyMembership(Dateframeable, Timestampable, models.Model):
                 self_end >= other_membership.start_date)
 
 
+class MinisterialMeeting(Dateframeable, Timestampable, models.Model):
+    """
+    Records meetings between UK ministers and external actors.
+
+    Data source: GOV.UK ministerial transparency publications (quarterly CSV/XLSX files)
+    from all government departments (2010-present).
+
+    Data Model (Simplified):
+    -----------------------
+    - organisation_met_raw: The exact text from GOV.UK "Organisation Met" column
+    - attendees: All parsed attendees (via MeetingAttendee junction table)
+    - is_roundtable: True if meeting has multiple attendees
+
+    The MeetingAttendee table is the canonical source for organization access.
+    Each attendee has its own entity resolution (actor → canonical_actor).
+
+    Example Usage:
+        # Count meetings by organization (proper entity resolution)
+        top_actors = MeetingAttendee.objects.values(
+            'canonical_actor__name'
+        ).annotate(
+            meeting_count=Count('meeting', distinct=True)
+        ).order_by('-meeting_count')
+
+        # Get all meetings with a specific organization
+        meetings = MinisterialMeeting.objects.filter(
+            attendees__canonical_actor=google_canonical
+        ).distinct()
+    """
+    # Minister (always Person, not polymorphic Actor)
+    minister = models.ForeignKey(
+        'Person',
+        related_name='ministerial_meetings_as_minister',
+        on_delete=models.CASCADE,
+        help_text="The minister who attended the meeting"
+    )
+
+    # Department
+    department = models.ForeignKey(
+        popolo_models.Organization,
+        related_name='ministerial_meetings',
+        on_delete=models.CASCADE,
+        help_text="The government department publishing this meeting record"
+    )
+
+    # Meeting metadata
+    meeting_date = models.DateField(
+        help_text="Date the meeting took place"
+    )
+    purpose = models.TextField(
+        blank=True,
+        help_text="Purpose or subject of the meeting"
+    )
+
+    # Raw organization name from source (matches GOV.UK "Organisation Met" column)
+    # Note: DB column was renamed from external_actor_name_raw in migration 0017
+    organisation_met_raw = models.CharField(
+        max_length=2048,
+        help_text="Exact text from GOV.UK 'Organisation Met' column (for audit/dedup)"
+    )
+
+    source_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text="URL to the GOV.UK transparency publication"
+    )
+    source_quarter = models.CharField(
+        max_length=7,
+        blank=True,
+        help_text="Publication quarter (e.g., '2024-Q1')"
+    )
+
+    # Roundtable tracking
+    is_roundtable = models.BooleanField(
+        default=False,
+        help_text="True if meeting has multiple attendees (comma-separated in source)"
+    )
+
+    class Meta:
+        ordering = ['-meeting_date']
+        verbose_name = "Ministerial Meeting"
+        verbose_name_plural = "Ministerial Meetings"
+        indexes = [
+            # Query patterns for aggregate endpoints
+            models.Index(fields=['minister', '-meeting_date'], name='meeting_minister_idx'),
+            models.Index(fields=['department', '-meeting_date'], name='meeting_dept_idx'),
+
+            # Date range filtering
+            models.Index(fields=['meeting_date'], name='meeting_date_idx'),
+
+            # Source tracking
+            models.Index(fields=['source_quarter'], name='meeting_quarter_idx'),
+        ]
+        constraints = [
+            # Prevent exact duplicates from same data source
+            models.UniqueConstraint(
+                fields=['minister', 'organisation_met_raw', 'meeting_date', 'department'],
+                name='unique_ministerial_meeting_v2'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.minister.name} met {self.organisation_met_raw} on {self.meeting_date}"
+
+
+class MeetingAttendee(Timestampable, models.Model):
+    """
+    Individual attendee at a ministerial meeting.
+
+    Purpose:
+    --------
+    Accurately tracks individual organization access to ministers, especially
+    for roundtable meetings where multiple organizations attend.
+
+    For one-on-one meetings: Single attendee
+    For roundtables: Multiple attendees (split from comma-separated list)
+
+    Entity Resolution:
+    -----------------
+    - actor: Original actor from data source (never modified)
+    - canonical_actor: Resolved canonical actor (set by entity resolution)
+    - Use effective_actor property in queries for accurate counting
+
+    Example Usage:
+        # Count meetings each organization attended (Guardian-style analysis)
+        top_actors = MeetingAttendee.objects.values(
+            'canonical_actor__name'
+        ).annotate(
+            meeting_count=Count('meeting', distinct=True),
+            one_on_one=Count(Case(When(meeting__is_roundtable=False, then=1))),
+            roundtables=Count(Case(When(meeting__is_roundtable=True, then=1)))
+        ).order_by('-meeting_count')
+
+        # Tech company access (including roundtables)
+        google_access = MeetingAttendee.objects.filter(
+            canonical_actor__name='Google LLC'
+        ).values('meeting__meeting_date', 'meeting__minister__name')
+    """
+    meeting = models.ForeignKey(
+        'MinisterialMeeting',
+        related_name='attendees',
+        on_delete=models.CASCADE,
+        help_text="The meeting this actor attended"
+    )
+
+    actor = models.ForeignKey(
+        popolo_models.Actor,
+        related_name='meeting_attendances',
+        on_delete=models.CASCADE,
+        help_text="Original actor from data source (never modified)"
+    )
+
+    # Phase 3: Entity resolution
+    canonical_actor = models.ForeignKey(
+        popolo_models.Actor,
+        related_name='canonical_meeting_attendances',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="Resolved canonical actor (set by entity resolution system)"
+    )
+
+    actor_name_raw = models.CharField(
+        max_length=512,
+        help_text="Original name as it appeared in source data"
+    )
+
+    @property
+    def effective_actor(self):
+        """
+        Returns the canonical actor if resolved, otherwise the original actor.
+        Use this property in queries for accurate entity references.
+        """
+        return self.canonical_actor or self.actor
+
+    class Meta:
+        ordering = ['meeting', 'actor']
+        verbose_name = "Meeting Attendee"
+        verbose_name_plural = "Meeting Attendees"
+        indexes = [
+            # Query patterns for access analysis
+            models.Index(fields=['meeting', 'actor']),
+            models.Index(fields=['actor']),
+            models.Index(fields=['canonical_actor']),
+
+            # Combined queries
+            models.Index(fields=['canonical_actor', 'meeting']),
+        ]
+        constraints = [
+            # Prevent duplicate attendees at same meeting
+            models.UniqueConstraint(
+                fields=['meeting', 'actor_name_raw'],
+                name='unique_meeting_attendee'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.actor.name} at {self.meeting}"
+
+
 class ActorResolution(Timestampable, models.Model):
     """
     Tracks potential duplicate actors that should be merged (entity resolution).
@@ -427,9 +627,13 @@ class ActorResolution(Timestampable, models.Model):
 
     MATCH_REASON_CHOICES = [
         ('identifier', 'External Identifier Match'),
+        ('exact', 'Exact Name Match'),
+        ('known_alias', 'Known Alias (Manual Mapping)'),
+        ('substring', 'Substring Match'),
         ('strong_alias', 'Strong Alias Match'),
         ('weak_alias', 'Weak Alias Match'),
         ('fuzzy', 'Fuzzy Name Match'),
+        ('acronym', 'Acronym Match'),
     ]
 
     REVIEW_STATUS_CHOICES = [
@@ -565,6 +769,284 @@ class ActorResolution(Timestampable, models.Model):
         self.notes = notes
         self.canonical_actor = None  # Clear canonical since not a duplicate
         self.save()
+
+
+class CompaniesHouseMatch(Timestampable, models.Model):
+    """
+    Stores potential Companies House matches for Organizations.
+
+    Similar to ActorResolution, this stores matches with confidence scores
+    for review before enriching organization data.
+
+    Workflow:
+    1. enrich_companies_house command searches CH API
+    2. Creates CompaniesHouseMatch records with confidence scores
+    3. High confidence (≥0.95) matches are auto-approved
+    4. Medium confidence (0.75-0.94) matches await review
+    5. Approved matches trigger enrichment (add identifier, founding_date, etc.)
+
+    Confidence Thresholds:
+    - ≥ 0.90: auto_approve - Enrich immediately
+    - 0.85-0.89: review - Store for admin review
+    - < 0.85: ignore - Don't store
+
+    Example:
+        match = CompaniesHouseMatch.objects.create(
+            organization=org,
+            company_number='03140273',
+            company_name='GRAYLING COMMUNICATIONS LIMITED',
+            confidence=0.90,
+            match_reason='exact_core',
+            status='pending',
+        )
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('auto_approved', 'Auto-Approved (High Confidence)'),
+        ('not_found', 'Not Found in Companies House'),
+        ('not_applicable', 'Not Applicable (Not CH Registrable)'),
+    ]
+
+    NOT_APPLICABLE_REASON_CHOICES = [
+        ('government_dept', 'Government Department'),
+        ('local_authority', 'Local Authority/Council'),
+        ('university', 'University/College'),
+        ('nhs', 'NHS/Health Trust'),
+        ('police', 'Police Force'),
+        ('trade_union', 'Trade Union'),
+        ('trade_body', 'Trade Association/Federation'),
+        ('foreign_entity', 'Foreign Company/Government'),
+        ('embassy', 'Embassy/Consulate'),
+        ('parliamentary', 'Parliamentary Body/APPG'),
+        ('person', 'Individual Person'),
+        ('concatenated', 'Concatenated Names (Data Quality Issue)'),
+        ('other', 'Other Non-Registrable Entity'),
+    ]
+
+    MATCH_REASON_CHOICES = [
+        ('identifier', 'Existing Identifier'),
+        ('exact', 'Exact Name Match'),
+        ('exact_normalized', 'Exact After Normalization'),
+        ('exact_camelcase', 'Exact After CamelCase Split'),
+        ('exact_core', 'Exact Core Name'),
+        ('exact_core_camel', 'Exact Core (CamelCase)'),
+        ('query_subset', 'Query Words Subset of CH'),
+        ('ch_subset', 'CH Words Subset of Query'),
+        ('jaccard', 'Jaccard Word Similarity'),
+        ('first_word_match', 'First Word Match'),
+        ('prefix_match', 'Prefix Match'),
+        ('fuzzy', 'Fuzzy Levenshtein Match'),
+        ('not_found', 'No Match Found'),
+        ('name_too_long', 'Name Too Long (Likely Concatenated)'),
+        ('concatenated_name', 'Concatenated Name Detected'),
+    ]
+
+    # The organization being matched
+    organization = models.ForeignKey(
+        'Organization',
+        related_name='companies_house_matches',
+        on_delete=models.CASCADE,
+        help_text="Organization to match to Companies House"
+    )
+
+    # Companies House data
+    company_number = models.CharField(
+        max_length=20,
+        help_text="Companies House company number"
+    )
+
+    company_name = models.CharField(
+        max_length=500,
+        help_text="Company name from Companies House"
+    )
+
+    company_status = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Company status (active, dissolved, etc.)"
+    )
+
+    company_type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Company type from CH (ltd, plc, llp, etc.)"
+    )
+
+    # Match quality
+    confidence = models.FloatField(
+        help_text="Confidence score (0.0-1.0) based on match quality"
+    )
+
+    match_reason = models.CharField(
+        max_length=30,
+        help_text="How the match was determined"
+    )
+
+    match_details = models.TextField(
+        blank=True,
+        help_text="Detailed description of match (e.g., 'Grayling → GRAYLING COMMUNICATIONS LIMITED')"
+    )
+
+    # Review status
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text="Review status"
+    )
+
+    not_applicable_reason = models.CharField(
+        max_length=20,
+        choices=NOT_APPLICABLE_REASON_CHOICES,
+        blank=True,
+        help_text="Why this org is not CH registrable (only for status='not_applicable')"
+    )
+
+    reviewed_by = models.ForeignKey(
+        'auth.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="Admin who reviewed this match"
+    )
+
+    reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this was reviewed"
+    )
+
+    notes = models.TextField(
+        blank=True,
+        help_text="Admin notes"
+    )
+
+    # Track if enrichment has been applied
+    enriched = models.BooleanField(
+        default=False,
+        help_text="Whether organization has been enriched with CH data"
+    )
+
+    enriched_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When enrichment was applied"
+    )
+
+    # Tie detection - when multiple results have same confidence
+    has_tie = models.BooleanField(
+        default=False,
+        help_text="True if multiple CH results had same top confidence (needs manual review)"
+    )
+
+    tie_alternatives = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Alternative matches when there's a tie. Format: [{company_number, company_name, confidence}, ...]"
+    )
+
+    class Meta:
+        ordering = ['-confidence', '-created_at']
+        verbose_name = "Companies House Match"
+        verbose_name_plural = "Companies House Matches"
+        indexes = [
+            models.Index(fields=['status', '-confidence']),
+            models.Index(fields=['organization', 'status']),
+            models.Index(fields=['company_number']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organization', 'company_number'],
+                name='unique_org_company_match'
+            ),
+        ]
+
+    def __str__(self):
+        status_icon = {
+            'pending': '⏳',
+            'approved': '✅',
+            'rejected': '❌',
+            'auto_approved': '🤖',
+            'not_found': '🔍',
+        }.get(self.status, '?')
+
+        if self.status == 'not_found':
+            return f"{status_icon} {self.organization.name} (Not Found)"
+
+        return (
+            f"{status_icon} {self.organization.name} → {self.company_name} "
+            f"({self.confidence:.2f})"
+        )
+
+    def approve(self, user=None, notes='', auto=False):
+        """
+        Approve this match and trigger enrichment.
+
+        Args:
+            user: Admin user who approved (None for auto-approval)
+            notes: Optional notes
+            auto: If True, mark as auto_approved
+        """
+        from django.utils import timezone
+
+        self.status = 'auto_approved' if auto else 'approved'
+        self.reviewed_by = user
+        self.reviewed_at = timezone.now()
+        self.notes = notes
+        self.save()
+
+        # Trigger enrichment
+        self.enrich_organization()
+
+    def reject(self, user, notes=''):
+        """Reject this match."""
+        from django.utils import timezone
+
+        self.status = 'rejected'
+        self.reviewed_by = user
+        self.reviewed_at = timezone.now()
+        self.notes = notes
+        self.save()
+
+    def enrich_organization(self):
+        """
+        Apply Companies House data to the organization.
+
+        Adds:
+        - Company number as Identifier
+        - Fetches full profile and applies additional data
+        """
+        from django.contrib.contenttypes.models import ContentType
+        from django.utils import timezone
+        from datafetch.models import Identifier
+
+        if self.enriched:
+            return  # Already enriched
+
+        org = self.organization
+        org_content_type = ContentType.objects.get_for_model(org.__class__)
+
+        # Add company number as identifier
+        Identifier.objects.get_or_create(
+            content_type=org_content_type,
+            object_id=org.pk,
+            scheme='uk.gov.companieshouse',
+            defaults={'identifier': self.company_number}
+        )
+
+        self.enriched = True
+        self.enriched_at = timezone.now()
+        self.save()
+
+    @classmethod
+    def get_pending_for_review(cls, min_confidence=0.75):
+        """Get pending matches ordered by confidence for review."""
+        return cls.objects.filter(
+            status='pending',
+            confidence__gte=min_confidence
+        ).select_related('organization').order_by('-confidence')
 
 
 class Note(Timestampable, GenericRelatable, models.Model):

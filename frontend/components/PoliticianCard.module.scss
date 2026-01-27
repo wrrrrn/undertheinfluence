@@ -1,0 +1,128 @@
+@import '../styles/variables';
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: $radius-lg;
+  box-shadow: $card-shadow-base;
+  padding: $spacing-lg;
+  height: 100%;
+  border: 1px solid $card-border-color;
+  transition: $card-transition;
+  text-decoration: none;
+  color: inherit;
+  position: relative;
+  overflow: hidden;
+
+  &:hover {
+    transform: translateY($card-hover-lift);
+    box-shadow: $card-shadow-hover;
+  }
+
+  // Party accent border on the left
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background-color: var(--party-color, $gray-200);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-md;
+  margin-bottom: $spacing-md;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: $gray-100;
+  border: 2px solid white;
+  box-shadow: $box-shadow-sm;
+}
+
+.info {
+  flex: 1;
+  min-width: 0; // Allow text truncation
+}
+
+.name {
+  font-family: $font-serif;
+  font-weight: $font-weight-bold;
+  font-size: 1.125rem;
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+  color: $influence-blue;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role {
+  font-size: $font-size-small;
+  color: $gray-500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-md;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: $gray-100;
+  color: $gray-600;
+
+  &.party {
+    background-color: var(--party-bg, $gray-100);
+    color: var(--party-text, $gray-700);
+  }
+
+  &.minister {
+    background-color: #fff7ed; // Orange-50
+    color: #c2410c; // Orange-700
+    border: 1px solid #fed7aa;
+  }
+}
+
+.stats {
+  margin-top: auto;
+  padding-top: $spacing-md;
+  border-top: 1px solid $gray-100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statLabel {
+  font-size: $font-size-tiny;
+  color: $gray-500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.statValue {
+  font-family: $font-sans;
+  font-weight: $font-weight-bold;
+  color: $influence-blue;
+  font-variant-numeric: tabular-nums;
+}

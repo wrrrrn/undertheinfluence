@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.admin.options import StackedInline
 from django.contrib.contenttypes import admin as generic
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from datafetch import models
 
@@ -200,6 +201,209 @@ class ActorResolutionAdmin(admin.ModelAdmin):
         return qs.select_related('actor1', 'actor2', 'canonical_actor', 'reviewed_by')
 
 
+class CompaniesHouseMatchAdmin(admin.ModelAdmin):
+    """Admin interface for reviewing and approving Companies House matches."""
+
+    list_display = (
+        'colored_status_badge',
+        'organization_display',
+        'company_name',
+        'company_number',
+        'confidence_display',
+        'match_reason',
+        'enriched_badge',
+        'created_at',
+    )
+
+    list_filter = (
+        'status',
+        'match_reason',
+        'enriched',
+        ('confidence', admin.AllValuesFieldListFilter),
+        'created_at',
+    )
+
+    search_fields = (
+        'organization__name',
+        'company_name',
+        'company_number',
+        'notes',
+    )
+
+    readonly_fields = (
+        'organization',
+        'company_number',
+        'company_name',
+        'company_status',
+        'company_type',
+        'confidence',
+        'match_reason',
+        'match_details_display',
+        'created_at',
+        'updated_at',
+        'reviewed_at',
+        'reviewed_by',
+        'enriched',
+        'enriched_at',
+    )
+
+    fieldsets = (
+        ('Organization', {
+            'fields': ('organization',)
+        }),
+        ('Companies House Match', {
+            'fields': (
+                'company_name',
+                'company_number',
+                'company_status',
+                'company_type',
+            )
+        }),
+        ('Match Quality', {
+            'fields': ('confidence', 'match_reason', 'match_details_display')
+        }),
+        ('Review', {
+            'fields': ('status', 'notes')
+        }),
+        ('Enrichment Status', {
+            'fields': ('enriched', 'enriched_at'),
+            'classes': ('collapse',)
+        }),
+        ('Audit Trail', {
+            'fields': ('created_at', 'updated_at', 'reviewed_at', 'reviewed_by'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    actions = ['approve_matches', 'reject_matches']
+
+    list_per_page = 50
+
+    def colored_status_badge(self, obj):
+        """Display status with color-coded badge."""
+        colors = {
+            'pending': '#ffc107',       # Yellow
+            'approved': '#28a745',      # Green
+            'auto_approved': '#17a2b8', # Blue
+            'rejected': '#dc3545',      # Red
+            'not_found': '#6c757d',     # Gray
+        }
+        color = colors.get(obj.status, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 8px; '
+            'border-radius: 3px; font-weight: bold; font-size: 11px;">{}</span>',
+            color,
+            obj.get_status_display()
+        )
+    colored_status_badge.short_description = 'Status'
+    colored_status_badge.admin_order_field = 'status'
+
+    def organization_display(self, obj):
+        """Display organization with classification."""
+        classification = obj.organization.classification or 'Unclassified'
+        return format_html(
+            '<strong>{}</strong><br><span style="color: #666; font-size: 11px;">{} (ID: {})</span>',
+            obj.organization.name,
+            classification,
+            obj.organization.actor_ptr_id
+        )
+    organization_display.short_description = 'Organization'
+    organization_display.admin_order_field = 'organization__name'
+
+    def confidence_display(self, obj):
+        """Display confidence as percentage with color."""
+        pct = obj.confidence * 100
+        if pct >= 90:
+            color = '#28a745'  # Green
+        elif pct >= 70:
+            color = '#17a2b8'  # Blue
+        elif pct >= 50:
+            color = '#ffc107'  # Yellow
+        else:
+            color = '#dc3545'  # Red
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{}%</span>',
+            color,
+            int(pct)
+        )
+    confidence_display.short_description = 'Confidence'
+    confidence_display.admin_order_field = 'confidence'
+
+    def enriched_badge(self, obj):
+        """Display enrichment status."""
+        if obj.enriched:
+            return mark_safe('<span style="color: #28a745;">✓</span>')
+        return mark_safe('<span style="color: #ccc;">—</span>')
+    enriched_badge.short_description = 'Enriched'
+    enriched_badge.admin_order_field = 'enriched'
+
+    def match_details_display(self, obj):
+        """Display match details as formatted JSON."""
+        import json
+        if obj.match_details:
+            return format_html(
+                '<pre style="font-size: 11px; background: #f5f5f5; padding: 10px; '
+                'border-radius: 4px; max-height: 200px; overflow: auto;">{}</pre>',
+                json.dumps(obj.match_details, indent=2)
+            )
+        return '-'
+    match_details_display.short_description = 'Match Details'
+
+    def approve_matches(self, request, queryset):
+        """Approve selected matches (bulk action)."""
+        pending = queryset.filter(status='pending')
+        count = 0
+        errors = 0
+
+        for match in pending:
+            try:
+                match.approve(user=request.user, notes="Bulk approved via admin")
+                count += 1
+            except Exception as e:
+                errors += 1
+
+        if errors:
+            self.message_user(
+                request,
+                f"Approved {count} match(es). {errors} error(s) occurred during enrichment.",
+                level='warning'
+            )
+        else:
+            self.message_user(
+                request,
+                f"Successfully approved and enriched {count} match(es).",
+                level='success'
+            )
+    approve_matches.short_description = "✓ Approve selected matches (and enrich)"
+
+    def reject_matches(self, request, queryset):
+        """Reject selected matches (bulk action)."""
+        pending = queryset.filter(status='pending')
+        count = 0
+
+        for match in pending:
+            match.reject(user=request.user, notes="Bulk rejected via admin")
+            count += 1
+
+        self.message_user(
+            request,
+            f"Successfully rejected {count} match(es).",
+            level='warning'
+        )
+    reject_matches.short_description = "✗ Reject selected matches"
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related('organization', 'reviewed_by')
+
+    class Media:
+        css = {
+            'all': ('admin/css/companies_house_match.css',)
+        }
+
+
 admin.site.register(models.Person, PersonAdmin)
 admin.site.register(models.Organization, OrganizationAdmin)
 admin.site.register(models.ActorResolution, ActorResolutionAdmin)
+admin.site.register(models.CompaniesHouseMatch, CompaniesHouseMatchAdmin)
