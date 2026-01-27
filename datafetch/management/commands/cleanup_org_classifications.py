@@ -20,6 +20,7 @@ Usage:
     python manage.py cleanup_org_classifications --stats-only
 """
 
+import re
 import time
 from collections import Counter
 from django.core.management.base import BaseCommand
@@ -75,10 +76,74 @@ class Command(BaseCommand):
 
     # Categories that should be reviewed (flagged but not changed)
     REVIEW_CATEGORIES = [
-        'External Organization',  # 23,923 - needs investigation
         'Other',  # 885 - mixed bag
         'Converted Or Closed',  # 11 - defunct companies
         'Impermissible Donor',  # 1 - EC edge case
+    ]
+
+    # Pattern-based classification for "External Organization" records
+    # Order matters - more specific patterns should come first
+    # Format: (pattern_type, pattern, classification, exclude_patterns)
+    PATTERN_CLASSIFICATIONS = [
+        # Trade Unions - be specific to avoid false positives
+        ('icontains', 'trade union', 'Trade Union', []),
+        ('icontains', 'trades union', 'Trade Union', []),
+        ('regex', r'\bTUC\b', 'Trade Union', []),
+        ('regex', r'\bUnion\b', 'Trade Union', ['european union', 'student union', 'oxford union', 'cambridge union', 'union jack']),
+        ('icontains', 'unite the union', 'Trade Union', []),
+        ('regex', r'\bGMB\b', 'Trade Union', []),
+        ('regex', r'\bUnison\b', 'Trade Union', []),
+        ('regex', r'\bUsdaw\b', 'Trade Union', []),
+
+        # NHS/Health bodies
+        ('icontains', 'NHS', 'NHS Body', []),
+        ('icontains', 'National Health Service', 'NHS Body', []),
+        ('regex', r'\bCCG\b', 'NHS Body', []),  # Clinical Commissioning Group
+        ('regex', r'\bICB\b', 'NHS Body', []),  # Integrated Care Board
+        ('icontains', 'Health Trust', 'NHS Body', []),
+        ('icontains', 'Hospital Trust', 'NHS Body', []),
+        ('icontains', 'Foundation Trust', 'NHS Body', ['charitable foundation']),
+        ('icontains', 'Mental Health', 'NHS Body', []),
+        ('icontains', 'Ambulance', 'NHS Body', []),
+
+        # Universities and Colleges (be careful - "college" can be part of company names)
+        ('icontains', 'University of', 'Educational Institution', []),
+        ('regex', r'\bUniversity\b', 'Educational Institution', ['university press', 'university hospital']),
+        ('icontains', 'College of', 'Educational Institution', []),
+        ('regex', r"King's College", 'Educational Institution', []),
+        ('regex', r"Queen's College", 'Educational Institution', []),
+        ('icontains', 'Imperial College', 'Educational Institution', []),
+        ('icontains', 'London School of Economics', 'Educational Institution', []),
+        ('icontains', 'LSE', 'Educational Institution', []),
+
+        # Local Authorities / Councils
+        ('icontains', 'County Council', 'Local Authority', []),
+        ('icontains', 'City Council', 'Local Authority', []),
+        ('icontains', 'Borough Council', 'Local Authority', []),
+        ('icontains', 'District Council', 'Local Authority', []),
+        ('icontains', 'Parish Council', 'Local Authority', []),
+        ('icontains', 'Town Council', 'Local Authority', []),
+        ('icontains', 'Metropolitan Borough', 'Local Authority', []),
+        ('icontains', 'London Borough', 'Local Authority', []),
+        ('icontains', 'Combined Authority', 'Local Authority', []),
+        ('icontains', 'Greater London Authority', 'Local Authority', []),
+        ('icontains', 'Mayor of', 'Local Authority', []),
+
+        # Charities (be careful - many companies have "trust" in name)
+        ('icontains', 'Charitable Trust', 'Charity', []),
+        ('icontains', 'Charity', 'Charity', ['charity commission']),
+        ('icontains', 'Charities', 'Charity', []),
+
+        # Professional bodies / Associations
+        ('icontains', 'Royal College of', 'Professional Body', []),
+        ('icontains', 'Institute of', 'Professional Body', []),
+        ('icontains', 'Institution of', 'Professional Body', []),
+        ('icontains', 'Chartered Institute', 'Professional Body', []),
+        ('icontains', 'Law Society', 'Professional Body', []),
+        ('icontains', 'Bar Council', 'Professional Body', []),
+        ('icontains', 'Medical Association', 'Professional Body', []),
+        ('regex', r'\bBMA\b', 'Professional Body', []),
+        ('regex', r'\bRCN\b', 'Professional Body', []),  # Royal College of Nursing
     ]
 
     # The canonical list of valid categories after cleanup
@@ -117,6 +182,13 @@ class Command(BaseCommand):
         'Legislature',  # Parliamentary chambers (House of Commons, Lords, etc.)
         'Lobbying Agency',
         'Government Department',
+        'Local Authority',  # Councils, local government
+
+        # Public Sector
+        'Educational Institution',  # Universities, colleges
+        'NHS Body',  # NHS trusts, hospitals, health bodies
+        'Charity',  # Registered charities
+        'Professional Body',  # Royal Colleges, Institutes, professional associations
 
         # Electoral Commission Types
         'Permitted Participant',
@@ -130,6 +202,7 @@ class Command(BaseCommand):
 
         # Placeholder/Unknown
         'External Organization',  # To be reviewed
+        'Concatenated (Needs Split)',  # Multiple entities in one name
         'Other',
         'Unknown',
     ]
@@ -151,11 +224,17 @@ class Command(BaseCommand):
             default=1000,
             help='Batch size for updates (default: 1000)'
         )
+        parser.add_argument(
+            '--flag-concatenated',
+            action='store_true',
+            help='Flag organizations with concatenated names for manual review'
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         stats_only = options['stats_only']
         batch_size = options['batch_size']
+        flag_concatenated = options['flag_concatenated']
 
         start_time = time.time()
 
@@ -172,6 +251,13 @@ class Command(BaseCommand):
 
         # Show what will change
         self._show_planned_changes()
+
+        if flag_concatenated:
+            self._show_concatenated_names()
+            if dry_run:
+                self.stdout.write(self.style.WARNING('\n[DRY RUN] No changes will be made'))
+                return
+            self._flag_concatenated_names()
 
         if dry_run:
             self.stdout.write(self.style.WARNING('\n[DRY RUN] No changes will be made'))
@@ -254,10 +340,13 @@ class Command(BaseCommand):
         self.stdout.write('Summary:')
 
         # Count issues
-        # Exclude known correct values (prepositions like 'by' should be lowercase in title case)
-        correct_lowercase = ['UK Establishment', 'CIO', 'Private Limited by Guarantee']
+        # Exclude known correct values (acronyms, prepositions, etc.)
+        correct_values = [
+            'UK Establishment', 'CIO', 'Private Limited by Guarantee',
+            'NHS Body', 'NHS',  # NHS is an acronym
+        ]
         case_issues = sum(count for cat, count in cats.items()
-                        if cat and cat != cat.title() and cat not in correct_lowercase)
+                        if cat and cat != cat.title() and cat not in correct_values)
         none_count = cats.get(None, 0) + cats.get('', 0)
         vague_count = cats.get('External Organization', 0) + cats.get('Organization', 0) + cats.get('Other', 0)
 
@@ -389,5 +478,150 @@ class Command(BaseCommand):
             self.stdout.write(f'{updated:,} updated')
             total_updated += updated
 
+        # Apply pattern-based classifications to "External Organization" records
+        self.stdout.write('')
+        self.stdout.write(self.style.HTTP_INFO('Pattern-based reclassification (External Organization):'))
+
+        pattern_updated = self._apply_pattern_classifications(batch_size)
+        total_updated += pattern_updated
+
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(f'Total updated: {total_updated:,}'))
+
+    def _apply_pattern_classifications(self, batch_size):
+        """Apply pattern-based classifications to External Organization records."""
+        from django.db.models import Q
+
+        total_updated = 0
+        classification_counts = Counter()
+
+        # Get all External Organization records
+        external_orgs = Organization.objects.filter(classification='External Organization')
+
+        for pattern_type, pattern, new_classification, exclude_patterns in self.PATTERN_CLASSIFICATIONS:
+            # Build the query
+            if pattern_type == 'icontains':
+                q = Q(name__icontains=pattern)
+            elif pattern_type == 'regex':
+                q = Q(name__regex=pattern)
+            else:
+                continue
+
+            # Apply exclusions
+            for exclude in exclude_patterns:
+                q &= ~Q(name__icontains=exclude)
+
+            # Find matching records that are still External Organization
+            matches = external_orgs.filter(q)
+            count = matches.count()
+
+            if count > 0:
+                with transaction.atomic():
+                    updated = matches.update(classification=new_classification)
+                classification_counts[new_classification] += updated
+                total_updated += updated
+
+        # Report results by classification
+        for classification, count in sorted(classification_counts.items(), key=lambda x: -x[1]):
+            self.stdout.write(f'  -> {classification}: {count:,} updated')
+
+        if total_updated == 0:
+            self.stdout.write('  No pattern matches found')
+
+        return total_updated
+
+    def _get_concatenated_orgs(self):
+        """
+        Find organizations with concatenated names (multiple entities in one name).
+
+        These are typically from ministerial meetings data where multiple attendees
+        were recorded in a single field.
+
+        Patterns detected:
+        - Multiple items separated by ", " (but not committees/departments)
+        - Items separated by ";"
+        """
+        from django.db.models import Q
+
+        # Only look at External Organization and Unknown - others are likely valid
+        base_qs = Organization.objects.filter(
+            classification__in=['External Organization', 'Unknown']
+        )
+
+        # Pattern: multiple commas (likely multiple entities)
+        # We look for 2+ commas which suggests multiple separate entities
+        comma_pattern = Q(name__regex=r',.*,')  # At least 2 commas
+
+        # Pattern: semicolon separated
+        semicolon_pattern = Q(name__contains=';')
+
+        # Combine patterns
+        concatenated = base_qs.filter(
+            comma_pattern | semicolon_pattern
+        ).exclude(
+            # Exclude likely addresses
+            Q(name__iregex=r'\b(street|road|house|floor|building|avenue|lane|place|square|ltd|limited)\b')
+        ).exclude(
+            # Exclude committees (pattern: "X, Y and Z Committee")
+            Q(name__iregex=r'committee$')
+        ).exclude(
+            # Exclude government departments (pattern: "Department for X, Y and Z")
+            Q(name__iregex=r'^department (for|of)')
+        ).exclude(
+            # Exclude select committees
+            Q(name__iregex=r'select committee')
+        ).exclude(
+            # Exclude APPGs
+            Q(name__iregex=r'all[- ]party|appg')
+        ).exclude(
+            # Exclude Bills (legislation names often have commas)
+            Q(name__iendswith=' bill') | Q(name__iendswith=' bill]')
+        ).exclude(
+            # Exclude Joint Committees
+            Q(name__icontains='joint committee')
+        )
+
+        return concatenated
+
+    def _show_concatenated_names(self):
+        """Show organizations with concatenated names."""
+        self.stdout.write(self.style.HTTP_INFO('\n## Concatenated Names Detected'))
+        self.stdout.write(self.style.HTTP_INFO('-' * 70))
+
+        concatenated = self._get_concatenated_orgs()
+        count = concatenated.count()
+
+        self.stdout.write(f'Found {count:,} organizations with likely concatenated names')
+        self.stdout.write('')
+        self.stdout.write('Sample (first 15):')
+
+        for org in concatenated[:15]:
+            name = org.name[:80] + '...' if len(org.name) > 80 else org.name
+            self.stdout.write(f'  - {name}')
+
+        self.stdout.write('')
+        self.stdout.write(self.style.WARNING(
+            'These need manual review - names contain multiple entities that should be split'
+        ))
+
+    def _flag_concatenated_names(self):
+        """Flag organizations with concatenated names by setting a special classification."""
+        self.stdout.write(self.style.HTTP_INFO('\n## Flagging Concatenated Names'))
+        self.stdout.write(self.style.HTTP_INFO('-' * 70))
+
+        concatenated = self._get_concatenated_orgs()
+        count = concatenated.count()
+
+        if count == 0:
+            self.stdout.write('No concatenated names to flag')
+            return
+
+        # Update to a special classification for manual review
+        with transaction.atomic():
+            updated = concatenated.update(classification='Concatenated (Needs Split)')
+
+        self.stdout.write(f'Flagged {updated:,} organizations as "Concatenated (Needs Split)"')
+        self.stdout.write('')
+        self.stdout.write(self.style.WARNING(
+            'Run a split command or manual review to separate these into individual entities'
+        ))
