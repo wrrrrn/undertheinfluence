@@ -106,6 +106,6 @@ These archived documents reflect the **planning phase** (January 14-15, 2026) be
 
 ---
 
-**Archive Maintenance**: These documents are frozen. Last archive update: January 22, 2026.
+**Archive Maintenance**: These documents are frozen. Last archive update: January 26, 2026.
 
 **Note**: `GUARDIAN_TECH_LOBBYING_ANALYSIS.md` was moved to `analysis/` (not archived) as it remains useful reference material for ministerial meetings analysis.

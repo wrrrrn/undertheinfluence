@@ -1,7 +1,7 @@
 # UnderTheInfluence Systems Architecture
 
-**Version:** 4.0 (Islands Architecture Edition)
-**Last Updated:** January 19, 2026
+**Version:** 4.1 (Data Quality & Entity Resolution)
+**Last Updated:** January 26, 2026
 **Status:** Living Document
 
 ---
@@ -41,6 +41,9 @@ UnderTheInfluence is a Django-based web application that tracks lobbying influen
 - ✅ Docker-based development environment
 - ✅ Basic UI with homepage dashboard components
 - ✅ Data import from ParlParse (MPs/Lords) and Ministers
+- ✅ Data quality cleanup (127,600+ issues resolved)
+- ✅ Companies House enrichment (51,157 organizations matched)
+- ✅ Entity resolution service (`populate_canonical` command)
 
 **See `docs/CURRENT_STATE.md` for detailed feature inventory.**
 
@@ -470,7 +473,9 @@ External API (e.g., ParlParse JSON)
 - **File-based caching**: `data/` directory stores fetched files
 - **Rate limiting**: 0.5s delay between requests
 - **Deduplication**: Uses `get_or_create()` with external IDs
-- **Canonical resolution**: `canonical_person` / `canonical_organization` fields
+- **Canonical resolution**: `canonical_actor` fields link records to authoritative entities
+- **Entity resolution service**: `datafetch/services/entity_resolution.py` with fast mode
+- **Name normalization**: `datafetch/utils/normalization.py` for consistent matching
 
 ### API Request Flow (Island → API → Database)
 
@@ -1226,4 +1231,4 @@ TWFY_API_KEY=***                    # TheyWorkForYou API key (future)
 - Technology stack changes
 - Deployment architecture changes
 
-**Last Major Update**: January 19, 2026 (v4.0 - Islands Architecture Edition)
+**Last Major Update**: January 26, 2026 (v4.1 - Data Quality & Entity Resolution)

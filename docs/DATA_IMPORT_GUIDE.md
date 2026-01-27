@@ -280,24 +280,47 @@ docker compose exec api python manage.py enrich_companies_house \
 
 **Analysis:** See `analysis/13_director_psc_analysis.sql` for SQL queries analyzing directors, ownership structures, and political connections.
 
-### 9. Entity Resolution
+### 9. Entity Resolution (Canonical Linking)
 
 ```bash
-# Identify duplicate actors
-docker compose exec api python manage.py resolve_duplicates
+# Link meeting attendees, donations, and consultancies to canonical actors
+docker compose exec api python manage.py populate_canonical --dry-run
 
-# Clear pending resolutions first
-docker compose exec api python manage.py resolve_duplicates --clear
+# Fast mode (recommended) - identifier + exact name matching only
+docker compose exec api python manage.py populate_canonical --fast --batch-size 500
 
-# Dry run (preview without creating records)
+# Process specific datasets
+docker compose exec api python manage.py populate_canonical --dataset meeting_attendees --fast
+docker compose exec api python manage.py populate_canonical --dataset donations --fast
+docker compose exec api python manage.py populate_canonical --dataset consultancies --fast
+
+# Verbose output with sample resolutions
+docker compose exec api python manage.py populate_canonical --fast --verbose --limit 1000
+
+# Full fuzzy matching (slower, more matches)
+docker compose exec api python manage.py populate_canonical --batch-size 100
+```
+
+**What it does:**
+- Links `MeetingAttendee.canonical_actor` to authoritative `Actor` records
+- Links `Donation.canonical_donor` and `Donation.canonical_recipient`
+- Links `Consultancy.canonical_client` and `Consultancy.canonical_agency`
+
+**Match confidence levels:**
+- 1.0: Identifier match (EC donor ID, ParlParse person ID)
+- 0.95: Exact name match after normalization
+- 0.85: Strong alias match
+- 0.70: Weak/fuzzy alias match
+
+**Performance:**
+- Fast mode: ~500 records/batch, ~10% resolution rate
+- Full mode: ~100 records/batch, higher resolution rate but much slower
+
+### 10. Legacy Duplicate Resolution (Deprecated)
+
+```bash
+# Old duplicate detection (prefer populate_canonical)
 docker compose exec api python manage.py resolve_duplicates --dry-run
-
-# Filter by type
-docker compose exec api python manage.py resolve_duplicates --type person
-docker compose exec api python manage.py resolve_duplicates --type organization
-
-# Custom threshold (default 0.6)
-docker compose exec api python manage.py resolve_duplicates --threshold 0.7
 ```
 
 ## Data Quality Improvements (v3.0)

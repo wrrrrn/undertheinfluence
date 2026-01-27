@@ -1,8 +1,8 @@
 # Data Quality Analysis Report
 
-**Date**: 2026-01-25 (Updated)
-**Previous Report**: 2026-01-14
-**Status**: Post-Cleanup & Companies House Enrichment
+**Date**: 2026-01-26 (Updated)
+**Previous Report**: 2026-01-25
+**Status**: Post-Cleanup, Companies House Enrichment & Entity Resolution
 
 ---
 
@@ -184,14 +184,24 @@ ID 64775: accepted=2009-04-24, received=2009-09-22 (151 days off)
 
 ### Entity Resolution Status
 
-| Dataset | Linked | Unlinked | % Linked |
-|---------|--------|----------|----------|
-| Donations (canonical_recipient) | 0 | 91,513 | 0% |
-| Meeting Attendees (canonical_actor) | 20 | 119,773 | 0.02% |
+| Dataset | Total | Linked | % Linked |
+|---------|-------|--------|----------|
+| Meeting Attendees | 119,793 | In progress | ~10% (fast mode) |
+| Donations (canonical) | 91,513 | Pending | 0% |
+| Consultancies (canonical) | 62,798 | Pending | 0% |
 
-**Status**: Entity resolution not yet run at scale.
+**Status**: Entity resolution available via `populate_canonical` command.
 
-**Action**: Run `populate_canonical` command to link entities across datasets.
+**Optimized Full Resolution** (~1000+ records/sec):
+```bash
+docker compose exec api python manage.py populate_canonical --dataset all --batch-size 2000
+```
+
+**Match confidence levels:**
+- 1.0: Identifier match (EC donor ID, Companies House number)
+- 0.95: Exact name match after normalization
+- 0.85: Strong alias match
+- 0.70: Fuzzy match (Levenshtein distance)
 
 ---
 
@@ -273,5 +283,5 @@ docker compose exec api python manage.py enrich_companies_house --retry-not-foun
 
 ---
 
-**Report Updated**: 2026-01-25
-**Previous Version**: 2026-01-14
+**Report Updated**: 2026-01-26
+**Previous Version**: 2026-01-25

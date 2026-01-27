@@ -2,7 +2,7 @@
 
 This document tracks the status of all data import commands.
 
-**Last Updated**: January 22, 2026
+**Last Updated**: January 26, 2026
 **Environment**: Docker (Python 3.12, Django 6.0.1, Wagtail 7.2.x, PostgreSQL 15)
 
 ---
@@ -11,12 +11,14 @@ This document tracks the status of all data import commands.
 
 | Command | Status | Records | Notes |
 |---------|--------|---------|-------|
-| `import_parlparse` | Working | ~4,700 persons | MPs and Lords foundation data |
-| `import_ministers` | Working | ~10,000 memberships | Ministerial appointments |
-| `import_mpsinterests` | Working | ~45,000 donations | MPs' Register of Interests |
-| `import_ministerial_meetings` | Working | ~41,000 meetings | GOV.UK transparency data |
-| `enrich_companies_house` | Working | ~15,600 matches | Company data enrichment |
-| `import_appc` | Working | - | PRCA current lobbying register |
+| `import_parlparse` | Working | 90,728 persons | MPs and Lords foundation data |
+| `import_ministers` | Working | 136,590 memberships | Ministerial appointments |
+| `import_mpsinterests` | Working | 91,513 donations | MPs' Register of Interests |
+| `import_ministerial_meetings` | Working | 41,362 meetings | GOV.UK transparency data |
+| `enrich_companies_house` | Working | 51,157 matches | Company data enrichment |
+| `populate_canonical` | Working | ~10% match rate | Entity resolution |
+| `clean_data` | Working | 127,600+ fixed | Data quality cleanup |
+| `import_appc` | Working | 62,798 consultancies | PRCA current lobbying register |
 | `import_ec` | Broken | - | Electoral Commission API changed |
 | `import_everypolitician` | Broken | - | Uses defunct cdn.rawgit.com |
 | `import_twfy` | Partial | - | Requires API key, network issues |
@@ -77,12 +79,16 @@ See `docs/MINISTERIAL_MEETINGS_PHASE3_COMPLETE.md` for full details.
 - `lobbying_client` - Lobbying clients (~18,600)
 - `donor` - Donation donors (~21,400)
 
-**Current Progress** (January 22, 2026):
-| Category | Total | Auto-Approved | Pending | Not Found | Remaining |
-|----------|-------|---------------|---------|-----------|-----------|
-| lobbying_agency | 217 | 196 | 0 | 21 | 0 |
-| lobbying_client | 18,635 | 5,500 | 2,929 | 1 | 10,107 |
-| donor | 21,414 | 1,980 | 1,518 | 0 | 17,916 |
+**Current Progress** (January 26, 2026):
+| Status | Count | % |
+|--------|-------|---|
+| Auto-approved | 12,532 | 24.5% |
+| Pending review | 11,198 | 21.9% |
+| Not found | 16,419 | 32.1% |
+| Not applicable | 10,892 | 21.3% |
+| Approved | 98 | 0.2% |
+| Rejected | 18 | 0.0% |
+| **Total** | **51,157** | 100% |
 
 Requires `COMPANIES_HOUSE_API_KEY` in `.env`.
 
@@ -160,10 +166,16 @@ docker compose exec api python manage.py import_lordsinterests
 # 3. Ministerial meetings
 docker compose exec api python manage.py import_ministerial_meetings --department all --since 2020
 
-# 4. Companies House enrichment (requires API key)
+# 4. Data quality cleanup
+docker compose exec api python manage.py clean_data --fix=all --dry-run
+docker compose exec api python manage.py clean_data --fix=all
+
+# 5. Companies House enrichment (requires API key)
 docker compose exec api python manage.py enrich_companies_house --category lobbying_agency
-docker compose exec api python manage.py enrich_companies_house --category lobbying_client --batch-size 500
-docker compose exec api python manage.py enrich_companies_house --category donor --batch-size 500
+docker compose exec api python manage.py enrich_companies_house --category all --batch-size 500
+
+# 6. Entity resolution (link records to canonical actors)
+docker compose exec api python manage.py populate_canonical --fast --batch-size 500
 ```
 
 ---

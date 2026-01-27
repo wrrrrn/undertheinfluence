@@ -95,6 +95,70 @@ docker compose exec api python manage.py clean_data --fix=merge_split_names --dr
 docker compose exec api python manage.py clean_data --fix=cleanup_concatenated_orgs --dry-run --min-length=150
 ```
 
+### Phase 3.5: Standardize Classifications & Person Data
+
+Separate commands to clean up Organization classifications and Person data quality.
+
+#### Organization Classifications
+
+Rationalizes 46 inconsistent values down to ~35 standardized categories.
+
+```bash
+# View current stats
+docker compose exec api python manage.py cleanup_org_classifications --stats-only
+
+# Preview changes (dry-run)
+docker compose exec api python manage.py cleanup_org_classifications --dry-run
+
+# Apply fixes
+docker compose exec api python manage.py cleanup_org_classifications
+```
+
+**What it fixes:**
+| Issue | Examples | Count |
+|-------|----------|-------|
+| Case inconsistencies | "company" → "Company", "Friendly society" → "Friendly Society" | ~4,300 |
+| Duplicate categories | "Registered Political Party" → "Political Party" | ~50 |
+| Empty values | (none) → "Unknown" | ~10,500 |
+| Typos | "Oversea Company" → "Overseas Company" | ~100 |
+
+**Categories flagged for manual review (not auto-fixed):**
+- "External Organization" (23,923) - meeting attendees' organizations, needs investigation
+- "Other" (886) - mixed bag
+
+#### Person Data Quality
+
+Fixes corrupted prefixes, inconsistent titles, and parses empty name fields.
+
+```bash
+# View current stats
+docker compose exec api python manage.py cleanup_person_data --stats-only
+
+# Preview changes (dry-run)
+docker compose exec api python manage.py cleanup_person_data --dry-run
+
+# Apply fixes
+docker compose exec api python manage.py cleanup_person_data
+
+# Check for duplicates (report only)
+docker compose exec api python manage.py cleanup_person_data --check-duplicates
+
+# Fix only prefixes (not names)
+docker compose exec api python manage.py cleanup_person_data --fix prefixes
+```
+
+**What it fixes:**
+| Issue | Examples | Count |
+|-------|----------|-------|
+| Corrupted "na" prefixes | "Lord na" → "Lord", "Lady na" → "Lady" | 73 |
+| Inconsistent prefixes | "The Rt Hon" → "Rt Hon", "Prof" → "Professor" | ~130 |
+| Empty given_name/family_name | Parses from name field | ~54,000 |
+
+**Duplicate detection:**
+The `--check-duplicates` flag identifies:
+- Exact name duplicates (1,516 names appear multiple times)
+- "Lord na" records that duplicate properly-parsed Lords (67 confirmed duplicates)
+
 ### Phase 4: Deduplicate
 
 Run after cleaning to merge duplicate records.
@@ -166,15 +230,39 @@ docker compose exec api python manage.py enrich_companies_house \
 
 Separate command to populate canonical fields for cross-dataset linking.
 
-```bash
-# Bootstrap canonical actor links (300k+ records)
-docker compose exec api python manage.py populate_canonical --dry-run
+**Note:** As of Jan 2026, this command is highly optimized with in-memory indexing.
 
-# Process specific datasets
-docker compose exec api python manage.py populate_canonical --dataset meetings --dry-run
-docker compose exec api python manage.py populate_canonical --dataset donations --dry-run
-docker compose exec api python manage.py populate_canonical --dataset consultancies --dry-run
+```bash
+# Dry run to preview
+docker compose exec api python manage.py populate_canonical --dry-run --verbose
+
+# Standard run (Recommended) - Full fuzzy matching
+# Now optimized to process ~1000+ records/sec
+docker compose exec api python manage.py populate_canonical --dataset all --batch-size 2000
+
+# Legacy "Fast mode" (Identifiers + Exact Name only)
+# Use only if memory is extremely constrained
+docker compose exec api python manage.py populate_canonical --fast --batch-size 2000
 ```
+
+**How canonical linking works:**
+
+Each record (MeetingAttendee, Donation, Consultancy) has a `canonical_actor` field that points to the authoritative Actor record. This enables:
+
+1. **Cross-dataset queries**: Find all interactions with "Shell" regardless of name variant
+2. **Aggregation**: Sum donations from same entity across different name spellings
+3. **Network analysis**: Build complete influence networks
+
+**Match confidence levels:**
+- 1.0: Identifier match (EC donor ID, ParlParse person ID, Companies House number)
+- 0.95: Exact name match after normalization (case, punctuation, legal suffixes)
+- 0.85: Strong alias match
+- 0.70: Weak/fuzzy alias match (Levenshtein distance)
+
+**Performance tips:**
+- The command now builds an in-memory index of all ~150k actors at startup (takes ~5-10s).
+- Use `--batch-size 2000` or higher for optimal throughput.
+- Score caching prevents redundant database calculations.
 
 ## Command Options
 
@@ -193,10 +281,31 @@ docker compose exec api python manage.py populate_canonical --dataset consultanc
 | Option | Description |
 |--------|-------------|
 | `--dry-run` | Show what would change without modifying |
-| `--dataset=<type>` | `meetings`, `donations`, `consultancies`, or `all` |
-| `--batch-size=N` | Records per batch (default: 1000) |
+| `--dataset=<type>` | `meeting_attendees`, `donations`, `consultancies`, or `all` |
+| `--batch-size=N` | Records per batch (default: 1000, use 500 for progress visibility) |
 | `--min-confidence=N` | Minimum confidence for linking (default: 0.85) |
+| `--fast` | Fast mode: identifier + exact name only (skip slow fuzzy matching) |
+| `--limit=N` | Process only N records (for testing) |
 | `--verbose` | Show each resolution |
+| `--skip-existing` | Skip records that already have canonical links (default: true) |
+
+### cleanup_org_classifications Options
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would change without modifying |
+| `--stats-only` | Only show statistics, no changes |
+| `--batch-size=N` | Records per batch (default: 1000) |
+
+### cleanup_person_data Options
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would change without modifying |
+| `--stats-only` | Only show statistics, no changes |
+| `--fix=<type>` | `all`, `prefixes`, or `names` (default: all) |
+| `--check-duplicates` | Report potential duplicate persons |
+| `--batch-size=N` | Records per batch (default: 500) |
 
 ## Understanding the Output
 
@@ -263,6 +372,13 @@ docker compose exec api python manage.py clean_data --fix=semicolon_actors
 docker compose exec api python manage.py clean_data --fix=flag_non_ch_orgs --dry-run
 docker compose exec api python manage.py clean_data --fix=flag_non_ch_orgs
 
+# 3.5. Standardize classifications and person data
+docker compose exec api python manage.py cleanup_org_classifications --dry-run
+docker compose exec api python manage.py cleanup_org_classifications
+
+docker compose exec api python manage.py cleanup_person_data --dry-run
+docker compose exec api python manage.py cleanup_person_data
+
 # 4. Re-run Companies House enrichment on cleaned data
 docker compose exec api python manage.py enrich_companies_house --retry-not-found --category lobbying_agency
 docker compose exec api python manage.py enrich_companies_house --retry-not-found --category donor --batch-size 500
@@ -275,6 +391,8 @@ docker compose exec api python manage.py populate_canonical --dataset all
 
 # 6. Verify final state
 docker compose exec api python manage.py clean_data --fix=all --dry-run
+docker compose exec api python manage.py cleanup_org_classifications --stats-only
+docker compose exec api python manage.py cleanup_person_data --stats-only
 # Should show minimal/no issues remaining
 ```
 
@@ -304,3 +422,5 @@ docker compose exec api python manage.py clean_data --fix=split_camelcase --dry-
 - `docs/DATA_IMPORT_GUIDE.md` - Import procedures
 - `datafetch/utils/data_cleanup.py` - Shared utility patterns
 - `datafetch/services/entity_resolution.py` - Resolution service
+- `datafetch/management/commands/cleanup_org_classifications.py` - Org classification cleanup
+- `datafetch/management/commands/cleanup_person_data.py` - Person data cleanup

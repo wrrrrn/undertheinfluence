@@ -1,6 +1,6 @@
 # UnderTheInfluence Documentation
 
-**Last Updated**: January 22, 2026
+**Last Updated**: January 26, 2026
 
 This directory contains all project documentation for UnderTheInfluence, a Django-based web application tracking political influence in UK politics.
 
@@ -99,11 +99,11 @@ This directory contains all project documentation for UnderTheInfluence, a Djang
 - Recommended execution order
 
 **`DATA_QUALITY_REPORT.md`**
-- Comprehensive data quality analysis
-- 167,967 issues identified across 26,000 actors
-- Automated cleanup recommendations
-- Issue breakdowns (duplicates, missing dates, orphaned records)
-- Entity resolution strategy
+- Comprehensive data quality analysis (post-cleanup)
+- Major improvements achieved: 99.98% duplicate reduction, 83% orphaned donations fixed
+- Companies House enrichment status (51,157 matches)
+- Entity resolution status and remaining work
+- Cleanup command reference
 
 **`DATA_IMPORT_GUIDE.md`**
 - Complete guide for importing political data
@@ -233,4 +233,4 @@ All documentation is maintained by the development team. When making significant
 
 ---
 
-**Last Major Update**: January 22, 2026 (documentation consolidation, added API reference)
+**Last Major Update**: January 26, 2026 (data quality improvements, entity resolution, Companies House enrichment)
