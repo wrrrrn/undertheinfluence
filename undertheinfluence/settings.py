@@ -17,8 +17,12 @@ from decouple import config, Csv
 BASE_DIR = realpath(dirname(dirname(__file__)))
 PROJECT_DIR = join(BASE_DIR, 'undertheinfluence')
 
-# Load configuration from environment variables
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = config('DEBUG', default=False, cast=bool)
+
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+if 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
 
 BASE_URL = config('BASE_URL', default='http://localhost:8000')
 

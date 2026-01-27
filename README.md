@@ -12,6 +12,13 @@ UnderTheInfluence is a web application that tracks lobbying influence in UK poli
 | PostgreSQL | 15 |
 | Frontend | React 18 + Vite 5 (Islands Architecture) |
 
+**Database**:
+- 155,065 actors (90,728 persons + 64,337 organizations)
+- 91,513 donations
+- 62,798 lobbying consultancies
+- 41,362 ministerial meetings (119,793 attendees)
+- 51,157 Companies House matches
+
 ## Data Sources
 
 | Source | Status | Description |
@@ -63,6 +70,12 @@ docker compose exec api python manage.py import_ministerial_meetings --departmen
 
 # Enrich with Companies House data
 docker compose exec api python manage.py enrich_companies_house --category lobbying_agency
+
+# Data quality cleanup
+docker compose exec api python manage.py clean_data --fix=all
+
+# Entity resolution (link records to canonical actors)
+docker compose exec api python manage.py populate_canonical --fast --batch-size 500
 ```
 
 ## Documentation
