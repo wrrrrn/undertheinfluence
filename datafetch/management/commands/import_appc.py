@@ -68,8 +68,8 @@ class Command(BaseCommand):
             first = match.group(1).strip()
             second = match.group(2).strip()
 
-            # Skip if second part is too short (likely not a company name)
-            if len(second) < 5:
+            # Skip if second part is too short (3 chars to catch acronyms like GSK, RWE)
+            if len(second) < 3:
                 return [name]
 
             # Skip if second part is just common suffixes/words

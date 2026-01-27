@@ -420,8 +420,8 @@ class NameSplitter:
             first = match.group(1).strip()
             second = match.group(2).strip()
 
-            # Validate the split
-            if len(second) < 5:
+            # Validate the split (3 chars to catch acronyms like GSK, RWE, SKY)
+            if len(second) < 3:
                 return [name]
 
             # Skip common non-split words

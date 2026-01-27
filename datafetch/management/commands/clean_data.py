@@ -1208,9 +1208,11 @@ class Command(BaseCommand):
         if limit: concat_orgs = concat_orgs[:limit]
 
         count = concat_orgs.count()
-        self.stdout.write(f'Found {count} concatenated organizations (Regex)')
+        self.stdout.write(f'Found {count} potential concatenated organizations (Regex match)')
 
         split_count = 0
+        skipped_count = 0
+        skip_reasons = {}
         totals = {
             'ch_matches_deleted': 0,
             'identifiers_deleted': 0,
@@ -1219,12 +1221,28 @@ class Command(BaseCommand):
         }
 
         for org in concat_orgs:
+            parts, skip_reason = self._split_name(org.name, return_reason=True)
+            if len(parts) <= 1:
+                skipped_count += 1
+                skip_reasons[skip_reason] = skip_reasons.get(skip_reason, 0) + 1
+                if verbose:
+                    self.stdout.write(self.style.WARNING(f'  Skipped: "{org.name[:70]}" - {skip_reason}'))
+                continue
+
             result = self._process_concat_org(org, dry_run, verbose)
             if result:
                 split_count += 1
                 if isinstance(result, dict):
                     for key in totals:
                         totals[key] += result.get(key, 0)
+
+        # Show skip summary
+        if skipped_count > 0:
+            self.stdout.write(f'\nSkipped {skipped_count} organizations (passed regex but excluded by rules):')
+            for reason, cnt in sorted(skip_reasons.items(), key=lambda x: -x[1]):
+                self.stdout.write(f'  - {reason}: {cnt}')
+
+        self.stdout.write(f'\nWill split: {split_count} organizations')
 
         # Store totals for reporting in Changes section
         self._fix_totals['split_concatenated_orgs'] = {
@@ -1234,29 +1252,51 @@ class Command(BaseCommand):
 
         return split_count
 
-    def _split_name(self, name):
+    def _split_name(self, name, return_reason=False):
+        """Split concatenated name. If return_reason=True, returns (parts, skip_reason)."""
         for pattern in self.EXCLUDE_PATTERNS:
-            if pattern.search(name): return [name]
-        
+            if pattern.search(name):
+                if return_reason:
+                    return [name], f"matches exclusion pattern"
+                return [name]
+
         match = self.CONCAT_PATTERN.match(name)
         if match:
             first = match.group(1).strip()
             second = match.group(2).strip()
-            if len(second) < 5: return [name]
-            skip_words = {'Co', 'Company', 'Partnership', 'Group', 'Holdings'}
-            if second in skip_words: return [name]
-            if self.TRADING_AS_PATTERN.match(' ' + second) or second.lower().startswith('t/a'): return [name]
-            if first.lower().replace(' ', '') == second.lower().replace(' ', ''): return [name]
-            
+            if len(second) < 3:
+                if return_reason:
+                    return [name], f"second part too short: '{second}'"
+                return [name]
+            skip_words = {'Co', 'Company', 'Partnership', 'Group', 'Holdings', 'UK', 'USA',
+                          'Europe', 'International', 'Global', 'Worldwide', 'Inc', 'plc', 'Home'}
+            if second in skip_words:
+                if return_reason:
+                    return [name], f"second part is skip word: '{second}'"
+                return [name]
+            if self.TRADING_AS_PATTERN.match(' ' + second) or second.lower().startswith('t/a'):
+                if return_reason:
+                    return [name], f"trading-as pattern: '{second}'"
+                return [name]
+            if first.lower().replace(' ', '') == second.lower().replace(' ', ''):
+                if return_reason:
+                    return [name], f"duplicate name parts"
+                return [name]
+
             results = [first]
             results.extend(self._split_name(second))
+            if return_reason:
+                return results, None
             return results
+        if return_reason:
+            return [name], "no concat pattern match"
         return [name]
 
     def _process_concat_org(self, org, dry_run, verbose):
         """Process a concatenated org. Returns dict with counts or False if skipped."""
         parts = self._split_name(org.name)
-        if len(parts) <= 1: return False
+        if len(parts) <= 1:
+            return False
 
         # Count what will be affected
         ch_matches = CompaniesHouseMatch.objects.filter(organization_id=org.actor_ptr_id).count()

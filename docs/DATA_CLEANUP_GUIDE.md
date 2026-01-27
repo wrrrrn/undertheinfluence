@@ -101,7 +101,7 @@ Separate commands to clean up Organization classifications and Person data quali
 
 #### Organization Classifications
 
-Rationalizes 46 inconsistent values down to ~35 standardized categories.
+Rationalizes 40+ inconsistent values down to ~35 standardized categories, with pattern-based auto-classification and concatenated name detection.
 
 ```bash
 # View current stats
@@ -112,19 +112,52 @@ docker compose exec api python manage.py cleanup_org_classifications --dry-run
 
 # Apply fixes
 docker compose exec api python manage.py cleanup_org_classifications
+
+# Flag concatenated names for manual review
+docker compose exec api python manage.py cleanup_org_classifications --flag-concatenated --dry-run
+docker compose exec api python manage.py cleanup_org_classifications --flag-concatenated
 ```
 
 **What it fixes:**
+
 | Issue | Examples | Count |
 |-------|----------|-------|
 | Case inconsistencies | "company" → "Company", "Friendly society" → "Friendly Society" | ~4,300 |
 | Duplicate categories | "Registered Political Party" → "Political Party" | ~50 |
 | Empty values | (none) → "Unknown" | ~10,500 |
 | Typos | "Oversea Company" → "Overseas Company" | ~100 |
+| Wrong mappings | "chamber" → "Legislature" (was "Chamber of Commerce") | ~7 |
+
+**Pattern-based auto-classification:**
+
+The command uses name patterns to automatically reclassify "External Organization" records:
+
+| Pattern | Classification | Example |
+|---------|---------------|---------|
+| Contains "trade union" | Trade Union | "Unite the Union" |
+| Contains "NHS", "Health Trust" | NHS Body | "NHS England" |
+| Contains "University of", "College" | Educational Institution | "University of Oxford" |
+| Contains "County Council", "Borough" | Local Authority | "Kent County Council" |
+| Contains "Royal College of" | Professional Body | "Royal College of Nursing" |
+| Contains "Charity", "Foundation" | Charity | "British Heart Foundation" |
+
+This auto-classifies ~2,400 records from "External Organization" into proper categories.
+
+**Concatenated name detection (`--flag-concatenated`):**
+
+Detects organizations with multiple entities in one name field (e.g., "BP, Shell, ExxonMobil") and marks them as "Concatenated (Needs Split)" for manual review or processing by the `split_concatenated_orgs` fix.
+
+Exclusions (not flagged as concatenated):
+- Committees and joint committees
+- APPGs (All-Party Parliamentary Groups)
+- Government departments
+- Bills and Acts
 
 **Categories flagged for manual review (not auto-fixed):**
-- "External Organization" (23,923) - meeting attendees' organizations, needs investigation
-- "Other" (886) - mixed bag
+- "External Organization" (~21,500) - meeting attendees' organizations after pattern classification
+- "Unknown" (~10,700) - no classification data available
+- "Other" (~885) - mixed bag
+- "Concatenated (Needs Split)" - when using `--flag-concatenated`
 
 #### Person Data Quality
 
@@ -295,6 +328,7 @@ Each record (MeetingAttendee, Donation, Consultancy) has a `canonical_actor` fie
 |--------|-------------|
 | `--dry-run` | Show what would change without modifying |
 | `--stats-only` | Only show statistics, no changes |
+| `--flag-concatenated` | Detect and flag organizations with multiple entities in name |
 | `--batch-size=N` | Records per batch (default: 1000) |
 
 ### cleanup_person_data Options
@@ -375,6 +409,10 @@ docker compose exec api python manage.py clean_data --fix=flag_non_ch_orgs
 # 3.5. Standardize classifications and person data
 docker compose exec api python manage.py cleanup_org_classifications --dry-run
 docker compose exec api python manage.py cleanup_org_classifications
+
+# Flag concatenated names for later splitting
+docker compose exec api python manage.py cleanup_org_classifications --flag-concatenated --dry-run
+docker compose exec api python manage.py cleanup_org_classifications --flag-concatenated
 
 docker compose exec api python manage.py cleanup_person_data --dry-run
 docker compose exec api python manage.py cleanup_person_data
