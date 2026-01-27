@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'api',
 
     # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
+    'corsheaders',  # CORS support for frontend on different port
     'rest_framework',
     'django_filters',  # Django Filter for API v2
     'drf_spectacular',  # OpenAPI schema generation
@@ -68,6 +69,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS must be before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -197,6 +199,14 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "SAMEORIGIN"  # for the wagtail toolbar
 CSRF_COOKIE_HTTPONLY = True
+
+# CORS settings (for Astro frontend on different port)
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:4321,http://127.0.0.1:4321',
+    cast=Csv()
+)
+CORS_ALLOW_CREDENTIALS = True
 
 # Django REST Framework settings
 REST_FRAMEWORK = {

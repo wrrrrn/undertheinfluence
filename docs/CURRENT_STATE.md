@@ -1,31 +1,31 @@
 # UnderTheInfluence: Current State Summary
 
-**Last Updated**: January 19, 2026
-**Branch**: `feature/new-ui`
-**Status**: Working prototype with modern frontend architecture
+**Last Updated**: January 27, 2026
+**Branch**: `feature/ux`
+**Status**: Working prototype with Astro 5 + Svelte 5 frontend
 
 ---
 
 ## Executive Summary
 
-UnderTheInfluence is a **working Django 6.0 web application** that tracks political influence in UK politics through donations and lobbying data. The project has successfully completed:
+UnderTheInfluence is a **working Django 6.0 web application** that tracks political influence in UK politics through donations, lobbying, and ministerial meetings data. The project has successfully completed:
 
 - **Backend modernization** (Django 1.8 → 6.0, Python 3.7 → 3.12)
 - **Full Dockerization** for development and deployment
-- **Modern frontend architecture** using Islands Architecture with React/Vite
-- **API v2** with aggregate endpoints and filtering
-- **Basic UI** with interactive homepage components
+- **Modern frontend architecture** using Astro 5 + Svelte 5 + D3.js
+- **API v2** with aggregate endpoints, filtering, and network graph data
+- **Interactive visualizations** including minister network graph with donation and meeting data
 
 **What Works Right Now**:
 - ✅ Docker Compose development environment
 - ✅ Django 6.0.1 + Wagtail 7.2.x + PostgreSQL 15
-- ✅ Islands Architecture with Vite 5 + React 18 + TypeScript
-- ✅ Homepage with StatsGrid, PartyBreakdown, TopDonorsLeaderboard islands
+- ✅ Astro 5 + Svelte 5 frontend with Tailwind CSS
+- ✅ D3.js minister network visualization (donations + meetings)
 - ✅ API v2 aggregate endpoints with filtering
-- ✅ Data import from ParlParse (MPs/Lords) and Ministers
-- ✅ Zustand-based URL state management
+- ✅ Data import from ParlParse, Ministers, MPs' Register, and Ministerial Meetings
+- ✅ CORS support for Astro frontend
 
-**What's Next**: Expand frontend components, add politician directory page, enhance entity profiles.
+**What's Next**: Add more visualizations, politician directory page, enhance entity profiles.
 
 ---
 
@@ -45,13 +45,11 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 ### Frontend
 | Component | Version | Status |
 |-----------|---------|--------|
-| **Vite** | 5.x | ✅ Build system |
-| **React** | 18.x | ✅ Islands only |
+| **Astro** | 5.x | ✅ SSR + partial hydration |
+| **Svelte** | 5.x | ✅ Interactive components |
+| **D3.js** | 7.x | ✅ Data visualization |
+| **Tailwind CSS** | 3.x | ✅ Utility-first styling |
 | **TypeScript** | 5.x | ✅ Type safety |
-| **Bootstrap** | 5.x | ✅ Layout/grid |
-| **CSS Modules** | (Vite) | ✅ Scoped styles |
-| **Zustand** | 4.5.x | ✅ State management |
-| **TanStack Query** | 5.x | ✅ Data fetching |
 
 ### Infrastructure
 - **Docker** + **Docker Compose** for development
@@ -63,37 +61,37 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 
 ## Architecture Summary
 
-### Islands Architecture
+### Astro + Svelte Frontend
 
-The frontend uses **Islands Architecture** - server-rendered Django templates with selective React hydration:
+The frontend uses **Astro 5** for server-side rendering with **Svelte 5** components for interactivity:
 
 ```
-┌─────────────────────────────────────────┐
-│         Django Template (HTML)          │
-│                                         │
-│  ┌──────────────┐   ┌──────────────┐  │
-│  │ Static HTML  │   │ Static HTML  │  │
-│  └──────────────┘   └──────────────┘  │
-│                                         │
-│  ┌────────────────────────────────┐    │
-│  │ React Island (StatsGrid)       │    │
-│  │ <div data-island="StatsGrid">  │    │
-│  │   [Interactive Component]      │    │
-│  │ </div>                         │    │
-│  └────────────────────────────────┘    │
-│                                         │
-│  ┌──────────────┐   ┌──────────────┐  │
-│  │ Static HTML  │   │ Static HTML  │  │
-│  └──────────────┘   └──────────────┘  │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Astro Page (.astro)                       │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Server-Rendered HTML (Static Content)                │  │
+│  │ - Hero section, typography, stats                    │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Svelte Component (client:visible)                    │  │
+│  │ - MinisterNetwork visualization (D3.js)              │  │
+│  │ - Interactive hover/click behavior                   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Server-Rendered HTML (Methodology, Footer)           │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **Key Principles**:
 - 📄 **Server-rendered by default** - SEO-friendly, fast initial load
-- 🏝️ **Islands hydrate selectively** - React only where interactivity is needed
-- 🔗 **URL-driven state** - Filter state lives in URL parameters (shareable links)
+- 🏝️ **Partial hydration** - Svelte components hydrate via `client:visible`
+- 📊 **D3.js visualizations** - Interactive network graphs
 - ♿ **Progressive enhancement** - Works without JavaScript
-- 🎯 **Minimal bundle** - ~40-60KB gzipped (vs 200KB+ for SPAs)
+- 🎯 **Minimal bundle** - Svelte compiles away the framework
 
 ### Data Model (Popolo-Based)
 
@@ -123,6 +121,7 @@ Relationships:
 **Models** (`datafetch/models/`):
 - ✅ Core Popolo models (Actor, Person, Organization, Post, Membership)
 - ✅ Relationship models (Donation, Consultancy)
+- ✅ Ministerial meetings models (MinisterialMeeting, MeetingAttendee)
 - ✅ Supporting models (Area, Identifier, OtherName, ContactDetail, Link, Source)
 - ✅ Temporal behaviors (Dateframeable, Timestampable)
 - ✅ Entity resolution fields (canonical_person, canonical_organization)
@@ -131,6 +130,7 @@ Relationships:
 - ✅ **Working**: `import_parlparse` (MPs/Lords since 2010)
 - ✅ **Working**: `import_ministers` (ministerial appointments)
 - ✅ **Working**: `import_mpsinterests` (MPs' Register of Interests)
+- ✅ **Working**: `import_ministerial_meetings` (GOV.UK transparency data)
 - ⚠️ **Partial**: `import_ec` (Electoral Commission - API changes needed)
 - ⚠️ **Partial**: `import_appc` (APPC lobbying - site changes)
 
@@ -157,6 +157,11 @@ Relationships:
 - `GET /api/v2/aggregates/donor-concentration/` - Whale donor analysis
   - Gini coefficient, HHI, concentration category
   - Pareto distribution metrics
+- `GET /api/v2/aggregates/minister-network/` - D3.js network graph data
+  - Ministers, donors, and meeting attendees as nodes
+  - Donation and meeting connections as links
+  - Filters: limit, min_value, min_meetings, current_only
+  - Returns nodes, links, and stats for force simulation
 
 **Actor Endpoints** (for profiles):
 - `GET /api/v2/actors/{id}/` - Actor detail
@@ -173,64 +178,49 @@ Relationships:
 
 ### Frontend - Components
 
-**Built Islands** (`frontend/islands/`):
-- ✅ **StatsGrid** - 4 metric cards with live API data
-  - Total donations, total value, concentration, dual influence
-  - Filters: date range, min value, donor type
-  - Timestamp provenance
-- ✅ **PartyBreakdown** - Party donation breakdown grid
-  - Party cards with official colors
-  - Total received, donor count, avg donation
-  - Responsive grid layout
-- ✅ **TopDonorsLeaderboard** - Paginated donor ranking
-  - Rank calculation accounts for pagination
-  - Filters sync with other islands
-  - Click-through to donor profiles
-- ✅ **FilterPanel** - Interactive filter controls
-  - Date range picker, value selector, donor type chips
-  - Updates URL state (syncs all islands)
-- ⏳ **ConcentrationChart** - D3.js visualization (scaffolded, not implemented)
+**Svelte Components** (`frontend/src/components/`):
+- ✅ **MinisterNetwork** - D3.js force-directed network visualization
+  - Shows ministers, donors, and meeting attendees as nodes
+  - Donation connections (solid lines) and meeting connections (dashed lines)
+  - Interactive: hover to preview, click to pin detail card
+  - Configurable: limit, minValue, minMeetings, currentOnly filters
+  - Boundary constraints keep nodes within SVG
+  - Natural history color palette (terracotta, forest green, warm brown)
 
-**Built Components** (`frontend/components/`):
-- ✅ **StatCard** - Metric display primitive
-  - Value, label, optional icon, variant colors
-  - Timestamp for data provenance
-  - Click-through href support
-- ✅ **PartyCard** - Political party card
-  - Party name with official color accent
-  - Donation statistics, responsive layout
-- ✅ **ActorCard** - Person/organization card (basic version)
-  - Name, classification, image
-  - Click-through to profile page
+**Astro Pages** (`frontend/src/pages/`):
+- ✅ **index.astro** - Editorial homepage
+  - Masthead with investigation label
+  - Hero section with headline and deck
+  - Stats strip (API-driven)
+  - Full-width minister network visualization
+  - Pull quote / insight section
+  - Methodology section
+  - Footer
+
+**Layouts** (`frontend/src/layouts/`):
+- ✅ **BaseLayout.astro** - Base HTML layout with Tailwind styles
 
 **State Management**:
-- ✅ Zustand store (`frontend/store/filterStore.ts`)
-- ✅ URL parameter synchronization
-- ✅ Filter state: dateFrom, dateTo, minValue, donorType, page
-- ✅ Browser back/forward navigation works
-- ✅ Shareable URLs preserve filter state
-
-**Island Loader** (`frontend/islands.tsx`):
-- ✅ Detects `[data-island]` markers in HTML
-- ✅ Lazy-loads island components
-- ✅ Hydrates with props from data attributes
-- ✅ Error handling for failed loads
+- ✅ Svelte 5 Runes (`$state`, `$props`, `$derived`)
+- ✅ Component-local state (no global store needed)
+- ✅ D3.js force simulation state
 
 ### Frontend - Styling
 
-**Design System**:
-- ✅ Bootstrap 5.x for layout/grid
-- ✅ CSS Modules for scoped component styles
-- ✅ SCSS preprocessing with Vite
-- ✅ Typography: Playfair Display (headings) + Inter (body)
-- ✅ Party colors with WCAG AA accessible variants
-- ✅ Responsive breakpoints (mobile-first)
+**Design System** (Natural History / Editorial):
+- ✅ Tailwind CSS for utility-first styling
+- ✅ Custom theme with organic color palette
+- ✅ Typography: Zodiak (headlines) + Satoshi (body)
+- ✅ Tabular figures for numeric data alignment
+- ✅ Responsive grid layouts
 
-**Editorial Design** (from `docs/FRONTEND_DESIGN.md`):
-- ✅ 20px border radius for cards (modern, premium feel)
-- ✅ Layered shadow system for depth
-- ✅ Party color accent bars/badges
-- ✅ Tabular numeric formatting for currency
+**Color Palette**:
+- Ministers: `#C54B3C` (Terracotta red)
+- Donors: `#4A6741` (Forest green)
+- Organizations: `#6B5B4F` (Warm brown)
+- Meetings: `#7B9E87` (Sage green)
+- Paper: `#FAF8F5` (Warm white)
+- Ink: `#2C2C2C` (Dark gray)
 
 ### Wagtail CMS Integration
 
@@ -255,12 +245,16 @@ Relationships:
 
 **Docker Setup**:
 ```bash
-# Start all services (Django + Vite + PostgreSQL + Redis)
+# Start backend services (Django + PostgreSQL + Redis)
 docker compose up -d
 
-# Django runs on http://localhost:8000
-# Vite dev server runs on http://localhost:5173
-# Hot Module Replacement (HMR) works across containers
+# Django API runs on http://localhost:8000
+
+# Start frontend dev server (from frontend/ directory)
+cd frontend && npm run dev
+
+# Astro dev server runs on http://localhost:4321
+# Hot Module Replacement (HMR) enabled
 ```
 
 **Custom Skills** (`.claude/skills/`):
@@ -295,12 +289,13 @@ python manage.py collectstatic --noinput
   - Filtering by party, role, status
 - ❌ **Enhanced Actor Profiles**
   - Tabbed interface (Overview, Donations, Network, Timeline)
-  - Network graph visualization (D3.js)
+  - Ego network visualization (D3.js) - building on MinisterNetwork
   - Activity timeline (chronological event feed)
-- ❌ **Network Visualizations**
-  - Force-directed graph (ego networks)
-  - Sankey diagrams (influence paths)
-  - Cluster detection visualization
+- ⏳ **Network Visualizations**
+  - ✅ Minister network (force-directed, donations + meetings)
+  - ❌ Ego networks (actor-specific view)
+  - ❌ Sankey diagrams (influence paths)
+  - ❌ Cluster detection visualization
 - ❌ **Data Tables** (replacing current basic views)
   - Sortable, filterable donation tables
   - Infinite scroll or pagination
@@ -312,13 +307,15 @@ python manage.py collectstatic --noinput
   - Annotated with current_party, is_minister, is_mp
 - ❌ `GET /api/v2/actors/{id}/network/` - Ego network data
   - Multi-hop relationship traversal
-  - Filter by relationship type
+  - Filter by relationship type (building on minister-network pattern)
 - ❌ `GET /api/v2/actors/{id}/paths-to/{target}/` - Influence paths
   - Find all routes from donor to politician
   - Used for Sankey diagrams
 - ❌ `GET /api/v2/network/clusters/` - Community detection
   - Identify tightly-connected groups
   - Cluster analysis metrics
+
+**Note**: `GET /api/v2/aggregates/minister-network/` is now implemented as the foundation for network visualizations.
 
 ### Data Quality (Medium Priority)
 - ⚠️ **Automated cleanup** (167,967 issues identified)
@@ -365,26 +362,20 @@ undertheinfluence/
 │   │   └── import_mpsinterests.py
 │   ├── views.py             # Django views (ActorView, SearchView)
 │   └── templates/           # Django templates
-├── frontend/               # Islands Architecture frontend
-│   ├── components/          # Reusable React components
-│   │   ├── ActorCard.tsx
-│   │   ├── StatCard.tsx
-│   │   └── PartyCard.tsx
-│   ├── islands/             # Top-level interactive islands
-│   │   ├── StatsGrid.tsx
-│   │   ├── PartyBreakdown.tsx
-│   │   ├── TopDonorsLeaderboard.tsx
-│   │   └── FilterPanel.tsx
-│   ├── hooks/               # Custom React hooks
-│   │   ├── useTopDonors.ts
-│   │   └── useHomepageStats.ts
-│   ├── store/               # Zustand state management
-│   │   └── filterStore.ts
-│   ├── styles/              # Global SCSS
-│   ├── islands.tsx          # Island loader/registry
-│   ├── main.tsx             # Vite entry point
+├── frontend/               # Astro + Svelte frontend
+│   ├── src/
+│   │   ├── components/      # Svelte components
+│   │   │   └── MinisterNetwork.svelte  # D3.js network visualization
+│   │   ├── layouts/         # Astro layouts
+│   │   │   └── BaseLayout.astro
+│   │   ├── pages/           # Astro pages (file-based routing)
+│   │   │   └── index.astro  # Homepage
+│   │   └── styles/          # Global CSS
+│   │       └── global.css
+│   ├── public/              # Static assets
+│   ├── astro.config.mjs     # Astro configuration
+│   ├── tailwind.config.mjs  # Tailwind CSS theme
 │   ├── package.json         # NPM dependencies
-│   ├── vite.config.ts       # Vite configuration
 │   └── tsconfig.json        # TypeScript configuration
 ├── undertheinfluence/      # Django project
 │   ├── settings.py          # Django settings (environment vars)
@@ -426,71 +417,58 @@ Docker Compose automatically configures these for local development.
 
 ## Key Decisions Made
 
-### 1. Islands Architecture (Not SPA)
-**Decision**: Use server-rendered Django templates with selective React hydration.
+### 1. Astro + Svelte (Not React Islands)
+**Decision**: Use Astro 5 for SSR with Svelte 5 for interactive components.
 
 **Rationale**:
-- SEO-friendly (server-rendered content)
-- Fast initial load (minimal JavaScript)
-- Progressive enhancement (works without JS)
-- Natural Django integration
-- Wagtail CMS compatibility
+- Built-in partial hydration (`client:visible`, `client:load`)
+- Svelte compiles away - smaller bundle size
+- Better DX for content-heavy pages
+- Svelte 5 Runes more intuitive than React hooks
+- No need for custom island loader
 
 **Trade-offs**:
-- Not suitable for real-time collaboration features
-- Client-side routing would require additional complexity
+- Smaller ecosystem than React
+- Learning curve for Svelte syntax
 
-### 2. URL-Driven State (Not Client-Side Only)
-**Decision**: Store filter state in URL parameters, synchronized via Zustand.
+### 2. Svelte 5 Runes (Not Zustand/Redux)
+**Decision**: Use Svelte 5 Runes (`$state`, `$props`, `$derived`) for state management.
 
 **Rationale**:
-- Shareable links (deep linking)
-- Browser back/forward works
-- No client-side routing needed
-- Multiple islands automatically synchronized
+- Built-in reactive primitives
+- No external state library needed
+- Compile-time optimizations
+- Clean, readable syntax
 
 **Trade-offs**:
-- URL can get long with many filters
-- Sensitive filters would need different approach
+- Component-local state (no global store pattern by default)
+- Svelte 5 is newer, fewer examples
 
-### 3. Zustand (Not Redux/MobX)
-**Decision**: Use Zustand for lightweight state management.
+### 3. Tailwind CSS (Not Bootstrap/CSS Modules)
+**Decision**: Use Tailwind CSS for utility-first styling.
 
 **Rationale**:
-- Minimal boilerplate (1KB gzipped)
-- TypeScript support
-- No provider wrapper needed
-- Prevents custom event "soup"
+- Rapid prototyping
+- Custom theme support
+- No CSS naming decisions
+- Astro integration is excellent
 
 **Trade-offs**:
-- Less ecosystem than Redux
-- No time-travel debugging by default
+- Verbose class strings
+- Less semantic HTML
 
-### 4. CSS Modules (Not Tailwind/Styled-Components)
-**Decision**: Use CSS Modules with SCSS for component styling.
+### 4. D3.js Force Simulation (Not React Flow/Cytoscape)
+**Decision**: Use D3.js force simulation for network visualization.
 
 **Rationale**:
-- Scoped styles prevent conflicts
-- Familiar CSS syntax
-- Works with Bootstrap 5 global styles
-- SCSS preprocessing for variables
+- Fine-grained control over physics
+- Works well with Svelte reactive updates
+- Industry standard for data viz
+- No additional dependencies
 
 **Trade-offs**:
-- More verbose than Tailwind
-- Requires naming conventions
-
-### 5. Bootstrap 5 (Not Custom Framework)
-**Decision**: Use Bootstrap 5 for layout/grid system.
-
-**Rationale**:
-- Mature, well-documented
-- Responsive grid system
-- Accessibility built-in
-- Familiar to developers
-
-**Trade-offs**:
-- Larger bundle than custom solution
-- "Bootstrap look" unless customized
+- More manual setup than high-level libs
+- Requires understanding force simulation parameters
 
 ### 6. Partial Dates as Strings (Not DateField)
 **Decision**: Store dates as `CharField` with YYYY/YYYY-MM/YYYY-MM-DD format.
@@ -661,4 +639,4 @@ Docker Compose automatically configures these for local development.
 - Architecture decisions are made
 - Deployment status changes
 
-**Last Major Update**: January 19, 2026 (initial creation)
+**Last Major Update**: January 27, 2026 (Astro + Svelte frontend, minister network visualization)

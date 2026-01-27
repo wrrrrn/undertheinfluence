@@ -5,7 +5,7 @@ Provides aggregate endpoints and actor detail endpoints with filtering and cachi
 """
 
 import time
-from django.db.models import Sum, Count, Q, Min, Max
+from django.db.models import Sum, Count, Q, Min, Max, Case, When, F, IntegerField
 from rest_framework import generics, viewsets, views, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -949,3 +949,340 @@ class HomepageStatsView(views.APIView):
 
         serializer = serializers.HomepageStatsSerializer(data)
         return Response(serializer.data)
+
+
+class MinisterNetworkView(views.APIView):
+    """
+    GET /api/v2/aggregates/minister-network/
+
+    Returns D3-compatible network graph data showing connections to government ministers.
+
+    **Nodes:**
+    - Ministers (persons with ministerial roles, excluding shadow ministers)
+    - Donors (persons/organizations who donated to ministers)
+
+    **Links:**
+    - Donation relationships between donors and ministers
+
+    **Query Parameters:**
+    - limit: Maximum number of ministers to include (default: 50)
+    - min_value: Minimum total donation value to include a connection (default: 1000)
+    - min_meetings: Minimum meeting count to include an attendee (default: 3)
+    - received_after: Filter donations from this date (YYYY-MM-DD)
+    - received_before: Filter donations up to this date (YYYY-MM-DD)
+    - current_only: If 'true', only include current ministers (default: false)
+
+    **Returns:**
+    - nodes: Array of {id, name, type, total_value, ...}
+    - links: Array of {source, target, value, count}
+    - stats: Summary statistics
+
+    Example:
+        GET /api/v2/aggregates/minister-network/?limit=30&min_value=10000&current_only=true
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Build and return the minister network graph."""
+        # Get query parameters
+        limit = int(request.query_params.get('limit', 50))
+        min_value = float(request.query_params.get('min_value', 1000))
+        min_meetings = int(request.query_params.get('min_meetings', 5))
+        received_after = request.query_params.get('received_after')
+        received_before = request.query_params.get('received_before')
+        current_only = request.query_params.get('current_only', 'false').lower() == 'true'
+
+        # Find ministers - look for specific ministerial titles
+        # Use exact patterns to avoid false matches
+        minister_patterns = [
+            'Secretary of State',
+            'Minister of State',
+            'Parliamentary Under-Secretary',
+            'Parliamentary Under Secretary',
+            'Chancellor of the Exchequer',
+            'Prime Minister',
+            'Attorney General',
+            'Solicitor General',
+            'Chief Secretary',
+            'Paymaster General',
+            'Minister for',
+            'Minister without Portfolio',
+        ]
+
+        # Build Q objects for OR query
+        minister_q = Q()
+        for pattern in minister_patterns:
+            minister_q |= Q(role__icontains=pattern)
+
+        minister_memberships = models.Membership.objects.filter(
+            minister_q
+        ).exclude(
+            role__icontains='shadow'
+        ).exclude(
+            role__icontains='pps'
+        )
+
+        # Filter to current ministers only (no end_date)
+        if current_only:
+            minister_memberships = minister_memberships.filter(
+                Q(end_date__isnull=True) | Q(end_date='')
+            )
+
+        minister_memberships = minister_memberships.values('person_id').distinct()
+
+        minister_ids = list(minister_memberships.values_list('person_id', flat=True))
+
+        # Get donations to ministers
+        donations_qs = models.Donation.objects.filter(
+            recipient_id__in=minister_ids
+        ).exclude(donor__isnull=True)
+
+        # Apply date filters
+        if received_after:
+            donations_qs = donations_qs.filter(received_date__gte=received_after)
+        if received_before:
+            donations_qs = donations_qs.filter(received_date__lte=received_before)
+
+        # Get top ministers by total received - apply limit here
+        minister_totals = donations_qs.values('recipient_id').annotate(
+            total_received=Sum('value')
+        ).order_by('-total_received')[:limit]
+
+        top_minister_ids = [m['recipient_id'] for m in minister_totals]
+
+        # Aggregate donations by donor -> minister (only for top ministers)
+        connections = donations_qs.filter(
+            recipient_id__in=top_minister_ids
+        ).values(
+            'donor_id', 'recipient_id'
+        ).annotate(
+            total_value=Sum('value'),
+            donation_count=Count('id')
+        ).filter(
+            total_value__gte=min_value
+        ).order_by('-total_value')
+
+        # Build node and link sets
+        nodes_dict = {}
+        links = []
+
+        # Get all unique actor IDs
+        donor_ids = set(c['donor_id'] for c in connections)
+        all_actor_ids = set(top_minister_ids) | donor_ids
+
+        # Fetch all actors
+        actors = {
+            a.id: a for a in models.Actor.objects.filter(id__in=all_actor_ids)
+        }
+
+        # Get minister roles for display
+        minister_roles = {}
+        for m in models.Membership.objects.filter(
+            person_id__in=top_minister_ids,
+            role__icontains='minister'
+        ).exclude(role__icontains='shadow').exclude(role__icontains='pps'):
+            if m.person_id not in minister_roles:
+                minister_roles[m.person_id] = m.role
+
+        # Get meeting counts for ministers
+        minister_meeting_counts = dict(
+            models.MinisterialMeeting.objects.filter(
+                minister_id__in=top_minister_ids
+            ).values('minister_id').annotate(
+                meeting_count=Count('id')
+            ).values_list('minister_id', 'meeting_count')
+        )
+
+        # Get meeting counts for donors/organizations (as attendees)
+        donor_meeting_counts = dict(
+            models.MeetingAttendee.objects.filter(
+                Q(actor_id__in=donor_ids) | Q(canonical_actor_id__in=donor_ids)
+            ).values('actor_id').annotate(
+                meeting_count=Count('meeting_id', distinct=True)
+            ).values_list('actor_id', 'meeting_count')
+        )
+        # Also check canonical_actor_id
+        canonical_meeting_counts = dict(
+            models.MeetingAttendee.objects.filter(
+                canonical_actor_id__in=donor_ids
+            ).values('canonical_actor_id').annotate(
+                meeting_count=Count('meeting_id', distinct=True)
+            ).values_list('canonical_actor_id', 'meeting_count')
+        )
+        # Merge canonical into donor counts
+        for actor_id, count in canonical_meeting_counts.items():
+            if actor_id:
+                donor_meeting_counts[actor_id] = donor_meeting_counts.get(actor_id, 0) + count
+
+        # Build minister nodes
+        for m in minister_totals:
+            mid = m['recipient_id']
+            if mid in actors:
+                actor = actors[mid]
+                nodes_dict[mid] = {
+                    'id': mid,
+                    'name': actor.name,
+                    'type': 'minister',
+                    'role': minister_roles.get(mid, 'Minister'),
+                    'total_value': float(m['total_received']),
+                    'meeting_count': minister_meeting_counts.get(mid, 0),
+                    'url': f'/person/{mid}/'
+                }
+
+        # Build donor nodes and links
+        for conn in connections:
+            donor_id = conn['donor_id']
+            recipient_id = conn['recipient_id']
+
+            if donor_id in actors and recipient_id in nodes_dict:
+                donor = actors[donor_id]
+
+                # Add donor node if not exists
+                if donor_id not in nodes_dict:
+                    # Determine donor type
+                    try:
+                        donor_type = 'organization' if hasattr(donor, 'organization') else 'person'
+                    except:
+                        donor_type = 'donor'
+
+                    nodes_dict[donor_id] = {
+                        'id': donor_id,
+                        'name': donor.name,
+                        'type': donor_type,
+                        'total_value': 0,
+                        'donation_count': 0,
+                        'meeting_count': donor_meeting_counts.get(donor_id, 0),
+                        'url': f'/actor/{donor_id}/'
+                    }
+
+                # Update donor total
+                nodes_dict[donor_id]['total_value'] += float(conn['total_value'])
+                nodes_dict[donor_id]['donation_count'] = nodes_dict[donor_id].get('donation_count', 0) + conn['donation_count']
+
+                # Add donation link
+                links.append({
+                    'source': donor_id,
+                    'target': recipient_id,
+                    'value': float(conn['total_value']),
+                    'count': conn['donation_count'],
+                    'link_type': 'donation'
+                })
+
+        # ============================================
+        # Add meeting attendees as nodes and links
+        # ============================================
+
+        # Get all meetings for top ministers
+        minister_meetings = models.MinisterialMeeting.objects.filter(
+            minister_id__in=top_minister_ids
+        )
+
+        # Get meeting attendees with counts, ordered by meeting count
+        attendee_data = models.MeetingAttendee.objects.filter(
+            meeting__minister_id__in=top_minister_ids
+        ).values(
+            'meeting__minister_id'
+        ).annotate(
+            # Use canonical_actor if available, else actor
+            effective_actor_id=Case(
+                When(canonical_actor_id__isnull=False, then=F('canonical_actor_id')),
+                default=F('actor_id'),
+                output_field=IntegerField()
+            )
+        ).values(
+            'meeting__minister_id', 'effective_actor_id'
+        ).annotate(
+            meeting_count=Count('meeting_id', distinct=True)
+        ).filter(
+            meeting_count__gte=min_meetings  # Filter by minimum meetings
+        ).order_by('-meeting_count')
+
+        # Collect unique attendee IDs
+        attendee_ids = set()
+        meeting_links_data = []
+        for item in attendee_data:
+            attendee_ids.add(item['effective_actor_id'])
+            meeting_links_data.append({
+                'attendee_id': item['effective_actor_id'],
+                'minister_id': item['meeting__minister_id'],
+                'meeting_count': item['meeting_count']
+            })
+
+        # Remove ministers from attendee list (don't want self-links)
+        attendee_ids = attendee_ids - set(top_minister_ids)
+
+        # Fetch attendee actors
+        attendee_actors = {
+            a.id: a for a in models.Actor.objects.filter(id__in=attendee_ids)
+        }
+
+        # Add attendee nodes
+        for attendee_id in attendee_ids:
+            if attendee_id in attendee_actors and attendee_id not in nodes_dict:
+                actor = attendee_actors[attendee_id]
+                try:
+                    actor_type = 'organization' if hasattr(actor, 'organization') else 'person'
+                except:
+                    actor_type = 'attendee'
+
+                # Count total meetings for this attendee
+                total_meetings = sum(
+                    m['meeting_count'] for m in meeting_links_data
+                    if m['attendee_id'] == attendee_id
+                )
+
+                nodes_dict[attendee_id] = {
+                    'id': attendee_id,
+                    'name': actor.name,
+                    'type': actor_type,
+                    'total_value': 0,  # No donations
+                    'donation_count': 0,
+                    'meeting_count': total_meetings,
+                    'url': f'/actor/{attendee_id}/'
+                }
+
+        # Add meeting links
+        for ml in meeting_links_data:
+            attendee_id = ml['attendee_id']
+            minister_id = ml['minister_id']
+
+            # Only add if both nodes exist and not self-link
+            if attendee_id in nodes_dict and minister_id in nodes_dict and attendee_id != minister_id:
+                links.append({
+                    'source': attendee_id,
+                    'target': minister_id,
+                    'value': ml['meeting_count'] * 1000,  # Scale for visibility
+                    'count': ml['meeting_count'],
+                    'link_type': 'meeting'
+                })
+
+        # Convert nodes dict to list
+        nodes = list(nodes_dict.values())
+
+        # Calculate stats
+        donation_links = [l for l in links if l.get('link_type') == 'donation']
+        meeting_links = [l for l in links if l.get('link_type') == 'meeting']
+
+        # Count nodes by connection type
+        nodes_with_donations = set()
+        nodes_with_meetings = set()
+        for l in donation_links:
+            nodes_with_donations.add(l['source'])
+        for l in meeting_links:
+            nodes_with_meetings.add(l['source'])
+
+        stats = {
+            'total_ministers': len([n for n in nodes if n['type'] == 'minister']),
+            'total_donors': len(nodes_with_donations),
+            'total_attendees': len(nodes_with_meetings - nodes_with_donations),  # Only meeting attendees
+            'total_connections': len(links),
+            'donation_connections': len(donation_links),
+            'meeting_connections': len(meeting_links),
+            'total_value': sum(l['value'] for l in donation_links),
+        }
+
+        return Response({
+            'nodes': nodes,
+            'links': links,
+            'stats': stats
+        })

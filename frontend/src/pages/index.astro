@@ -1,0 +1,156 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import MinisterNetwork from '../components/MinisterNetwork.svelte';
+
+// Fetch stats from Django API (SSR)
+const API_URL = import.meta.env.DATA_API_URL || 'http://api:8000/api/v2';
+
+let stats = {
+  total_donations: 0,
+  total_value: '0',
+  dual_influence_count: 0,
+};
+
+try {
+  const response = await fetch(`${API_URL}/aggregates/stats/`);
+  if (response.ok) {
+    stats = await response.json();
+  }
+} catch (error) {
+  console.error('Failed to fetch stats:', error);
+}
+
+// Format currency
+const formatCurrency = (value: string | number) => {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (num >= 1_000_000_000) return `£${(num / 1_000_000_000).toFixed(1)}bn`;
+  if (num >= 1_000_000) return `£${(num / 1_000_000).toFixed(0)}m`;
+  return `£${num.toLocaleString()}`;
+};
+---
+
+<BaseLayout title="Mapping influence in British politics">
+  <main class="min-h-screen">
+    <!-- Masthead -->
+    <header class="border-b-2 border-ink py-4">
+      <div class="max-w-7xl mx-auto px-6 flex justify-between items-center">
+        <span class="section-label">Investigation</span>
+        <span class="text-caption text-ink-muted">Data updated January 2026</span>
+      </div>
+    </header>
+
+    <!-- Hero section -->
+    <section class="max-w-7xl mx-auto px-6 pt-12 pb-8">
+      <h1 class="headline text-headline-xl max-w-4xl">
+        The web of money and access in Westminster
+      </h1>
+      <p class="deck">
+        Who funds British politics—and what do they get in return? This investigation
+        maps the financial relationships between donors and government ministers.
+      </p>
+    </section>
+
+    <!-- Stats as editorial typography -->
+    <section class="max-w-7xl mx-auto px-6 py-6">
+      <div class="rule-thick"></div>
+
+      <div class="grid grid-cols-3 gap-12 py-6">
+        <div>
+          <p class="stat-figure tabular">{stats.total_donations.toLocaleString()}</p>
+          <p class="stat-label">Donations tracked</p>
+        </div>
+        <div>
+          <p class="stat-figure">{formatCurrency(stats.total_value)}</p>
+          <p class="stat-label">Total value declared</p>
+        </div>
+        <div>
+          <p class="stat-figure tabular">{stats.dual_influence_count}</p>
+          <p class="stat-label">Dual-influence relationships</p>
+        </div>
+      </div>
+
+      <div class="rule"></div>
+    </section>
+
+    <!-- Full-width Network Visualization -->
+    <section class="w-full py-8 bg-paper-cream">
+      <div class="max-w-7xl mx-auto px-6 mb-6">
+        <div class="grid grid-cols-12 gap-8">
+          <div class="col-span-4">
+            <h2 class="chart-title">The minister network</h2>
+            <p class="chart-subtitle">
+              Financial connections between donors and government ministers.
+              Node size reflects total donation value. Click a node for details.
+            </p>
+          </div>
+          <div class="col-span-8 text-right">
+            <p class="source">
+              Source: MPs' Register of Interests, Electoral Commission
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full-width visualization container -->
+      <div class="w-full px-4">
+        <MinisterNetwork
+          client:visible
+          apiUrl="http://localhost:8000/api/v2/aggregates/minister-network/"
+          width={1400}
+          height={800}
+          limit={30}
+          minValue={5000}
+          minMeetings={5}
+        />
+      </div>
+    </section>
+
+    <!-- Annotation / Insight section -->
+    <section class="max-w-7xl mx-auto px-6 py-12">
+      <div class="rule"></div>
+
+      <div class="grid grid-cols-12 gap-8 py-8">
+        <div class="col-span-8">
+          <p class="pull-quote">
+            "The top 5 ministers have collectively received over £7 million in declared donations—
+            more than the bottom 100 combined."
+          </p>
+        </div>
+        <div class="col-span-4">
+          <p class="annotation">
+            Donation patterns reveal a highly concentrated network where a small number
+            of wealthy individuals and organisations fund the most senior politicians.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Methodology -->
+    <section class="max-w-7xl mx-auto px-6 py-8">
+      <div class="rule"></div>
+      <div class="grid grid-cols-12 gap-8 pt-8">
+        <div class="col-span-3">
+          <h3 class="chart-title">Methodology</h3>
+        </div>
+        <div class="col-span-9">
+          <p class="font-body text-ink-light leading-relaxed">
+            This visualisation shows donations to individuals who have held ministerial
+            office in UK government. Shadow ministers and parliamentary private secretaries
+            are excluded. Donation data is sourced from the MPs' Register of Interests
+            and the Electoral Commission's database of political donations. Node positions
+            are calculated using a force-directed layout algorithm.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-ink/10 py-8 mt-12">
+      <div class="max-w-7xl mx-auto px-6">
+        <p class="source">
+          Under The Influence is an ongoing investigation into political funding in the UK.
+        </p>
+      </div>
+    </footer>
+  </main>
+</BaseLayout>
