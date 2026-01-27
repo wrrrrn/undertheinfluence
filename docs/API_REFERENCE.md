@@ -2,7 +2,7 @@
 
 **Version**: v2
 **Base URL**: `/api/v2/`
-**Last Updated**: January 22, 2026
+**Last Updated**: January 26, 2026
 
 ---
 
@@ -35,11 +35,11 @@ Returns key metrics for the homepage dashboard.
 **Response:**
 ```json
 {
-  "total_donations": 91281,
+  "total_donations": 91513,
   "total_donation_value": 1234567890.50,
-  "total_consultancies": 26000,
+  "total_consultancies": 62798,
   "total_meetings": 41362,
-  "total_actors": 25000
+  "total_actors": 155065
 }
 ```
 
@@ -70,7 +70,7 @@ GET /api/v2/aggregates/top-donors/?limit=10&received_after=2020-01-01
 **Response:**
 ```json
 {
-  "count": 21414,
+  "count": 90728,
   "next": "/api/v2/aggregates/top-donors/?limit=10&offset=10",
   "previous": null,
   "results": [

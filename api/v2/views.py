@@ -715,6 +715,45 @@ class ActorMembershipsView(generics.ListAPIView):
         return filterset.qs.order_by('-start_date')
 
 
+class ActorMeetingsView(generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/meetings/
+
+    Returns ministerial meetings involving this actor.
+    - If actor is a Minister: shows meetings hosted.
+    - If actor is an External Organization/Person: shows meetings attended.
+
+    Query Parameters:
+    - date_after, date_before: Date filtering
+    - limit, offset: Pagination
+    """
+    serializer_class = serializers.MinisterialMeetingSerializer
+    pagination_class = pagination.DetailPagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        actor_id = self.kwargs['pk']
+        
+        # Check if actor is involved as minister or external actor
+        # Also check canonical_actor in attendees for robust matching
+        queryset = models.MinisterialMeeting.objects.filter(
+            Q(minister_id=actor_id) |
+            Q(attendees__actor_id=actor_id) |
+            Q(attendees__canonical_actor_id=actor_id)
+        ).select_related(
+            'minister', 'department'
+        ).prefetch_related(
+            'attendees', 'attendees__actor'
+        ).distinct().order_by('-meeting_date')
+
+        # Apply filters
+        filterset = filters.MinisterialMeetingFilterSet(
+            self.request.query_params,
+            queryset=queryset
+        )
+        return filterset.qs
+
+
 class DonorConcentrationView(views.APIView):
     """
     GET /api/v2/aggregates/donor-concentration/
@@ -949,3 +988,95 @@ class HomepageStatsView(views.APIView):
 
         serializer = serializers.HomepageStatsSerializer(data)
         return Response(serializer.data)
+
+
+class PoliticianViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/v2/politicians/
+
+    Returns a paginated list of politicians with current status annotations.
+    """
+    serializer_class = serializers.PoliticianSerializer
+    filterset_class = filters.PoliticianFilter
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        from django.utils import timezone
+        from django.db.models import Prefetch
+
+        today = timezone.now().date().isoformat()
+
+        # 1. Base Query: People with political memberships (MPs, Lords)
+        # We look for memberships in organizations classified as 'Legislature'
+        # (House of Commons, House of Lords, Scottish Parliament, Senedd, NI Assembly)
+        # This covers almost all politicians including Ministers (who are usually MPs/Lords)
+        qs = models.Person.objects.filter(
+            memberships__organization__classification='Legislature'
+        ).distinct().order_by('name')
+
+        # 2. Prefetch "Current" memberships for serialization
+        # This avoids N+1 queries when determining current party/role
+        current_memberships = models.Membership.objects.filter(
+            Q(end_date__isnull=True) | Q(end_date__gte=today),
+            start_date__lte=today
+        ).select_related('organization', 'post', 'on_behalf_of')
+
+        qs = qs.prefetch_related(
+            Prefetch('memberships', queryset=current_memberships, to_attr='active_memberships')
+        )
+        
+        return qs
+
+
+class PartyViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/v2/parties/
+
+    Returns a list of political parties with current MP/Lord counts.
+    """
+    serializer_class = serializers.PoliticalPartySerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None  # No pagination for party lists (usually < 20)
+
+    def get_queryset(self):
+        # Get IDs for House of Commons and House of Lords
+        # Organization inherits name from Actor via actor_ptr
+        commons_id = models.Organization.objects.filter(
+            name='House of Commons'
+        ).values_list('actor_ptr_id', flat=True).first()
+        lords_id = models.Organization.objects.filter(
+            name='House of Lords'
+        ).values_list('actor_ptr_id', flat=True).first()
+
+        # Return parties that have been used as on_behalf_of in Legislature memberships
+        # This captures all parliamentary parties, not just those classified as 'Political Party'
+        return models.Organization.objects.filter(
+            Q(classification='Political Party') |
+            Q(memberships_on_behalf_of__organization__classification='Legislature')
+        ).distinct().annotate(
+            # Count current MPs: memberships in House of Commons on_behalf_of this party
+            # Current = end_date is empty string, NULL, or >= today (dates stored as YYYY-MM-DD strings)
+            mp_count=Count(
+                'memberships_on_behalf_of',
+                filter=Q(
+                    memberships_on_behalf_of__organization_id=commons_id
+                ) & (
+                    Q(memberships_on_behalf_of__end_date='') |
+                    Q(memberships_on_behalf_of__end_date__isnull=True) |
+                    Q(memberships_on_behalf_of__end_date__gte='2026-01-01')
+                ),
+                distinct=True
+            ),
+            # Count current Lords: memberships in House of Lords on_behalf_of this party
+            lord_count=Count(
+                'memberships_on_behalf_of',
+                filter=Q(
+                    memberships_on_behalf_of__organization_id=lords_id
+                ) & (
+                    Q(memberships_on_behalf_of__end_date='') |
+                    Q(memberships_on_behalf_of__end_date__isnull=True) |
+                    Q(memberships_on_behalf_of__end_date__gte='2026-01-01')
+                ),
+                distinct=True
+            )
+        ).order_by('-mp_count', '-lord_count')
