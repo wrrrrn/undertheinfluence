@@ -148,7 +148,7 @@ class Command(BaseCommand):
         if not agency_obj:
             agency_obj = models.Organization.objects.create(
                 name=agency_name,
-                classification="Lobbying agency"
+                classification="Lobbying Agency"
             )
 
         # Add address as contact detail

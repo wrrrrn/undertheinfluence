@@ -133,7 +133,19 @@ class Command(BaseCommand):
 
         organizations_dict = {}
         for organization in organizations:
-            if organization.get('classification') == 'party':
+            # Convert ParlParse classifications to our standard names
+            classification = organization.get('classification')
+            if classification == 'party':
+                organization['classification'] = 'Political Party'
+            elif classification == 'chamber':
+                # Legislative chambers (House of Commons, Lords, Scottish Parliament, etc.)
+                organization['classification'] = 'Legislature'
+            elif classification == 'metro':
+                # Regional legislatures (London Assembly)
+                organization['classification'] = 'Legislature'
+            elif classification is None:
+                # Unclassified orgs in ParlParse are usually political parties
+                # (e.g., People Before Profit Alliance)
                 organization['classification'] = 'Political Party'
             id_ = organization.pop('id')
 

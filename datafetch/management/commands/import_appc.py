@@ -131,7 +131,7 @@ class Command(BaseCommand):
 
         agency_dict = {
             "name": agency_name,
-            "classification": "Lobbying agency"
+            "classification": "Lobbying Agency"
         }
         agency_obj, created = models.Organization.objects.get_or_create(
             name=agency_dict["name"],

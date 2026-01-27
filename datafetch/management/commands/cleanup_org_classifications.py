@@ -38,8 +38,12 @@ class Command(BaseCommand):
         'company': 'Company',
         'Friendly society': 'Friendly Society',
         'Unincorporated association': 'Unincorporated Association',
-        'chamber': 'Chamber of Commerce',
-        'metro': 'Other',
+        'chamber': 'Legislature',  # Parliamentary chambers (House of Commons, Lords, etc.)
+        'metro': 'Legislature',  # Regional legislatures (London Assembly)
+
+        # Casing fixes
+        'Uk Establishment': 'UK Establishment',
+        'Lobbying agency': 'Lobbying Agency',
 
         # Merge duplicates - Political
         'Registered Political Party': 'Political Party',
@@ -59,9 +63,10 @@ class Command(BaseCommand):
         'Industrial and Provident Society': 'Registered Society',
         'Building Society': 'Registered Society',
 
-        # Vague categories -> more specific or Unknown
+        # Vague categories -> Unknown
         'Organization': 'Unknown',
-        'Other': 'Other',  # Keep as-is but flag for review
+        # Note: 'Other' and 'External Organization' are in REVIEW_CATEGORIES
+        # They need manual investigation, not auto-mapping
 
         # None/empty -> Unknown
         None: 'Unknown',
@@ -109,6 +114,7 @@ class Command(BaseCommand):
 
         # Political/Government
         'Political Party',
+        'Legislature',  # Parliamentary chambers (House of Commons, Lords, etc.)
         'Lobbying Agency',
         'Government Department',
 
@@ -211,6 +217,7 @@ class Command(BaseCommand):
             if cat in [None, '', 'Organization', 'Other', 'External Organization', 'Unknown']:
                 issues.append(entry)
             elif cat in ['Political Party', 'Registered Political Party', 'Registered Party',
+                        'Legislature', 'chamber',  # Parliamentary chambers
                         'Lobbying Agency', 'Lobbying agency', 'Government Department']:
                 political_types.append(entry)
             elif cat in ['Permitted Participant', 'Third Party', 'Public Fund', 'Impermissible Donor']:
@@ -247,8 +254,10 @@ class Command(BaseCommand):
         self.stdout.write('Summary:')
 
         # Count issues
+        # Exclude known correct values (prepositions like 'by' should be lowercase in title case)
+        correct_lowercase = ['UK Establishment', 'CIO', 'Private Limited by Guarantee']
         case_issues = sum(count for cat, count in cats.items()
-                        if cat and cat != cat.title() and cat not in ['UK Establishment', 'CIO'])
+                        if cat and cat != cat.title() and cat not in correct_lowercase)
         none_count = cats.get(None, 0) + cats.get('', 0)
         vague_count = cats.get('External Organization', 0) + cats.get('Organization', 0) + cats.get('Other', 0)
 
@@ -355,6 +364,29 @@ class Command(BaseCommand):
                     updated = queryset.update(classification=new_val)
 
             self.stdout.write(f' {updated:,} updated')
+            total_updated += updated
+
+        # Fix known legislature organizations by name
+        # These are from ParlParse and may have been incorrectly classified before import fix
+        legislature_names = [
+            'House of Commons',
+            'House of Lords',
+            'Scottish Parliament',
+            'Senedd',
+            'Northern Ireland Assembly',
+            'Crown',
+            'London Assembly',  # metro -> Legislature
+        ]
+        legislature_qs = Organization.objects.filter(
+            name__in=legislature_names
+        ).exclude(classification='Legislature')
+
+        legislature_count = legislature_qs.count()
+        if legislature_count > 0:
+            self.stdout.write(f'  Known legislatures -> Legislature: ', ending='')
+            with transaction.atomic():
+                updated = legislature_qs.update(classification='Legislature')
+            self.stdout.write(f'{updated:,} updated')
             total_updated += updated
 
         self.stdout.write('')
