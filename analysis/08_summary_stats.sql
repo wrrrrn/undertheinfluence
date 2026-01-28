@@ -2,126 +2,96 @@
 -- SUMMARY STATISTICS & DATA QUALITY
 -- ============================================================================
 -- Purpose: Database overview, data quality checks, and aggregate statistics
--- Focus: Record counts, date ranges, null analysis, classification stats
--- Date: 2026-01-19
+-- Focus: Record counts, date ranges, null analysis, classification stats, meetings
+-- Date: 2026-01-26 (Updated with Canonical Resolution)
 -- Database: PostgreSQL
 -- ============================================================================
 
--- SECTION 7: SECTOR & CLASSIFICATION ANALYSIS
+-- ============================================================================
+-- SECTION 1: DATABASE OVERVIEW
 -- ============================================================================
 
--- 7.1 Donations by Donor Classification
-SELECT
-  COALESCE(org.classification, 'Unclassified/Individual') AS donor_classification,
-  COUNT(*) AS donation_count,
-  SUM(d.value) AS total_donated,
-  COUNT(DISTINCT d.donor_id) AS distinct_donors,
-  COUNT(DISTINCT d.recipient_id) AS distinct_recipients,
-  ROUND(AVG(d.value), 2) AS avg_donation
-FROM datafetch_donation d
-LEFT JOIN datafetch_organization org ON org.actor_ptr_id = d.donor_id
-WHERE d.value > 0
-GROUP BY COALESCE(org.classification, 'Unclassified/Individual')
-ORDER BY total_donated DESC;
-
-
--- 7.2 Lobbying Clients by Classification
-SELECT
-  COALESCE(client_org.classification, 'Unclassified') AS client_type,
-  COUNT(DISTINCT c.client_id) AS distinct_clients,
-  COUNT(DISTINCT c.agency_id) AS distinct_agencies,
-  COUNT(*) AS consultancy_count
-FROM datafetch_consultancy c
-LEFT JOIN datafetch_organization client_org ON client_org.actor_ptr_id = c.client_id
-GROUP BY COALESCE(client_org.classification, 'Unclassified')
-ORDER BY distinct_clients DESC;
-
-
--- ============================================================================
--- SECTION 8: DATA QUALITY CHECKS
--- ============================================================================
-
--- 8.1 Null Donor Analysis (by donation type)
-SELECT
-  donation_type,
-  COUNT(*) AS total_count,
-  COUNT(*) FILTER (WHERE donor_id IS NULL) AS null_donor_count,
-  ROUND(100.0 * COUNT(*) FILTER (WHERE donor_id IS NULL) / COUNT(*), 1) AS null_donor_pct,
-  COUNT(DISTINCT recipient_id) AS distinct_recipients
-FROM datafetch_donation
-GROUP BY donation_type
-ORDER BY null_donor_count DESC;
-
-
--- ============================================================================
--- SECTION 9: SUMMARY STATISTICS
--- ============================================================================
-
--- 9.1 Database Overview
+-- 1.1 Core Record Counts
 SELECT 'Total Persons' AS metric, COUNT(*) AS count FROM datafetch_person
 UNION ALL
 SELECT 'Total Organizations', COUNT(*) FROM datafetch_organization
+UNION ALL
+SELECT 'Total Actors', COUNT(*) FROM datafetch_actor
 UNION ALL
 SELECT 'Total Donations', COUNT(*) FROM datafetch_donation
 UNION ALL
 SELECT 'Donations with Value > 0', COUNT(*) FROM datafetch_donation WHERE value > 0
 UNION ALL
-SELECT 'Donations with Donor NULL', COUNT(*) FROM datafetch_donation WHERE donor_id IS NULL
-UNION ALL
 SELECT 'Total Consultancies', COUNT(*) FROM datafetch_consultancy
 UNION ALL
-SELECT 'Total Memberships', COUNT(*) FROM datafetch_membership
+SELECT 'Ministerial Meetings', COUNT(*) FROM datafetch_ministerialmeeting
 UNION ALL
-SELECT 'Ministerial Memberships', COUNT(*) FROM datafetch_membership WHERE role IS NOT NULL AND role <> '';
-
-
--- 9.2 Date Range Coverage (safe casting)
-WITH safe_donations AS (
-  SELECT
-    CASE WHEN received_date::text ~ '^\d{4}-\d{2}-\d{2}$' THEN received_date::date END AS received_dt
-  FROM datafetch_donation
-)
-SELECT 'Earliest Donation' AS metric, MIN(received_dt)::text AS date_value
-FROM safe_donations
-WHERE received_dt IS NOT NULL
-UNION ALL
-SELECT 'Latest Donation', MAX(received_dt)::text
-FROM safe_donations
-WHERE received_dt IS NOT NULL;
+SELECT 'Meeting Attendees', COUNT(*) FROM datafetch_meetingattendee;
 
 
 -- ============================================================================
--- APPENDIX: TIME-BASED ANALYSIS (SAFE DATE CASTING)
+-- SECTION 2: DONATION SUMMARY
 -- ============================================================================
 
--- A.1 Donations by Year (Lobbying Clients Only)
-WITH lobbying_clients AS (
-  SELECT DISTINCT client_id FROM datafetch_consultancy
-),
-safe_donations AS (
-  SELECT
-    d.*,
-    CASE WHEN d.received_date::text ~ '^\d{4}-\d{2}-\d{2}$' THEN d.received_date::date END AS received_dt
-  FROM datafetch_donation d
-  WHERE d.donor_id IN (SELECT client_id FROM lobbying_clients)
-    AND d.value > 0
-)
+-- 2.1 Donations by Donor Classification
 SELECT
-  EXTRACT(YEAR FROM received_dt) AS year,
-  COUNT(DISTINCT donor_id) AS active_lobbying_donors,
+  COALESCE(org.classification, 'Individual') AS donor_classification,
   COUNT(*) AS donation_count,
-  SUM(value) AS total_donated,
-  ROUND(AVG(value), 2) AS avg_donation
-FROM safe_donations
-WHERE received_dt IS NOT NULL
-GROUP BY EXTRACT(YEAR FROM received_dt)
-ORDER BY year DESC;
+  SUM(d.value) AS total_donated,
+  COUNT(DISTINCT COALESCE(d.canonical_donor_id, d.donor_id)) AS distinct_donors
+FROM datafetch_donation d
+LEFT JOIN datafetch_organization org ON org.actor_ptr_id = COALESCE(d.canonical_donor_id, d.donor_id)
+WHERE d.value > 0
+GROUP BY COALESCE(org.classification, 'Individual')
+ORDER BY total_donated DESC;
 
 
 -- ============================================================================
--- END OF QUERY SUITE
+-- SECTION 3: MINISTERIAL MEETINGS OVERVIEW
 -- ============================================================================
 
+-- 3.1 Meetings by Department
+SELECT
+    d.name as department,
+    COUNT(*) as meetings,
+    COUNT(DISTINCT mm.minister_id) as ministers,
+    (SELECT COUNT(DISTINCT COALESCE(ma.canonical_actor_id, ma.actor_id)) 
+     FROM datafetch_meetingattendee ma 
+     JOIN datafetch_ministerialmeeting mm2 ON ma.meeting_id = mm2.id 
+     WHERE mm2.department_id = mm.department_id) as external_actors
+FROM datafetch_ministerialmeeting mm
+JOIN datafetch_actor d ON mm.department_id = d.id
+GROUP BY d.name, mm.department_id
+ORDER BY meetings DESC;
+
+
 -- ============================================================================
--- END OF SUMMARY STATISTICS & DATA QUALITY
+-- SECTION 4: CROSS-DATASET INFLUENCE
 -- ============================================================================
+
+-- 4.1 Influence Channels Summary
+SELECT
+    'Organizations with meetings' as category,
+    COUNT(DISTINCT COALESCE(canonical_actor_id, actor_id))::text as count
+FROM datafetch_meetingattendee
+UNION ALL
+SELECT
+    'Organizations hiring lobbyists',
+    COUNT(DISTINCT COALESCE(canonical_client_id, client_id))::text
+FROM datafetch_consultancy
+UNION ALL
+SELECT
+    'Organizations donating > £1k',
+    COUNT(DISTINCT COALESCE(canonical_donor_id, donor_id))::text
+FROM datafetch_donation WHERE value > 1000
+UNION ALL
+SELECT
+    'Organizations using ALL THREE channels',
+    COUNT(*)::text
+FROM (
+    SELECT DISTINCT COALESCE(canonical_client_id, client_id) as org_id FROM datafetch_consultancy
+    INTERSECT
+    SELECT DISTINCT COALESCE(canonical_donor_id, donor_id) FROM datafetch_donation WHERE value > 1000
+    INTERSECT
+    SELECT DISTINCT COALESCE(canonical_actor_id, actor_id) FROM datafetch_meetingattendee
+) all_three;

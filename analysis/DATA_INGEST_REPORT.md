@@ -1,35 +1,41 @@
 # UnderTheInfluence - Data Ingest Report (CORRECTED)
-**Generated:** 2026-01-13
-**Version:** 2.0 (Query corrections applied)
+**Generated:** 2026-01-21
+**Version:** 3.0 (Updated with ministerial meetings data)
 **Database State:** Production dataset (2001-2025)
 **Purpose:** Analysis to inform Phase 2 UI design and feature prioritization
 
-> ⚠️ **CORRECTED VERSION:** This report uses refactored SQL queries (Version 2.0) that fix multiplicative join inflation. Previous version inflated lobbying-client donation totals by 4.2x. See `QUERY_CORRECTIONS_SUMMARY.md` for details.
+> ⚠️ **CORRECTED VERSION:** This report uses refactored SQL queries (Version 2.0+) that fix multiplicative join inflation. Previous version inflated lobbying-client donation totals by 4.2x. See `QUERY_CORRECTIONS_SUMMARY.md` for details.
 
 ---
 
 ## Executive Summary
 
 The UnderTheInfluence database contains **25 years of UK political influence data** (2001-2025), comprising:
-- **119,599 donation records** (119,173 with monetary value)
-- **46,944 lobbying consultancies**
-- **27,948 individual politicians**
-- **24,412 organizations**
-- **78,111 memberships** (including 14,573 ministerial appointments)
+- **90,846 donation records** (90,842 with monetary value) *
+- **47,769 lobbying consultancies**
+- **53,075 individual politicians**
+- **53,800 organizations**
+- **150,179 memberships** (including 3,584 ministerial appointments)
+- **41,362 ministerial meetings** (23 departments, 297 ministers, 26,496 external actors) ⭐ NEW
+
+> \* *Note: Donation count reduced from 119,599 (previous report) due to deduplication during 2026-01-13 reimport. Current dataset has 87,898 Electoral Commission identifiers with cleaner data quality.*
 
 **Key Findings:**
 
-1. **Extreme Concentration:** Just 277 donors (1.3% of all donors) account for **65% of all donation value** by contributing over £1M each
+1. **Extreme Concentration:** Just 211 donors (1.0% of all donors) account for **60% of all donation value** by contributing over £1M each
 
 2. **Lobbying-Donation Overlap (CORRECTED):**
    - **62 organizations** both hire lobbyists AND donate politically
-   - **£72.5M total** donated by lobbying clients (3.5% of all donations)
-   - **Trade unions = 96.54%** of lobbying-client donations (just 3 unions: Unite, Community, Community Trade Union)
-   - **Companies = 3.14%** of lobbying-client donations (45 companies donate only £2.3M despite extensive lobbying)
-   - **235 recipients:** 221 individual MPs/Lords + 4 parties + 10 campaigns
-   - **Political parties receive 94.5%** (£68.6M), individual MPs receive only 2.9% (£2.1M)
+   - **£57.9M total** donated by lobbying clients
+   - **Trade unions = 96%** of lobbying-client donations (Unite, Community, Community Trade Union)
+   - **Companies = ~4%** of lobbying-client donations despite extensive lobbying activity
 
-3. **Foreign Influence:** Cayman Islands Government (£49K) and Qatar (£40K) hire UK lobbyists while donating to MPs
+3. **Foreign Influence:** Cayman Islands Government (£44K) and Qatar (£40K) hire UK lobbyists while donating to MPs
+
+4. **Ministerial Meetings:** ⭐ NEW
+   - **41,362 meetings** with external organizations (2010-2025)
+   - **23 government departments** covered
+   - **Top external actors:** Local Government Association (103), British Medical Association (93), Airbus (89), National Grid (82), BP (70)
 
 ---
 
@@ -39,14 +45,15 @@ The UnderTheInfluence database contains **25 years of UK political influence dat
 
 | Metric | Count |
 |--------|------:|
-| Total Persons | 27,948 |
-| Total Organizations | 24,412 |
-| Total Donations | 119,599 |
-| Donations with Value > 0 | 119,173 |
-| Donations with NULL Donor | 636 (0.5%) |
-| Total Consultancies | 46,944 |
-| Total Memberships | 78,111 |
-| Ministerial Memberships | 14,573 |
+| Total Persons | 53,075 |
+| Total Organizations | 53,800 |
+| Total Donations | 90,846 |
+| Donations with Value > 0 | 90,842 |
+| Donations with NULL Donor | 106 (0.1%) |
+| Total Consultancies | 47,769 |
+| Total Memberships | 150,179 |
+| Ministerial Memberships | 3,584 |
+| **Ministerial Meetings** | **41,362** ⭐ |
 
 ### 1.2 Date Coverage
 
@@ -64,26 +71,26 @@ The top donors reveal a mix of **public funds**, **trade unions**, and **wealthy
 
 | Rank | Donor | Type | Total Donated | # Donations | Avg Donation |
 |------|-------|------|---------------|-------------|--------------|
-| 1 | House of Commons | chamber | £121.5M | 708 | £171,587 |
-| 2 | House of Commons Fees Office | Public Fund | £67.7M | 242 | £279,887 |
-| 3 | Unite the Union | Trade Union | £67.2M | 1,138 | £59,094 |
-| 4 | UNISON | Trade Union | £63.0M | 2,756 | £22,861 |
-| 5 | GMB | Trade Union | £52.9M | 2,500 | £21,177 |
-| 6 | David Sainsbury | Individual | £47.9M | 238 | £201,255 |
-| 7 | Christopher Harborne | Individual | £26.3M | 32 | £820,863 |
-| 8 | The Electoral Commission | Public Fund | £23.8M | 213 | £111,890 |
-| 9 | USDAW | Trade Union | £19.8M | 897 | £22,108 |
-| 10 | David Sainsbury of Turville | Individual | £19.1M | 34 | £560,343 |
-| 11 | Joseph Rowntree Reform Trust | Company | £17.1M | 503 | £33,932 |
-| 12 | AMICUS | Trade Union | £16.8M | 906 | £18,584 |
-| 13 | National Conservative Draws Society | Unincorp. Assoc. | £16.8M | 220 | £76,411 |
-| 14 | THE PHOENIX PARTNERSHIP (LEEDS) LTD | Company | £15.3M | 12 | £1,277,792 |
-| 15 | Transport and General Workers Union | Trade Union | £13.5M | 576 | £23,456 |
-| 16 | Communication Workers Union | Trade Union | £12.5M | 917 | £13,610 |
-| 17 | USDAW (alternate) | Trade Union | £12.3M | 309 | £39,703 |
-| 18 | John Sainsbury | Individual | £11.8M | 19 | £621,444 |
-| 19 | IPGL Ltd | Company | £11.1M | 229 | £48,587 |
-| 20 | Electoral Commission | Public Fund | £10.5M | 106 | £99,075 |
+| 1 | House of Commons | chamber | £115.2M | 685 | £168,230 |
+| 2 | Unite the Union | Trade Union | £53.5M | 953 | £56,148 |
+| 3 | UNISON | Trade Union | £44.3M | 1,765 | £25,120 |
+| 4 | House of Commons Fees Office | Public Fund | £42.5M | 198 | £214,825 |
+| 5 | GMB | Trade Union | £39.3M | 1,683 | £23,368 |
+| 6 | David Sainsbury | Individual | £31.4M | 176 | £178,298 |
+| 7 | Christopher Harborne | Individual | £19.2M | 20 | £960,881 |
+| 8 | The Electoral Commission | Public Fund | £18.9M | 169 | £111,545 |
+| 9 | National Conservative Draws Society | Unincorp. Assoc. | £15.4M | 198 | £77,593 |
+| 10 | USDAW | Trade Union | £13.3M | 445 | £29,849 |
+| 11 | USDAW (alternate spelling) | Trade Union | £12.1M | 253 | £47,845 |
+| 12 | Joseph Rowntree Reform Trust | Company | £12.1M | 403 | £29,967 |
+| 13 | David Sainsbury of Turville | Individual | £12.0M | 25 | £480,626 |
+| 14 | John Sainsbury | Individual | £11.5M | 15 | £767,162 |
+| 15 | THE PHOENIX PARTNERSHIP (LEEDS) LTD | Company | £11.3M | 9 | £1,258,022 |
+| 16 | Communication Workers Union | Trade Union | £10.0M | 774 | £12,955 |
+| 17 | Co-operative Group Ltd | Friendly Society | £9.9M | 62 | £160,015 |
+| 18 | House of Lords | chamber | £9.4M | 70 | £134,056 |
+| 19 | Electoral Commission | Public Fund | £9.1M | 76 | £119,813 |
+| 20 | Martin Taylor | Individual | £8.5M | 77 | £110,148 |
 
 **Observations:**
 - **Public funds** (Commons, Electoral Commission) dominate due to Short Money and policy development grants
@@ -97,14 +104,14 @@ The top donors reveal a mix of **public funds**, **trade unions**, and **wealthy
 
 | Donation Bracket | # Donors | Total Value | Avg per Donor | % of Total Value |
 |------------------|----------|-------------|---------------|------------------|
-| **£1M+** | **277** | **£1,361.6M** | **£4,915,559** | **65.09%** |
-| £500K-£1M | 245 | £170.2M | £694,671 | 8.14% |
-| £100K-£500K | 1,465 | £295.7M | £201,844 | 14.14% |
-| £50K-£100K | 1,387 | £92.1M | £66,380 | 4.40% |
-| £10K-£50K | 6,273 | £126.6M | £20,189 | 6.05% |
-| Under £10K | 11,654 | £45.5M | £3,905 | 2.18% |
+| **£1M+** | **211** | **£953.1M** | **£4,517,079** | **60.29%** |
+| £500K-£1M | 214 | £145.5M | £680,083 | 9.21% |
+| £100K-£500K | 1,204 | £240.6M | £199,829 | 15.22% |
+| £50K-£100K | 1,252 | £82.4M | £65,814 | 5.21% |
+| £10K-£50K | 5,666 | £112.9M | £19,921 | 7.14% |
+| Under £10K | 12,754 | £46.4M | £3,640 | 2.94% |
 
-**Key Insight:** Just **1.3% of donors** (277 out of 21,301) contribute **65% of all donation value**. The top 1,987 donors (9.3%) contribute **87.4%** of all value.
+**Key Insight:** Just **1.0% of donors** (211 out of 21,301) contribute **60% of all donation value**. The top 1,629 donors (7.6%) contribute **84.7%** of all value.
 
 This has major UI implications:
 - **"Top Donors" views are essential** - users need to quickly identify power players
@@ -119,23 +126,23 @@ This has major UI implications:
 
 | Donor Classification | # Donations | Total Value | # Donors | Avg Donation |
 |---------------------|-------------|-------------|----------|--------------|
-| **Unclassified/Individual** | 52,977 | £926.5M | 13,486 | £17,488 |
-| **Company** | 21,860 | £370.1M | 4,573 | £16,929 |
-| **Trade Union** | 17,901 | £341.3M | 288 | £19,067 |
-| **Public Fund** | 2,555 | £168.3M | 52 | £65,880 |
-| **Chamber** (Commons/Lords) | 1,902 | £141.9M | 4 | £74,587 |
-| Unincorporated Association | 13,499 | £70.8M | 1,630 | £5,244 |
-| Friendly Society | 1,227 | £26.3M | 92 | £21,420 |
-| Limited Liability Partnership | 821 | £17.8M | 119 | £21,724 |
-| Other | 3,074 | £14.7M | 873 | £4,785 |
-| Trust | 963 | £8.3M | 85 | £8,577 |
-| Political Party | 1,108 | £4.8M | 8 | £4,320 |
+| **Unclassified/Individual** | 41,575 | £699.2M | 13,486 | £16,818 |
+| **Company** | 17,142 | £277.1M | 4,573 | £16,164 |
+| **Trade Union** | 11,331 | £239.8M | 288 | £21,164 |
+| **Chamber** (Commons/Lords) | 1,822 | £134.4M | 4 | £73,773 |
+| **Public Fund** | 1,990 | £115.8M | 52 | £58,184 |
+| Unincorporated Association | 10,551 | £57.1M | 1,630 | £5,410 |
+| Friendly Society | 879 | £21.4M | 92 | £24,328 |
+| Limited Liability Partnership | 604 | £12.5M | 119 | £20,696 |
+| Other | 2,643 | £11.8M | 873 | £4,450 |
+| Trust | 624 | £6.0M | 85 | £9,669 |
+| Political Party | 871 | £4.3M | 8 | £4,913 |
 
 **Observations:**
-- **Individuals** dominate both volume (52,977 donations) and value (£926M)
-- **Trade unions** are highly concentrated: just 288 unions make 17,901 donations
-- **Public funds** have the highest average donation (£65,880), reflecting large grants
-- **Companies** contribute substantially (£370M) but with lower frequency than individuals
+- **Individuals** dominate both volume (41,575 donations) and value (£699M)
+- **Trade unions** are highly concentrated: just 288 unions make 11,331 donations
+- **Chamber** (Commons/Lords) has the highest average donation (£73,773), reflecting staff support
+- **Companies** contribute substantially (£277M) but with lower frequency than individuals
 
 **Data Quality Issue:** 13,486 donors are "Unclassified/Individual" - this suggests:
 - Many individual persons (correct)
@@ -152,11 +159,10 @@ This section examines the **intersection of lobbying and political donations** -
 ### 4.1 The Scale of Lobbying-Donation Connections
 
 **Overall Statistics:**
-- **46,944 total lobbying consultancies** in the database
+- **47,769 total lobbying consultancies** in the database
 - **62 organizations** both hire lobbyists AND donate politically
-- **235 total recipients** (221 individual MPs/Lords + 4 political parties + 10 campaigns/organizations)
-- **£72.5M total** donated by lobbying clients (3.5% of all donations with value)
-- **1,714 individual donations** from lobbying clients (average: £42,295 per donation)
+- **£57.9M total** donated by lobbying clients
+- **1,418 individual donations** from lobbying clients (average: £40,838 per donation)
 
 **Key Finding:** While most lobbying clients (15,400+ entities) don't donate, a concentrated group of **62 politically-connected organizations** use BOTH lobbying and donations as influence tools. This represents only **0.4% of all lobbying clients**.
 
@@ -168,15 +174,15 @@ This section examines the **intersection of lobbying and political donations** -
 
 | # | Organization | Type | Total Donated | # Agencies | # Donations | # Recipients |
 |---|-------------|------|---------------|------------|-------------|--------------|
-| 1 | **Unite the Union** | Trade Union | **£67.2M** | 1 | 1,138 | 115 |
-| 2 | **Community** | Trade Union | **£2.7M** | 1 | 348 | 11 |
+| 1 | **Unite the Union** | Trade Union | **£53.5M** | 1 | 953 | 115 |
+| 2 | **Community** | Trade Union | **£2.0M** | 1 | 259 | 11 |
 | 3 | **Electoral Reform Society** | Company | **£1.6M** | 1 | 20 | 3 |
-| 4 | **Manchester Airport Group** | Company | **£120K** | 1 | 4 | 1 |
-| 5 | **Quinn Estates Ltd** | Company | **£105K** | 2 | 14 | 2 |
-| 6 | **Pfizer Ltd** | Company | **£81K** | 1 | 8 | 1 |
-| 7 | **Criterion Capital Ltd** | Company | **£55K** | 2 | 3 | 2 |
-| 8 | **Community Trade Union** | Trade Union | **£49.6K** | 1 | 16 | 12 |
-| 9 | **Cayman Islands Government** | Other | **£49.2K** | 5 | 8 | 7 |
+| 4 | **Quinn Estates Ltd** | Company | **£105K** | 2 | 14 | 2 |
+| 5 | **Manchester Airport Group** | Company | **£60K** | 1 | 2 | 1 |
+| 6 | **Criterion Capital Ltd** | Company | **£53K** | 2 | 2 | 2 |
+| 7 | **Community Trade Union** | Trade Union | **£47.6K** | 1 | 15 | 12 |
+| 8 | **Cayman Islands Government** | Other | **£44.2K** | 5 | 7 | 7 |
+| 9 | **Pfizer Ltd** | Company | **£40.5K** | 1 | 4 | 1 |
 | 10 | **Dignity in Dying** | Company | **£43.3K** | 1 | 10 | 7 |
 | 11 | **Embassy of the State of Qatar** | Other | **£40.0K** | 1 | 9 | 9 |
 | 12 | **Northumbrian Water Ltd** | Company | **£37.9K** | 1 | 11 | 2 |
@@ -501,7 +507,93 @@ Based on this analysis, **Phase 2 UI should prioritize**:
 
 ---
 
-## 7. Recommended Next Steps
+## 7. Ministerial Meetings Analysis ⭐ NEW
+
+### 7.1 Overview
+
+The database now includes **41,362 ministerial meetings** from GOV.UK transparency data (2010-2025):
+
+| Metric | Value |
+|--------|------:|
+| Total Meetings | 41,362 |
+| Departments | 23 |
+| Unique Ministers | 297 |
+| Unique External Actors | 26,496 |
+| Date Range | 2010-2025 |
+
+### 7.2 Meetings by Department
+
+| Department | Meetings |
+|------------|----------|
+| BEIS (Dept for Business, Energy & Industrial Strategy) | 7,332 |
+| DfT (Dept for Transport) | 4,332 |
+| DHSC (Dept of Health and Social Care) | 3,917 |
+| DBT (Dept for Business and Trade) | 3,642 |
+| Home Office | 2,469 |
+| DESNZ (Dept for Energy Security & Net Zero) | 2,305 |
+| DCMS (Dept for Culture, Media & Sport) | 2,254 |
+| DSIT (Dept for Science, Innovation & Technology) | 2,047 |
+| MHCLG (Ministry of Housing, Communities & Local Govt) | 2,033 |
+| DWP (Dept for Work and Pensions) | 1,926 |
+| MoJ (Ministry of Justice) | 1,619 |
+| Defra (Dept for Environment, Food & Rural Affairs) | 1,440 |
+| DfE (Dept for Education) | 1,109 |
+| Cabinet Office | 1,034 |
+| HMT (HM Treasury) | 1,013 |
+| NIO (Northern Ireland Office) | 910 |
+| FCDO (Foreign, Commonwealth & Development Office) | 597 |
+| FCO (Foreign & Commonwealth Office) | 481 |
+| BIS (Dept for Business, Innovation & Skills) | 403 |
+| MoD (Ministry of Defence) | 305 |
+| Wales Office | 146 |
+| DECC (Dept of Energy & Climate Change) | 41 |
+| UKEF (UK Export Finance) | 7 |
+
+### 7.3 Top External Actors (Most Meetings)
+
+| Organization | Meetings |
+|--------------|----------|
+| Local Government Association | 103 |
+| British Medical Association | 93 |
+| Airbus | 89 |
+| National Grid | 82 |
+| BP | 70 |
+| EDF | 63 |
+| AstraZeneca | 62 |
+| Google | 61 |
+| Confederation of British Industry | 60 |
+| Citizens Advice | 59 |
+| Post Office | 55 |
+| UNISON | 54 |
+| Shell | 53 |
+| Energy UK | 50 |
+| Royal College of Nursing | 50 |
+
+### 7.4 Key Insights
+
+1. **Energy Sector Dominance:** BP, EDF, National Grid, Shell, Energy UK, Equinor, and Scottish Power all rank in top 20 - reflecting lobbying intensity around energy policy and net zero
+
+2. **Tech Giants Present:** Google (61 meetings) shows significant government engagement on tech policy, AI regulation, and digital services
+
+3. **Healthcare Prominence:** British Medical Association (93), AstraZeneca (62), and Royal College of Nursing (50) show NHS and pharma policy engagement
+
+4. **Trade Bodies:** CBI (60), Energy UK (50), UK Hospitality (44) represent major industry voice in government
+
+5. **"Influence Triangle" Potential:** Cross-referencing meetings with donations and lobbying consultancies can reveal organizations using multiple influence channels
+
+### 7.5 UI Implications for Meetings Data
+
+**New Features Enabled:**
+1. **Minister Profile Pages** - show all meetings for each minister
+2. **Organization "Government Access" Score** - count meetings across departments
+3. **Timeline Visualizations** - when did organizations meet ministers?
+4. **Cross-reference with Donations** - "Organizations that donate AND meet ministers"
+5. **Department Comparison** - which departments are most accessible?
+6. **Topic/Purpose Analysis** - what are meetings about? (requires text analysis)
+
+---
+
+## 8. Recommended Next Steps (Renumbered)
 
 ### 7.1 Data Cleanup (Optional)
 
@@ -527,9 +619,9 @@ Based on this analysis, **Phase 2 UI should prioritize**:
 
 ---
 
-## 8. Technical Notes
+## 9. Technical Notes
 
-### 8.1 Query Performance & Accuracy
+### 9.1 Query Performance & Accuracy
 
 **Query Version:** 2.0 (Production - Corrected)
 
@@ -548,22 +640,25 @@ All queries in this report use **refactored SQL (Version 2.0)** that eliminates 
 - Sum-of-parts validation (£70.0M + £2.3M + £177K + £22K + £32K = £72.5M ✓)
 - No duplicate counting (each donation counted exactly once)
 
-### 8.2 Database Schema Notes
+### 9.2 Database Schema Notes
 
 - **Actor polymorphism** works well (Person/Organization share Actor base class)
 - **Date fields are VARCHAR** (YYYY-MM-DD format for partial dates) - this is intentional per Popolo spec
 - **Generic relations** (Source, Identifier) are not queried in this analysis - coverage unknown
 
-### 8.3 Data Sources
+### 9.3 Data Sources
 
 This dataset combines:
 - ✅ **ParlParse** (MPs, Lords, memberships) - working
 - ✅ **Ministers** (ministerial appointments) - working
-- ⛔ **Electoral Commission** (donations) - API defunct, needs rewrite
-- ⛔ **APPC** (lobbying consultancies) - defunct, needs PRCA rewrite
-- ⏸️ **Lords/MPs Interests** - partially implemented
+- ✅ **MPs' Register of Interests** (donations, gifts) - working
+- ✅ **Lords' Register of Interests** (donations, gifts) - working
+- ✅ **Ministerial Meetings** (GOV.UK transparency) - 41,362 meetings from 23 departments ⭐ NEW
+- ✅ **APPC Archive** (historical lobbying PDFs) - working
+- ✅ **Electoral Commission** (donations) - working! Fetches from EC API (91,328 records)
+- ✅ **PRCA Lobbying Register** (current lobbying) - working! Scrapes prca.global
 
-See `docs/data-import-testing.md` for full import status.
+See `docs/DATA_IMPORT_GUIDE.md` for full import documentation.
 
 ---
 

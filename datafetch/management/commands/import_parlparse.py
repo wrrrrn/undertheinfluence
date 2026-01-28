@@ -1,3 +1,4 @@
+import datetime
 from django.core.management.base import BaseCommand, CommandError
 
 from datafetch import models, helpers
@@ -132,7 +133,19 @@ class Command(BaseCommand):
 
         organizations_dict = {}
         for organization in organizations:
-            if organization.get('classification') == 'party':
+            # Convert ParlParse classifications to our standard names
+            classification = organization.get('classification')
+            if classification == 'party':
+                organization['classification'] = 'Political Party'
+            elif classification == 'chamber':
+                # Legislative chambers (House of Commons, Lords, Scottish Parliament, etc.)
+                organization['classification'] = 'Legislature'
+            elif classification == 'metro':
+                # Regional legislatures (London Assembly)
+                organization['classification'] = 'Legislature'
+            elif classification is None:
+                # Unclassified orgs in ParlParse are usually political parties
+                # (e.g., People Before Profit Alliance)
                 organization['classification'] = 'Political Party'
             id_ = organization.pop('id')
 
@@ -239,6 +252,22 @@ class Command(BaseCommand):
 
             if membership.get('on_behalf_of_id'):
                 membership['on_behalf_of_id'] = j['organizations'][membership['on_behalf_of_id']]
+
+            # Validate date order (start_date <= end_date)
+            start_date = membership.get('start_date')
+            end_date = membership.get('end_date')
+            if start_date and end_date:
+                try:
+                    start = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+                    end = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+                    if end < start:
+                        # Swap dates if they are in the wrong order
+                        print(f"Swapping invalid dates for membership: {start_date} -> {end_date}")
+                        membership['start_date'] = end_date
+                        membership['end_date'] = start_date
+                except ValueError:
+                    # Ignore partial dates or other formats
+                    pass
 
             defaults = {k: v for k, v in membership.items() if k not in ignore_fields}
             unique = {k: v for k, v in defaults.items() if k in unique_fields}

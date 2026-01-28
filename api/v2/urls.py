@@ -2,13 +2,21 @@
 URL routing for API v2
 """
 
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import SimpleRouter
 from api.v2 import views
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 app_name = 'api_v2'
 
+router = SimpleRouter()
+router.register(r'politicians', views.PoliticianViewSet, basename='politician')
+router.register(r'parties', views.PartyViewSet, basename='party')
+
 urlpatterns = [
+    # Router URLs
+    path('', include(router.urls)),
+
     # OpenAPI schema and documentation
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('docs/', SpectacularSwaggerView.as_view(url_name='api_v2:schema'), name='swagger-ui'),
@@ -30,4 +38,5 @@ urlpatterns = [
     path('actors/<int:pk>/donations-received/', views.ActorDonationsReceivedView.as_view(), name='actor-donations-received'),
     path('actors/<int:pk>/consultancies/', views.ActorConsultanciesView.as_view(), name='actor-consultancies'),
     path('actors/<int:pk>/memberships/', views.ActorMembershipsView.as_view(), name='actor-memberships'),
+    path('actors/<int:pk>/meetings/', views.ActorMeetingsView.as_view(), name='actor-meetings'),
 ]

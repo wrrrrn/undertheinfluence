@@ -1,8 +1,8 @@
 # UnderTheInfluence: Current State Summary
 
 **Last Updated**: January 27, 2026
-**Branch**: `feature/ux`
-**Status**: Working prototype with Astro 5 + Svelte 5 frontend
+**Branch**: `feature/ux` (Merged with `develop`)
+**Status**: Working prototype with Astro 5 + Svelte 5 frontend, data quality cleanup, entity resolution, and Companies House enrichment
 
 ---
 
@@ -23,9 +23,13 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 - ✅ D3.js minister network visualization (donations + meetings)
 - ✅ API v2 aggregate endpoints with filtering
 - ✅ Data import from ParlParse, Ministers, MPs' Register, and Ministerial Meetings
+- ✅ **Ministerial Meetings Import** - 41,362 meetings from 23 departments
+- ✅ **Companies House Enrichment** - 51,157 organizations matched (24.5% auto-approved)
+- ✅ **Data Quality Cleanup** - 127,600+ issues resolved (99.98% duplicate reduction)
+- ✅ **Entity Resolution Service** - Fast canonical actor linking (~10% match rate)
 - ✅ CORS support for Astro frontend
 
-**What's Next**: Add more visualizations, politician directory page, enhance entity profiles.
+**What's Next**: Complete entity resolution at scale, API endpoints for meetings, frontend visualization.
 
 ---
 
@@ -103,7 +107,8 @@ Actor (Polymorphic Base)
 Relationships:
 ├── Membership (Person ↔ Organization + Post)
 ├── Donation (Actor → Actor with £ value)
-└── Consultancy (Organization client ↔ Organization agency)
+├── Consultancy (Organization client ↔ Organization agency)
+└── MinisterialMeeting (Minister ↔ External Actor)
 ```
 
 **Key Features**:
@@ -131,13 +136,17 @@ Relationships:
 - ✅ **Working**: `import_ministers` (ministerial appointments)
 - ✅ **Working**: `import_mpsinterests` (MPs' Register of Interests)
 - ✅ **Working**: `import_ministerial_meetings` (GOV.UK transparency data)
+- ✅ **Working**: `enrich_companies_house` (directors, PSCs, company data)
 - ⚠️ **Partial**: `import_ec` (Electoral Commission - API changes needed)
 - ⚠️ **Partial**: `import_appc` (APPC lobbying - site changes)
 
 **Database** (PostgreSQL via Docker):
-- ~26,000 actors (persons + organizations)
-- ~150,000 memberships
-- ~91,000+ donations (Electoral Commission data)
+- **155,065 actors** (90,728 persons + 64,337 organizations)
+- **136,590 memberships** (including directors, PSCs, parliamentary roles)
+- **91,513 donations** (Electoral Commission + MPs Register of Interests)
+- **62,798 consultancies** (lobbying relationships)
+- **41,362 ministerial meetings** (23 departments, 119,793 attendees)
+- **Companies House**: 51,157 matches (12,532 auto-approved, 11,198 pending review)
 - Full import from 1996-2026 working
 
 ### Backend - API Layer
@@ -317,16 +326,16 @@ python manage.py collectstatic --noinput
 
 **Note**: `GET /api/v2/aggregates/minister-network/` is now implemented as the foundation for network visualizations.
 
-### Data Quality (Medium Priority)
-- ⚠️ **Automated cleanup** (167,967 issues identified)
-  - 28,516 duplicate donations (fixable automatically)
-  - 637 orphaned donations
-  - 76 invalid donation dates
-  - 116,542 memberships missing start_date
-- ⚠️ **Import command improvements**
-  - Add deduplication to `import_ec`
-  - Add date validation to `import_ec`
-  - Fix missing membership dates in `import_appc`
+### Data Quality (Mostly Complete)
+- ✅ **Automated cleanup completed** (~127,600 issues resolved)
+  - ✅ 28,516 → 5 duplicate donations (-99.98%)
+  - ✅ 637 → 111 orphaned donations (-83%)
+  - ✅ 116,542 → 19,447 missing membership dates (-83%)
+  - ✅ Concatenated names split into proper entities
+- ⚠️ **Remaining work**
+  - 47 invalid donation dates (need EC verification)
+  - ~2,500 concatenated/problematic names
+  - ~211,000 unlinked entities (entity resolution in progress)
 
 ### Testing (Low Priority - Future)
 - ❌ Frontend component tests (Jest + React Testing Library)
@@ -359,7 +368,7 @@ undertheinfluence/
 │   ├── management/commands/ # Data import commands
 │   │   ├── import_parlparse.py
 │   │   ├── import_ministers.py
-│   │   └── import_mpsinterests.py
+│   │   ├── import_mpsinterests.py
 │   ├── views.py             # Django views (ActorView, SearchView)
 │   └── templates/           # Django templates
 ├── frontend/               # Astro + Svelte frontend
@@ -499,13 +508,14 @@ Docker Compose automatically configures these for local development.
 ## Known Issues
 
 ### Data Quality
-- **167,967 total data quality issues** identified (see `docs/DATA_QUALITY_REPORT.md`)
-  - 28,516 duplicate donations (fixable automatically)
-  - 637 orphaned donations
-  - 76 invalid donation dates
-  - 116,542 memberships missing start_date (77.6%)
-- **Automated cleanup ready**: `clean_data --fix=all` command exists
-- **Manual review needed**: Invalid dates, orphaned donations with values
+- **Major cleanup completed** (see `docs/DATA_QUALITY_REPORT.md`)
+  - ✅ 28,516 → 5 duplicate donations (-99.98%)
+  - ✅ 637 → 111 orphaned donations (-83%)
+  - ✅ 116,542 → 19,447 missing membership dates (-83%)
+  - ⚠️ 47 invalid donation dates remaining
+  - ⚠️ ~2,500 concatenated names remaining
+- **Entity resolution**: `populate_canonical` command highly optimized (in-memory indexing)
+- **Companies House enrichment**: 51,157 organizations matched
 
 ### Import Commands
 - **Electoral Commission** (`import_ec`): CSV API endpoint changed, needs update
@@ -537,10 +547,10 @@ Docker Compose automatically configures these for local development.
    - `/api/v2/politicians/` endpoint
    - Basic server-rendered directory
    - Group by government/opposition → party
-2. **Data Quality Cleanup**
-   - Run automated cleanup (`clean_data --fix=all`)
-   - Manual review of invalid dates
-   - Document cleanup results
+2. **Data Quality Cleanup (Phase 1)**
+   - ✅ Run automated cleanup (`clean_data --fix=all`)
+   - ✅ Manual review of invalid dates
+   - ✅ Document cleanup results (`docs/DATA_CLEANUP_RESULTS.md`)
 
 ### Short-Term (This Month)
 3. **Network Visualization**
@@ -571,9 +581,12 @@ Docker Compose automatically configures these for local development.
 ## Success Metrics (Current Baseline)
 
 **Data Coverage**:
-- ✅ 26,000+ actors (persons + organizations)
-- ✅ 150,000+ memberships
-- ✅ 91,000+ donations
+- ✅ 155,065 actors (90,728 persons + 64,337 organizations)
+- ✅ 136,590 memberships
+- ✅ 91,513 donations
+- ✅ 62,798 consultancies (lobbying relationships)
+- ✅ **41,362 ministerial meetings** (119,793 attendees, 23 departments)
+- ✅ **51,157 Companies House matches** (12,532 auto-approved)
 - ✅ 30 years of data (1996-2026)
 
 **Performance (Current)**:
@@ -639,4 +652,4 @@ Docker Compose automatically configures these for local development.
 - Architecture decisions are made
 - Deployment status changes
 
-**Last Major Update**: January 27, 2026 (Astro + Svelte frontend, minister network visualization)
+**Last Major Update**: January 27, 2026 (Merged feature/ux and feature/more-data: Astro frontend + entity resolution)

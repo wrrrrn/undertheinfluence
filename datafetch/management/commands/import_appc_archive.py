@@ -148,7 +148,7 @@ class Command(BaseCommand):
         if not agency_obj:
             agency_obj = models.Organization.objects.create(
                 name=agency_name,
-                classification="Lobbying agency"
+                classification="Lobbying Agency"
             )
 
         # Add address as contact detail
@@ -204,7 +204,16 @@ class Command(BaseCommand):
                 if not person_obj:
                     person_obj = models.Person.objects.create(name=practitioner_name)
 
-                agency_obj.add_member(person_obj)
+                # Create Membership explicitly with dates
+                models.Membership.objects.get_or_create(
+                    person=person_obj,
+                    organization=agency_obj,
+                    role="Lobbyist",
+                    defaults={
+                        "start_date": date_range[0],
+                        "end_date": date_range[1]
+                    }
+                )
 
         # Add clients and create Consultancy relationships
         for client_name in company_data.get('clients', []):

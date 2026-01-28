@@ -18,7 +18,7 @@ from .popolo.querysets import PostQuerySet, OtherNameQuerySet, ContactDetailQuer
 
 
 class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
-    name = models.CharField(_("name"), max_length=512, help_text=_("A person or organization's preferred full name"))
+    name = models.CharField(_("name"), max_length=1024, help_text=_("A person or organization's preferred full name"))
     image = models.URLField(_("image"), blank=True, null=True, help_text=_("An image representing the person or organization"))
 
     # array of items referencing "http://popoloproject.com/schemas/other_name.json#"
@@ -87,16 +87,23 @@ class Person(Actor):
     url_name = 'person-detail'
 
     def add_membership(self, organization):
-        m = Membership(person=self, organization=organization)
-        m.save()
+        """Add a membership to an organization, avoiding duplicates."""
+        Membership.objects.get_or_create(
+            person=self,
+            organization=organization
+        )
 
     def add_memberships(self, organizations):
-       for o in organizations:
-           self.add_membership(o)
+        for o in organizations:
+            self.add_membership(o)
 
     def add_role(self, post):
-        m = Membership(person=self, post=post, organization=post.organization)
-        m.save()
+        """Add a role/post membership, avoiding duplicates."""
+        Membership.objects.get_or_create(
+            person=self,
+            post=post,
+            organization=post.organization
+        )
 
 
 class Organization(Actor):
@@ -137,8 +144,11 @@ class Organization(Actor):
     url_name = 'organization-detail'
 
     def add_member(self, person):
-        m = Membership(organization=self, person=person)
-        m.save()
+        """Add a person as a member of this organization, avoiding duplicates."""
+        Membership.objects.get_or_create(
+            organization=self,
+            person=person
+        )
 
     def add_members(self, persons):
         for p in persons:
@@ -183,8 +193,12 @@ class Post(Dateframeable, Timestampable, models.Model):
     objects = PostQuerySet.as_manager()
 
     def add_person(self, person):
-        m = Membership(post=self, person=person, organization=self.organization)
-        m.save()
+        """Add a person to this post, avoiding duplicates."""
+        Membership.objects.get_or_create(
+            post=self,
+            person=person,
+            organization=self.organization
+        )
 
     def __str__(self):
         return self.label
@@ -305,7 +319,7 @@ class OtherName(Dateframeable, GenericRelatable, models.Model):
 
     name = models.CharField(
         _("name"),
-        max_length=512,
+        max_length=1024,
         help_text=_("An alternate or former name")
     )
 

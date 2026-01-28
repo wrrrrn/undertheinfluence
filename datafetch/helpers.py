@@ -58,6 +58,7 @@ def fetch_file(url, filename, path=None, refresh=False, **kwargs):
         with open(filepath, "wb") as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
+    return filepath  # Return filepath for caller to use
 
 
 def create_data_folder(path):
@@ -112,6 +113,97 @@ def parse_name(name):
 
 def parse_company_name(name):
     return re.sub(u"^(.*?), The$", r"The \1", name.strip())
+
+
+def parse_ch_officer_name(name):
+    """
+    Parse Companies House officer name format into structured components.
+
+    CH uses "SURNAME, Forenames" format for individuals.
+    Corporate directors use "COMPANY NAME" (no comma).
+
+    Examples:
+    - "SMITH, John Andrew" -> {name: "John Andrew Smith", family_name: "Smith", given_name: "John"}
+    - "VAN DER BERG, Jan" -> {name: "Jan Van Der Berg", family_name: "Van Der Berg", given_name: "Jan"}
+    - "O'BRIEN, Patrick" -> {name: "Patrick O'Brien", family_name: "O'Brien", given_name: "Patrick"}
+    - "ACME LIMITED" -> {name: "Acme Limited", family_name: "", given_name: "", is_corporate: True}
+
+    Args:
+        name: Name string from Companies House API
+
+    Returns:
+        Dict with keys: name, family_name, given_name, is_corporate
+    """
+    if not name:
+        return {
+            'name': '',
+            'family_name': '',
+            'given_name': '',
+            'is_corporate': False,
+        }
+
+    name = name.strip()
+
+    # Check if it's a corporate name (no comma, or comma inside parentheses)
+    # Corporate names often have patterns like "LTD", "LIMITED", "PLC", etc.
+    if ',' not in name:
+        # No comma - likely corporate
+        # Title case it for readability
+        return {
+            'name': name.title(),
+            'family_name': '',
+            'given_name': '',
+            'is_corporate': True,
+        }
+
+    # Split on first comma only
+    parts = name.split(',', 1)
+    if len(parts) != 2:
+        # Unexpected format, return as-is
+        return {
+            'name': name.title(),
+            'family_name': '',
+            'given_name': '',
+            'is_corporate': True,
+        }
+
+    surname_part = parts[0].strip()
+    forenames_part = parts[1].strip()
+
+    # Convert UPPERCASE surname to title case, handling special cases
+    # like "VAN DER BERG" -> "Van Der Berg", "O'BRIEN" -> "O'Brien"
+    def title_case_surname(s):
+        """Title case surname, handling prefixes and apostrophes."""
+        # Split on spaces and apostrophes while preserving them
+        words = re.split(r"(\s+|')", s)
+        result = []
+        for word in words:
+            if word.isspace() or word == "'":
+                result.append(word)
+            elif word.upper() in ('VAN', 'VON', 'DE', 'DER', 'DEN', 'LA', 'LE', 'DI', 'DA'):
+                # Keep common prefixes lowercase (optional - depends on preference)
+                # For UK, title case is more common
+                result.append(word.title())
+            else:
+                result.append(word.title())
+        return ''.join(result)
+
+    family_name = title_case_surname(surname_part)
+    given_name = forenames_part.title()
+
+    # Extract just the first given name for the given_name field
+    given_name_parts = given_name.split()
+    first_given_name = given_name_parts[0] if given_name_parts else ''
+
+    # Build full name: "Forenames Surname"
+    full_name = f"{given_name} {family_name}".strip()
+
+    return {
+        'name': full_name,
+        'family_name': family_name,
+        'given_name': first_given_name,
+        'is_corporate': False,
+    }
 
 def snake_case(camel_case_text):
     return re.sub(r'([a-z])([A-Z])', r'\1_\2', camel_case_text).lower()

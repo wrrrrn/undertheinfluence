@@ -1,0 +1,58 @@
+@import '../styles/variables';
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: $spacing-lg;
+  margin-bottom: $spacing-xl;
+}
+
+.loader {
+  display: flex;
+  justify-content: center;
+  padding: $spacing-xl;
+}
+
+.emptyState {
+  text-align: center;
+  padding: $spacing-3xl 0;
+  color: $gray-500;
+
+  h3 {
+    color: $gray-700;
+    margin-bottom: $spacing-md;
+  }
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: $spacing-sm;
+  margin-top: $spacing-xl;
+}
+
+.pageButton {
+  padding: 0.5rem 1rem;
+  border: 1px solid $gray-300;
+  background: white;
+  border-radius: $radius-sm;
+  color: $gray-700;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    border-color: $action-blue;
+    color: $action-blue;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.active {
+    background: $action-blue;
+    color: white;
+    border-color: $action-blue;
+  }
+}
