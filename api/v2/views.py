@@ -1261,9 +1261,9 @@ class MinisterNetworkView(views.APIView):
             nid for nid, node in nodes_dict.items()
             if node['type'] == 'organization'
         ]
-        
+
         if org_ids:
-            # Fetch memberships
+            # Fetch memberships with canonical entry for entity resolution
             memberships = models.Membership.objects.filter(
                 organization_id__in=org_ids
             ).filter(
@@ -1272,8 +1272,8 @@ class MinisterNetworkView(views.APIView):
                 Q(role__icontains='director') |
                 Q(role__icontains='significant control') |
                 Q(role__icontains='shareholder')
-            ).select_related('person')
-            
+            ).select_related('person', 'person__canonical_entry')
+
             # Map role to simpler type
             def get_role_type(role_name):
                 r = role_name.lower()
@@ -1282,16 +1282,26 @@ class MinisterNetworkView(views.APIView):
                 return 'director'
 
             for m in memberships:
-                pid = m.person_id
+                # Use canonical entry if this person is a duplicate
+                person = m.person
+                if person.canonical_entry_id:
+                    # Use the canonical entry instead
+                    canonical_person = person.canonical_entry
+                    pid = canonical_person.id
+                    person_name = canonical_person.name
+                else:
+                    pid = person.id
+                    person_name = person.name
+
                 oid = m.organization_id
-                
+
                 # Only add if organization is still in nodes (it should be)
                 if oid in nodes_dict:
                     # Add person node if not exists
                     if pid not in nodes_dict:
                         nodes_dict[pid] = {
                             'id': pid,
-                            'name': m.person.name,
+                            'name': person_name,
                             'type': get_role_type(m.role),
                             'role': m.role,
                             'total_value': 0,
@@ -1299,7 +1309,7 @@ class MinisterNetworkView(views.APIView):
                             'meeting_count': 0,
                             'url': f'/person/{pid}/'
                         }
-                    
+
                     # Add link
                     links.append({
                         'source': pid,
@@ -1320,17 +1330,11 @@ class MinisterNetworkView(views.APIView):
         )
 
         # Get meeting attendees with counts, ordered by meeting count
+        # Use canonical resolution
         attendee_data = models.MeetingAttendee.objects.filter(
             meeting__minister_id__in=top_minister_ids
-        ).values(
-            'meeting__minister_id'
         ).annotate(
-            # Use canonical_actor if available, else actor
-            effective_actor_id=Case(
-                When(canonical_actor_id__isnull=False, then=F('canonical_actor_id')),
-                default=F('actor_id'),
-                output_field=IntegerField()
-            )
+            effective_actor_id=Coalesce('canonical_actor_id', 'actor_id')
         ).values(
             'meeting__minister_id', 'effective_actor_id'
         ).annotate(
@@ -1353,48 +1357,99 @@ class MinisterNetworkView(views.APIView):
         # Remove ministers from attendee list (don't want self-links)
         attendee_ids = attendee_ids - set(top_minister_ids)
 
-        # Fetch attendee actors
+        # Fetch attendee actors with canonical entry for additional resolution
         attendee_actors = {
-            a.id: a for a in models.Actor.objects.filter(id__in=attendee_ids)
+            a.id: a for a in models.Actor.objects.filter(
+                id__in=attendee_ids
+            ).select_related('canonical_entry')
         }
 
-        # Add attendee nodes
+        # Build resolution map: attendee_id -> canonical_id
+        # This handles cases where MeetingAttendee.canonical_actor wasn't set
+        # but the Actor itself is marked as a duplicate
+        attendee_resolution = {}
+        for aid, actor in attendee_actors.items():
+            if actor.canonical_entry_id:
+                attendee_resolution[aid] = actor.canonical_entry_id
+            else:
+                attendee_resolution[aid] = aid
+
+        # Fetch canonical actors that weren't in original set
+        extra_canonical_ids = set(attendee_resolution.values()) - set(attendee_actors.keys())
+        if extra_canonical_ids:
+            extra_actors = {
+                a.id: a for a in models.Actor.objects.filter(id__in=extra_canonical_ids)
+            }
+            attendee_actors.update(extra_actors)
+
+        # Add attendee nodes (using resolved canonical IDs)
+        processed_canonical_ids = set()
         for attendee_id in attendee_ids:
-            if attendee_id in attendee_actors and attendee_id not in nodes_dict:
-                actor = attendee_actors[attendee_id]
+            canonical_id = attendee_resolution.get(attendee_id, attendee_id)
+
+            # Skip if we've already processed this canonical ID
+            if canonical_id in processed_canonical_ids:
+                continue
+            processed_canonical_ids.add(canonical_id)
+
+            if canonical_id in attendee_actors and canonical_id not in nodes_dict:
+                actor = attendee_actors[canonical_id]
                 try:
                     actor_type = 'organization' if hasattr(actor, 'organization') else 'person'
                 except:
                     actor_type = 'attendee'
 
-                # Count total meetings for this attendee
+                # Count total meetings for this attendee (aggregate across duplicates)
                 total_meetings = sum(
                     m['meeting_count'] for m in meeting_links_data
-                    if m['attendee_id'] == attendee_id
+                    if attendee_resolution.get(m['attendee_id'], m['attendee_id']) == canonical_id
                 )
 
-                nodes_dict[attendee_id] = {
-                    'id': attendee_id,
+                nodes_dict[canonical_id] = {
+                    'id': canonical_id,
                     'name': actor.name,
                     'type': actor_type,
                     'total_value': 0,  # No donations
                     'donation_count': 0,
                     'meeting_count': total_meetings,
-                    'url': f'/actor/{attendee_id}/'
+                    'companies_house_number': None,
+                    'url': f'/actor/{canonical_id}/'
                 }
 
-        # Add meeting links
+                # Add Companies House number if available
+                if hasattr(actor, 'identifiers'):
+                    ch = actor.identifiers.filter(scheme='uk.gov.companieshouse').first()
+                    if ch:
+                        nodes_dict[canonical_id]['companies_house_number'] = ch.identifier
+
+        # Add meeting links (using resolved canonical IDs)
+        # Aggregate links by canonical_attendee -> minister to avoid duplicate edges
+        meeting_link_aggregates = {}
         for ml in meeting_links_data:
-            attendee_id = ml['attendee_id']
+            # Resolve attendee to canonical ID
+            raw_attendee_id = ml['attendee_id']
+            canonical_attendee_id = attendee_resolution.get(raw_attendee_id, raw_attendee_id)
             minister_id = ml['minister_id']
 
-            # Only add if both nodes exist and not self-link
-            if attendee_id in nodes_dict and minister_id in nodes_dict and attendee_id != minister_id:
+            # Skip self-links
+            if canonical_attendee_id == minister_id:
+                continue
+
+            # Aggregate by (canonical_attendee, minister) pair
+            key = (canonical_attendee_id, minister_id)
+            if key not in meeting_link_aggregates:
+                meeting_link_aggregates[key] = 0
+            meeting_link_aggregates[key] += ml['meeting_count']
+
+        # Create links from aggregated data
+        for (canonical_attendee_id, minister_id), meeting_count in meeting_link_aggregates.items():
+            # Only add if both nodes exist
+            if canonical_attendee_id in nodes_dict and minister_id in nodes_dict:
                 links.append({
-                    'source': attendee_id,
+                    'source': canonical_attendee_id,
                     'target': minister_id,
-                    'value': ml['meeting_count'] * 1000,  # Scale for visibility
-                    'count': ml['meeting_count'],
+                    'value': meeting_count * 1000,  # Scale for visibility
+                    'count': meeting_count,
                     'link_type': 'meeting'
                 })
 

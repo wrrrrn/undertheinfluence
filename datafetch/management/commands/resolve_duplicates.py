@@ -57,6 +57,16 @@ class Command(BaseCommand):
             action='store_true',
             help='Clear all pending ActorResolution records before running'
         )
+        parser.add_argument(
+            '--resume',
+            action='store_true',
+            help='Resume from the last processed actor ID found in resolutions'
+        )
+        parser.add_argument(
+            '--name',
+            type=str,
+            help='Only scan actors whose name contains this string'
+        )
 
     def _format_duration(self, seconds):
         """Format seconds into human-readable duration."""
@@ -80,13 +90,30 @@ class Command(BaseCommand):
         eta_seconds = avg_time * remaining_batches
         return self._format_duration(eta_seconds)
 
+    def _print_summary(self, stats, total_elapsed):
+        """Print execution summary."""
+        self.stdout.write('\n' + '='*60)
+        self.stdout.write('Summary')
+        self.stdout.write('='*60)
+        self.stdout.write(f"Total Time: {self._format_duration(total_elapsed)}")
+        self.stdout.write(f"Scanned: {stats['scanned']}")
+        self.stdout.write(f"Matches found: {stats['matches']}")
+        self.stdout.write(f"Auto-approved: {stats['auto_approved']}")
+        self.stdout.write(f"Pending review: {stats['pending']}")
+        self.stdout.write(f"Skipped existing: {stats['skipped_existing']}")
+
     def handle(self, *args, **options):
+        # Track timing
+        start_time = time.time()
+
         dry_run = options['dry_run']
         threshold = options['threshold']
         limit = options['limit']
         actor_type = options['type']
         auto_approve = options['auto_approve']
         clear = options['clear']
+        resume = options['resume']
+        name_filter = options['name']
 
         if dry_run:
             self.stdout.write(self.style.WARNING('\n🔍 DRY RUN MODE - No database changes will be made'))
@@ -108,6 +135,22 @@ class Command(BaseCommand):
         elif actor_type == 'organization':
             queryset = Organization.objects.all().order_by('id')
 
+        # Filters
+        if name_filter:
+            self.stdout.write(f"Filtering actors by name containing: '{name_filter}'")
+            queryset = queryset.filter(name__icontains=name_filter)
+
+        # Resume logic
+        if resume:
+            from django.db.models import Max
+            max_1 = ActorResolution.objects.aggregate(m=Max('actor1_id'))['m'] or 0
+            max_2 = ActorResolution.objects.aggregate(m=Max('actor2_id'))['m'] or 0
+            last_id = max(max_1, max_2)
+            
+            if last_id > 0:
+                self.stdout.write(self.style.SUCCESS(f'Resuming from Actor ID {last_id}...'))
+                queryset = queryset.filter(id__gt=last_id)
+
         if limit > 0:
             queryset = queryset[:limit]
 
@@ -122,92 +165,69 @@ class Command(BaseCommand):
             'skipped_existing': 0,
         }
 
-        # Track timing
-        start_time = time.time()
+        # Targeted mode: Exhaustive pairwise search within the name filter
+        if name_filter:
+            actors = list(queryset)
+            for i, actor in enumerate(actors):
+                stats['scanned'] += 1
+                
+                # Skip if current actor name is a single word
+                if ' ' not in actor.name.strip():
+                    continue
+
+                for other in actors[i+1:]:
+                    # Skip if other actor name is a single word
+                    if ' ' not in other.name.strip():
+                        continue
+
+                    # Skip if already matched
+                    if ActorResolution.objects.filter(
+                        Q(actor1=actor, actor2=other) | Q(actor1=other, actor2=actor)
+                    ).exists():
+                        continue
+
+                    # Calculate actual similarity
+                    from datafetch.utils.normalization import calculate_name_similarity, get_confidence_level
+                    similarity = calculate_name_similarity(actor.name, other.name)
+                    
+                    if similarity >= threshold:
+                        confidence, decision = get_confidence_level(similarity)
+                        stats['matches'] += 1
+                        
+                        # Use actor with more data as canonical
+                        score1 = service.calculate_entity_score(actor)
+                        score2 = service.calculate_entity_score(other)
+                        
+                        if score1 > score2:
+                            canon = actor
+                        elif score2 > score1:
+                            canon = other
+                        else:
+                            # Tie-break with ID
+                            canon = actor if actor.pk < other.pk else other
+                        
+                        self.stdout.write(
+                            f"  Targeted Match: {actor.name} ({actor.pk}) ↔ {other.name} ({other.pk}) "
+                            f"[{similarity:.2f}]"
+                        )
+                        
+                        if not dry_run:
+                            ActorResolution.objects.create(
+                                actor1=actor if actor.pk < other.pk else other,
+                                actor2=other if actor.pk < other.pk else actor,
+                                canonical_actor=canon,
+                                confidence=similarity,
+                                match_reason='targeted_fuzzy',
+                                decision='review',
+                                review_status='pending'
+                            )
+            
+            # Print Summary and Return
+            self._print_summary(stats, time.time() - start_time)
+            return
+
         batch_times = []
         batch_size = 1000
         total_batches = (total_actors + batch_size - 1) // batch_size
         batch_num = 0
         batch_start = time.time()
-
-        # Scan actors
-        # Use iterator to avoid memory issues
-        for actor in queryset.iterator(chunk_size=batch_size):
-            stats['scanned'] += 1
-            
-            # Progress update logic
-            if stats['scanned'] % batch_size == 0:
-                batch_num += 1
-                batch_elapsed = time.time() - batch_start
-                batch_times.append(batch_elapsed)
-                eta = self._calculate_eta(batch_times, batch_num, total_batches)
-                
-                pct = (stats['scanned'] / total_actors) * 100
-                self.stdout.write(
-                    f"  [{pct:5.1f}%] Scanned {stats['scanned']}/{total_actors} | "
-                    f"Matches: {stats['matches']} | "
-                    f"{self._format_duration(batch_elapsed)}/batch | ETA: {eta}"
-                )
-                batch_start = time.time()
-
-            # Find duplicates using service
-            matches = service.find_duplicates(actor, min_confidence=threshold)
-
-            for match in matches:
-                # We only want one record per pair. Convention: actor1.id < actor2.id
-                if actor.pk < match.canonical.pk:
-                    actor1, actor2 = actor, match.canonical
-                else:
-                    actor1, actor2 = match.canonical, actor
-
-                # Skip if exists
-                if ActorResolution.objects.filter(actor1=actor1, actor2=actor2).exists():
-                    stats['skipped_existing'] += 1
-                    continue
-
-                stats['matches'] += 1
-                decision = 'review'
-                review_status = 'pending'
-
-                # Auto-approve logic
-                if auto_approve and match.confidence >= 0.95:
-                    decision = 'auto_merge'
-                    review_status = 'approved'
-                    stats['auto_approved'] += 1
-                elif match.confidence >= 0.95:
-                    decision = 'auto_merge' # Suggestion
-                elif match.confidence >= 0.85:
-                    decision = 'review'
-                else:
-                    decision = 'suggest'
-
-                if decision != 'auto_merge':
-                    stats['pending'] += 1
-
-                self.stdout.write(
-                    f"  Match: {actor1.name} ({actor1.pk}) ↔ {actor2.name} ({actor2.pk}) "
-                    f"[{match.confidence:.2f}] {match.match_reason}"
-                )
-
-                if not dry_run:
-                    ActorResolution.objects.create(
-                        actor1=actor1,
-                        actor2=actor2,
-                        canonical_actor=match.canonical, # Service suggests canonical
-                        confidence=match.confidence,
-                        match_reason=match.match_reason,
-                        decision=decision,
-                        review_status=review_status
-                    )
-
-        total_elapsed = time.time() - start_time
-        self.stdout.write('\n' + '='*60)
-        self.stdout.write('Summary')
-        self.stdout.write('='*60)
-        self.stdout.write(f"Total Time: {self._format_duration(total_elapsed)}")
-        self.stdout.write(f"Scanned: {stats['scanned']}")
-        self.stdout.write(f"Matches found: {stats['matches']}")
-        self.stdout.write(f"Auto-approved: {stats['auto_approved']}")
-        self.stdout.write(f"Pending review: {stats['pending']}")
-        self.stdout.write(f"Skipped existing: {stats['skipped_existing']}")
-

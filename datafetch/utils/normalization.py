@@ -221,6 +221,12 @@ def calculate_name_similarity(name1: str, name2: str) -> float:
     if weak1 == weak2:
         return 0.85
 
+    # Middle name robustness: check if one is a subset of the other
+    words1 = set(weak1.split())
+    words2 = set(weak2.split())
+    if words1 and words2 and (words1.issubset(words2) or words2.issubset(words1)):
+        return 0.80
+
     # Calculate Levenshtein distance for partial similarity
     distance = levenshtein_distance(weak1, weak2)
     max_len = max(len(weak1), len(weak2))

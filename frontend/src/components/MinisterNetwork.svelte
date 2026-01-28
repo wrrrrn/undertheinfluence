@@ -45,10 +45,49 @@
   let gravityY = $state(0.27);
   let collisionPadding = $state(6);
   let showSettings = $state(false);
+  let highlightBridges = $state(true);
+
+  // Compute circular bubbles for minister-pair clusters
+  // Groups shared connections by which minister PAIR they connect
+  // Compute bridge nodes: nodes that connect to 2+ ministers
+  const bridgeNodeIds = $derived.by(() => {
+    if (nodes.length === 0 || processedLinks.length === 0) return new Set<number>();
+
+    // Build map: node -> set of ministers it connects to
+    const nodeToMinisters = new Map<number, Set<number>>();
+    const ministerIds = new Set(nodes.filter(n => n.type === 'minister').map(n => n.id));
+
+    processedLinks.forEach(link => {
+      if (link.link_type === 'donation' || link.link_type === 'meeting') {
+        const src = link.source;
+        const tgt = link.target;
+        if (src && tgt) {
+          if (ministerIds.has(tgt.id) && !ministerIds.has(src.id)) {
+            if (!nodeToMinisters.has(src.id)) nodeToMinisters.set(src.id, new Set());
+            nodeToMinisters.get(src.id)!.add(tgt.id);
+          }
+          if (ministerIds.has(src.id) && !ministerIds.has(tgt.id)) {
+            if (!nodeToMinisters.has(tgt.id)) nodeToMinisters.set(tgt.id, new Set());
+            nodeToMinisters.get(tgt.id)!.add(src.id);
+          }
+        }
+      }
+    });
+
+    // Find nodes connecting 2+ ministers
+    const bridges = new Set<number>();
+    nodeToMinisters.forEach((ministers, nodeId) => {
+      if (ministers.size >= 2) {
+        bridges.add(nodeId);
+      }
+    });
+
+    return bridges;
+  });
 
   function updatePhysics() {
     if (!simulation) return;
-    
+
     simulation.force('link').distance((d: any) => d.link_type === 'role' ? roleLinkDistance : linkDistance);
     simulation.force('charge').strength((d: any) => d.type === 'minister' ? ministerCharge : chargeStrength);
     simulation.force('x').strength(gravityX);
@@ -59,7 +98,7 @@
         : radiusScale(d.total_value);
       return r + collisionPadding;
     });
-    
+
     simulation.alpha(0.3).restart();
   }
 
@@ -70,8 +109,20 @@
   const radiusScale = $derived(
     d3.scaleSqrt()
       .domain([0, Math.max(...nodes.map(n => n.total_value), 1)])
-      .range([4, 28])
+      .range([4, 32]) // Increased max size slightly
   );
+
+  // Separate scale for donors so they aren't dwarfed by ministers
+  const donorScale = $derived(
+    d3.scaleSqrt()
+      .domain([0, Math.max(...nodes.filter(n => n.type !== 'minister').map(n => n.total_value), 1)])
+      .range([4, 24])
+  );
+
+  // ... (inside updatePhysics and template)
+  
+  // Use donorScale for non-ministers
+  // ...
 
   // Natural history color palette
   const colorMap: Record<string, string> = {
@@ -125,6 +176,29 @@
         if (n.type === 'director' || n.type === 'psc') {
           n.role_degree = roleCounts[n.id] || 0;
         }
+      });
+
+      // Identify bridge nodes (connect to multiple ministers)
+      const ministerIds = new Set(data.nodes.filter((n: any) => n.type === 'minister').map((n: any) => n.id));
+      const nodeMinisterConnections: Record<number, Set<number>> = {};
+      data.links.forEach((l: any) => {
+        if (l.link_type === 'donation' || l.link_type === 'meeting') {
+          const src = l.source;
+          const tgt = l.target;
+          if (ministerIds.has(tgt)) {
+            if (!nodeMinisterConnections[src]) nodeMinisterConnections[src] = new Set();
+            nodeMinisterConnections[src].add(tgt);
+          }
+        }
+      });
+
+      // Mark bridge nodes with ministerKey for clustering
+      data.nodes.forEach((n: any) => {
+        const ministers = nodeMinisterConnections[n.id] || new Set();
+        n.ministerCount = ministers.size;
+        n.isBridge = n.ministerCount >= 2;
+        // Create a key from sorted minister IDs for grouping
+        n.ministerKey = Array.from(ministers).sort((a, b) => a - b).join('-');
       });
 
       // Initialize positions before setting state
@@ -217,6 +291,31 @@
           node.x = Math.max(padding + r, Math.min(width - padding - r, node.x));
           node.y = Math.max(padding + r, Math.min(height - padding - r, node.y));
         });
+
+        // Bridge nodes repel each other slightly to spread out
+        if (highlightBridges && bridgeNodeIds.size > 0) {
+          const bridgeNodes = nodes.filter(n => bridgeNodeIds.has(n.id));
+          const repelStrength = 0.5;
+
+          for (let i = 0; i < bridgeNodes.length; i++) {
+            for (let j = i + 1; j < bridgeNodes.length; j++) {
+              const a = bridgeNodes[i];
+              const b = bridgeNodes[j];
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+              if (dist < 150) { // Only repel if close
+                const force = (150 - dist) / dist * repelStrength;
+                a.x -= dx * force * 0.5;
+                a.y -= dy * force * 0.5;
+                b.x += dx * force * 0.5;
+                b.y += dy * force * 0.5;
+              }
+            }
+          }
+        }
+
         // Trigger Svelte reactivity by creating new array references
         nodes = [...nodes];
         processedLinks = [...processedLinks];
@@ -277,6 +376,26 @@
       class="network-svg"
       style="min-height: 600px;"
     >
+      <!-- Bridge node highlight rings (nodes connecting 2+ ministers) -->
+      {#if highlightBridges}
+        <g class="bridge-rings">
+          {#each nodes.filter(n => bridgeNodeIds.has(n.id)) as node}
+            {@const r = (node.type === 'director' || node.type === 'psc')
+              ? 5 + (node.role_degree || 0) * 6
+              : radiusScale(node.total_value)}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={r + 6}
+              fill="none"
+              stroke="rgba(218, 165, 32, 0.8)"
+              stroke-width="3"
+              class="bridge-ring"
+            />
+          {/each}
+        </g>
+      {/if}
+
       <!-- Links -->
       <g class="links">
         {#each processedLinks as link}
@@ -472,6 +591,12 @@
               <input type="range" min="0" max="20" step="1" bind:value={collisionPadding} oninput={updatePhysics} />
             </label>
           </div>
+          <div class="setting-group">
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={highlightBridges} />
+              Highlight Key Connectors
+            </label>
+          </div>
         </div>
       {/if}
     </div>
@@ -498,6 +623,12 @@
         <span class="legend-line"></span>
         <span>{stats.donation_connections || 0} donations</span>
       </div>
+      {#if highlightBridges && bridgeNodeIds.size > 0}
+        <div class="legend-item">
+          <span class="legend-ring"></span>
+          <span>Key Connectors ({bridgeNodeIds.size} connect 2+ ministers)</span>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -719,5 +850,23 @@
     height: 1px;
     background: #2C2C2C;
     opacity: 0.3;
+  }
+
+  .legend-ring {
+    width: 12px;
+    height: 12px;
+    border: 3px solid rgba(218, 165, 32, 0.8);
+    border-radius: 50%;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .checkbox-label input {
+    cursor: pointer;
   }
 </style>

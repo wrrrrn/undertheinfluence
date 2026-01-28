@@ -86,6 +86,75 @@ Backfill `canonical_*` pointers on millions of records using the high-performanc
 docker compose exec api python manage.py populate_canonical --dataset all --batch-size 2000
 ```
 
+### Phase 5.1: Backfill Actor Canonical Entries
+After relationship-level canonical fields are populated, backfill `Actor.canonical_entry` to mark duplicate actors at the entity level. This enables graph visualizations and APIs to consolidate duplicates.
+
+```bash
+# Backfill canonical_entry from existing canonical relationships
+docker compose exec api python manage.py shell -c "
+from datafetch.models import Donation, MeetingAttendee, Actor
+from django.db.models import F
+from django.db import transaction
+
+# From Donations
+with transaction.atomic():
+    donation_pairs = Donation.objects.filter(
+        canonical_donor__isnull=False
+    ).exclude(
+        donor_id=F('canonical_donor_id')
+    ).values('donor_id', 'canonical_donor_id').distinct()
+
+    donor_to_canonical = {}
+    for pair in donation_pairs:
+        if pair['donor_id'] not in donor_to_canonical:
+            donor_to_canonical[pair['donor_id']] = pair['canonical_donor_id']
+
+    updated = 0
+    for donor_id, canonical_id in donor_to_canonical.items():
+        updated += Actor.objects.filter(pk=donor_id, canonical_entry__isnull=True).update(
+            canonical_entry_id=canonical_id
+        )
+    print(f'Updated from donations: {updated}')
+
+# From MeetingAttendees
+with transaction.atomic():
+    attendee_pairs = MeetingAttendee.objects.filter(
+        canonical_actor__isnull=False
+    ).exclude(
+        actor_id=F('canonical_actor_id')
+    ).values('actor_id', 'canonical_actor_id').distinct()
+
+    actor_to_canonical = {}
+    for pair in attendee_pairs:
+        if pair['actor_id'] not in actor_to_canonical:
+            actor_to_canonical[pair['actor_id']] = pair['canonical_actor_id']
+
+    updated = 0
+    for actor_id, canonical_id in actor_to_canonical.items():
+        updated += Actor.objects.filter(pk=actor_id, canonical_entry__isnull=True).update(
+            canonical_entry_id=canonical_id
+        )
+    print(f'Updated from meeting attendees: {updated}')
+
+print(f'Total actors with canonical_entry: {Actor.objects.filter(canonical_entry__isnull=False).count()}')
+"
+```
+
+Alternatively, use the EntityResolutionService for more comprehensive backfilling:
+
+```bash
+docker compose exec api python manage.py shell -c "
+from datafetch.services.entity_resolution import EntityResolutionService
+from datafetch.models import Actor
+
+service = EntityResolutionService(fast_mode=True)
+service.prefetch_all_actors()
+
+stats = service.backfill_canonical_entries(batch_size=1000, min_confidence=0.85)
+print(f'Backfill complete: {stats}')
+"
+```
+
 ### Phase 6: Manual Actor Resolution (Merging)
 Clean up the Actor table itself by identifying and merging duplicate entities (e.g. "David Sainsbury" ↔ "Lord Sainsbury").
 
