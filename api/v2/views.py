@@ -6,6 +6,7 @@ Provides aggregate endpoints and actor detail endpoints with filtering and cachi
 
 import time
 from django.db.models import Sum, Count, Q, Min, Max, Case, When, F, IntegerField, Prefetch
+from django.db.models.functions import Coalesce
 from rest_framework import generics, viewsets, views, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -59,7 +60,9 @@ class TopDonorsView(generics.ListAPIView):
         # Aggregate by effective_donor (canonical resolution)
         # Group by donor_id and include donor object
         # Note: Don't materialize the full queryset yet - let pagination slice it first
-        aggregated = queryset.values('donor_id', 'donor__name').annotate(
+        aggregated = queryset.annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).values('effective_donor_id').annotate(
             total_donated=Sum('value'),
             donation_count=Count('id')
         ).order_by('-total_donated')
@@ -83,7 +86,7 @@ class TopDonorsView(generics.ListAPIView):
         # Now fetch Actor objects only for the paginated results
         if page is not None:
             # Extract donor_ids from the paginated subset only
-            donor_ids = [item['donor_id'] for item in page]
+            donor_ids = [item['effective_donor_id'] for item in page]
 
             # Fetch only the actors we need (e.g., 10-100, not 21k)
             actors_dict = {
@@ -92,16 +95,21 @@ class TopDonorsView(generics.ListAPIView):
             }
 
             # Check which donors are lobbying clients (have Consultancy records)
+            # Use effective_client_id here too? 
+            # ideally yes, but Consultancy model changes needed for full consistency.
+            # For now, check based on the resolved donor IDs.
             lobbying_donor_ids = set(
-                models.Consultancy.objects.filter(client_id__in=donor_ids)
-                .values_list('client_id', flat=True)
+                models.Consultancy.objects.annotate(
+                    effective_client_id=Coalesce('canonical_client_id', 'client_id')
+                ).filter(effective_client_id__in=donor_ids)
+                .values_list('effective_client_id', flat=True)
                 .distinct()
             )
 
             # Build result list with actor objects
             results = []
             for item in page:
-                donor_id = item['donor_id']
+                donor_id = item['effective_donor_id']
                 if donor_id in actors_dict:
                     results.append({
                         'actor': actors_dict[donor_id],
@@ -114,25 +122,27 @@ class TopDonorsView(generics.ListAPIView):
             return paginator.get_paginated_response(serializer.data)
 
         # Fallback for no pagination (shouldn't happen with our pagination class)
-        donor_ids = [item['donor_id'] for item in aggregated_qs]
+        donor_ids = [item['effective_donor_id'] for item in aggregated_qs]
         actors_dict = {
             actor.id: actor
             for actor in models.Actor.objects.filter(id__in=donor_ids)
         }
         lobbying_donor_ids = set(
-            models.Consultancy.objects.filter(client_id__in=donor_ids)
-            .values_list('client_id', flat=True)
+            models.Consultancy.objects.annotate(
+                effective_client_id=Coalesce('canonical_client_id', 'client_id')
+            ).filter(effective_client_id__in=donor_ids)
+            .values_list('effective_client_id', flat=True)
             .distinct()
         )
         results = [
             {
-                'actor': actors_dict[item['donor_id']],
+                'actor': actors_dict[item['effective_donor_id']],
                 'total_donated': item['total_donated'] or 0,
                 'donation_count': item['donation_count'],
-                'is_lobbying_client': item['donor_id'] in lobbying_donor_ids
+                'is_lobbying_client': item['effective_donor_id'] in lobbying_donor_ids
             }
             for item in aggregated_qs
-            if item['donor_id'] in actors_dict
+            if item['effective_donor_id'] in actors_dict
         ]
         serializer = self.get_serializer(results, many=True)
         return Response(serializer.data)
@@ -172,7 +182,9 @@ class TopRecipientsView(generics.ListAPIView):
 
         # Aggregate by effective_recipient
         # Note: Don't materialize the full queryset - let pagination slice it first
-        aggregated = queryset.values('recipient_id', 'recipient__name').annotate(
+        aggregated = queryset.annotate(
+            effective_recipient_id=Coalesce('canonical_recipient_id', 'recipient_id')
+        ).values('effective_recipient_id').annotate(
             total_received=Sum('value'),
             donation_count=Count('id')
         ).order_by('-total_received')
@@ -195,7 +207,7 @@ class TopRecipientsView(generics.ListAPIView):
         # Now fetch Actor objects only for the paginated results
         if page is not None:
             # Extract recipient_ids from the paginated subset only
-            recipient_ids = [item['recipient_id'] for item in page]
+            recipient_ids = [item['effective_recipient_id'] for item in page]
 
             # Fetch only the actors we need
             actors_dict = {
@@ -206,7 +218,7 @@ class TopRecipientsView(generics.ListAPIView):
             # Build result list with actor objects
             results = []
             for item in page:
-                recipient_id = item['recipient_id']
+                recipient_id = item['effective_recipient_id']
                 if recipient_id in actors_dict:
                     results.append({
                         'actor': actors_dict[recipient_id],
@@ -218,19 +230,19 @@ class TopRecipientsView(generics.ListAPIView):
             return paginator.get_paginated_response(serializer.data)
 
         # Fallback for no pagination
-        recipient_ids = [item['recipient_id'] for item in aggregated_qs]
+        recipient_ids = [item['effective_recipient_id'] for item in aggregated_qs]
         actors_dict = {
             actor.id: actor
             for actor in models.Actor.objects.filter(id__in=recipient_ids)
         }
         results = [
             {
-                'actor': actors_dict[item['recipient_id']],
+                'actor': actors_dict[item['effective_recipient_id']],
                 'total_received': item['total_received'] or 0,
                 'donation_count': item['donation_count']
             }
             for item in aggregated_qs
-            if item['recipient_id'] in actors_dict
+            if item['effective_recipient_id'] in actors_dict
         ]
         serializer = self.get_serializer(results, many=True)
         return Response(serializer.data)
@@ -418,33 +430,34 @@ class DualInfluenceView(generics.ListAPIView):
         """
         Find organizations that both donate and lobby.
 
-        Uses subqueries to find actors present in both donations (as donor)
-        and consultancies (as client).
+        Uses set intersection of effective (canonical) actors.
         """
-        from django.db.models import Exists, OuterRef
+        # Get set of unique effective donors (with filters applied later for sums, but here for existence)
+        # Use unfiltered base for existence check first? Or filtered?
+        # Usually dual influence means "is a donor (ever) AND is a client (ever)".
+        # But here we filter donations by date.
+        
+        # Base querysets
+        donations_all = models.Donation.objects.exclude(donor__isnull=True)
+        consultancies_all = models.Consultancy.objects.exclude(client__isnull=True)
 
-        # Actors who have donated
-        donors = models.Donation.objects.filter(
-            donor_id=OuterRef('pk')
-        ).values('donor_id')
+        effective_donors = set(donations_all.annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).values_list('effective_donor_id', flat=True).distinct())
 
-        # Actors who have used lobbying agencies
-        clients = models.Consultancy.objects.filter(
-            client_id=OuterRef('pk')
-        ).values('client_id')
+        effective_clients = set(consultancies_all.annotate(
+            effective_client_id=Coalesce('canonical_client_id', 'client_id')
+        ).values_list('effective_client_id', flat=True).distinct())
 
-        # Find actors in both sets
-        dual_influence_actors = models.Actor.objects.annotate(
-            has_donated=Exists(donors),
-            has_lobbied=Exists(clients)
-        ).filter(has_donated=True, has_lobbied=True)
+        # Intersection
+        actor_ids = list(effective_donors.intersection(effective_clients))
 
         # Now aggregate their activity
-        actor_ids = list(dual_influence_actors.values_list('id', flat=True))
-
-        # Aggregate donations (apply date filters)
-        donation_queryset = models.Donation.objects.filter(
-            donor_id__in=actor_ids
+        # Filter donations by these actors (as effective donor)
+        donation_queryset = models.Donation.objects.annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).filter(
+            effective_donor_id__in=actor_ids
         )
 
         # Apply date filters from query parameters
@@ -454,7 +467,7 @@ class DualInfluenceView(generics.ListAPIView):
         )
         donation_queryset = filterset.qs
 
-        donation_agg = donation_queryset.values('donor_id').annotate(
+        donation_agg = donation_queryset.values('effective_donor_id').annotate(
             total_donated=Sum('value'),
             donation_count=Count('id'),
             first_donation=Min('received_date'),
@@ -462,17 +475,19 @@ class DualInfluenceView(generics.ListAPIView):
         )
 
         # Aggregate consultancies
-        consultancy_agg = models.Consultancy.objects.filter(
-            client_id__in=actor_ids
-        ).values('client_id').annotate(
+        consultancy_agg = models.Consultancy.objects.annotate(
+            effective_client_id=Coalesce('canonical_client_id', 'client_id')
+        ).filter(
+            effective_client_id__in=actor_ids
+        ).values('effective_client_id').annotate(
             lobbying_count=Count('id'),
             first_consultancy=Min('start_date'),
             last_consultancy=Max('start_date')
         )
 
         # Build lookup dicts
-        donation_data = {item['donor_id']: item for item in donation_agg}
-        consultancy_data = {item['client_id']: item for item in consultancy_agg}
+        donation_data = {item['effective_donor_id']: item for item in donation_agg}
+        consultancy_data = {item['effective_client_id']: item for item in consultancy_agg}
 
         # Combine data
         results = []
@@ -481,10 +496,9 @@ class DualInfluenceView(generics.ListAPIView):
             cons_data = consultancy_data.get(actor_id, {})
 
             if don_data and cons_data:
-                # Calculate activity span (handle that consultancy dates are strings)
+                # Calculate activity span
                 first_donation = don_data.get('first_donation')
                 last_donation = don_data.get('last_donation')
-                # Consultancy dates are stored as strings, use them directly
                 first_consultancy = cons_data.get('first_consultancy')
                 last_consultancy = cons_data.get('last_consultancy')
 
@@ -493,7 +507,6 @@ class DualInfluenceView(generics.ListAPIView):
                     'total_donated': don_data.get('total_donated', 0),
                     'donation_count': don_data.get('donation_count', 0),
                     'lobbying_count': cons_data.get('lobbying_count', 0),
-                    # Use donation dates since they're actual dates
                     'first_activity': first_donation,
                     'last_activity': last_donation,
                 })
@@ -940,7 +953,9 @@ class HomepageStatsView(views.APIView):
         # Get all donors ranked by total donated (with filters applied)
         donor_totals = donations_qs.exclude(
             donor__isnull=True
-        ).values('donor_id').annotate(
+        ).annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).values('effective_donor_id').annotate(
             total=Sum('value')
         ).order_by('-total')
 
@@ -961,21 +976,24 @@ class HomepageStatsView(views.APIView):
 
         # Dual influence count
         # Count organizations that both donate AND use lobbying agencies (respecting filters)
-        from django.db.models import Exists, OuterRef
+        
+        # Get set of unique effective donors
+        effective_donor_ids = set(donations_qs.exclude(
+            donor__isnull=True
+        ).annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).values_list('effective_donor_id', flat=True).distinct())
 
-        # Use filtered donations queryset for dual influence calculation
-        donors = donations_qs.filter(
-            donor_id=OuterRef('pk')
-        ).values('donor_id')
+        # Get set of unique effective clients (lobbying)
+        # Note: Consultancies don't have filters applied here usually, but if we wanted to be strict we could.
+        # Ideally we should filter consultancies by date too if date filters are present, but for now take all.
+        effective_client_ids = set(models.Consultancy.objects.exclude(
+            client__isnull=True
+        ).annotate(
+            effective_client_id=Coalesce('canonical_client_id', 'client_id')
+        ).values_list('effective_client_id', flat=True).distinct())
 
-        clients = models.Consultancy.objects.filter(
-            client_id=OuterRef('pk')
-        ).values('client_id')
-
-        dual_influence_count = models.Actor.objects.annotate(
-            has_donated=Exists(donors),
-            has_lobbied=Exists(clients)
-        ).filter(has_donated=True, has_lobbied=True).count()
+        dual_influence_count = len(effective_donor_ids.intersection(effective_client_ids))
 
         data = {
             'total_donations': donation_stats['total_donations'] or 0,
@@ -1088,12 +1106,17 @@ class MinisterNetworkView(views.APIView):
         ).order_by('-total_received')[:limit]
 
         top_minister_ids = [m['recipient_id'] for m in minister_totals]
+        
+        from django.db.models.functions import Coalesce
 
         # Aggregate donations by donor -> minister (only for top ministers)
+        # Use effective_donor_id to group resolved duplicates
         connections = donations_qs.filter(
             recipient_id__in=top_minister_ids
+        ).annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
         ).values(
-            'donor_id', 'recipient_id'
+            'effective_donor_id', 'recipient_id'
         ).annotate(
             total_value=Sum('value'),
             donation_count=Count('id')
@@ -1106,13 +1129,33 @@ class MinisterNetworkView(views.APIView):
         links = []
 
         # Get all unique actor IDs
-        donor_ids = set(c['donor_id'] for c in connections)
+        donor_ids = set(c['effective_donor_id'] for c in connections)
         all_actor_ids = set(top_minister_ids) | donor_ids
 
         # Fetch all actors
         actors = {
             a.id: a for a in models.Actor.objects.filter(id__in=all_actor_ids)
         }
+
+        # Fetch Companies House identifiers
+        from django.contrib.contenttypes.models import ContentType
+        # We need to find identifiers for these actors.
+        # Identifiers are generic relations, so we need content type for Actor/Organization
+        # But efficiently, we can just query Identifier where object_id matches (if IDs are unique across models or we know the type)
+        # Actor IDs are unique.
+        
+        ch_identifiers = {}
+        # Get content types for Actor and its subclasses if needed, but usually we just query by object_id if we assume unique IDs or check generic relation
+        # Easier: Filter by scheme and object_id
+        
+        # Note: Identifiers are attached to Actor (parent of Person/Org)
+        identifiers_qs = models.Identifier.objects.filter(
+            scheme='uk.gov.companieshouse',
+            object_id__in=all_actor_ids
+        ).values('object_id', 'identifier')
+        
+        for item in identifiers_qs:
+            ch_identifiers[item['object_id']] = item['identifier']
 
         # Get minister roles for display
         minister_roles = {}
@@ -1165,12 +1208,13 @@ class MinisterNetworkView(views.APIView):
                     'role': minister_roles.get(mid, 'Minister'),
                     'total_value': float(m['total_received']),
                     'meeting_count': minister_meeting_counts.get(mid, 0),
+                    'companies_house_number': ch_identifiers.get(mid),
                     'url': f'/person/{mid}/'
                 }
 
         # Build donor nodes and links
         for conn in connections:
-            donor_id = conn['donor_id']
+            donor_id = conn['effective_donor_id']
             recipient_id = conn['recipient_id']
 
             if donor_id in actors and recipient_id in nodes_dict:
@@ -1191,6 +1235,7 @@ class MinisterNetworkView(views.APIView):
                         'total_value': 0,
                         'donation_count': 0,
                         'meeting_count': donor_meeting_counts.get(donor_id, 0),
+                        'companies_house_number': ch_identifiers.get(donor_id),
                         'url': f'/actor/{donor_id}/'
                     }
 
@@ -1206,6 +1251,64 @@ class MinisterNetworkView(views.APIView):
                     'count': conn['donation_count'],
                     'link_type': 'donation'
                 })
+
+        # ============================================
+        # Add Directors and PSCs for Organization nodes
+        # ============================================
+        
+        # Identify organization nodes
+        org_ids = [
+            nid for nid, node in nodes_dict.items()
+            if node['type'] == 'organization'
+        ]
+        
+        if org_ids:
+            # Fetch memberships
+            memberships = models.Membership.objects.filter(
+                organization_id__in=org_ids
+            ).filter(
+                Q(end_date__isnull=True) | Q(end_date='')
+            ).filter(
+                Q(role__icontains='director') |
+                Q(role__icontains='significant control') |
+                Q(role__icontains='shareholder')
+            ).select_related('person')
+            
+            # Map role to simpler type
+            def get_role_type(role_name):
+                r = role_name.lower()
+                if 'significant control' in r or 'shareholder' in r:
+                    return 'psc'
+                return 'director'
+
+            for m in memberships:
+                pid = m.person_id
+                oid = m.organization_id
+                
+                # Only add if organization is still in nodes (it should be)
+                if oid in nodes_dict:
+                    # Add person node if not exists
+                    if pid not in nodes_dict:
+                        nodes_dict[pid] = {
+                            'id': pid,
+                            'name': m.person.name,
+                            'type': get_role_type(m.role),
+                            'role': m.role,
+                            'total_value': 0,
+                            'donation_count': 0,
+                            'meeting_count': 0,
+                            'url': f'/person/{pid}/'
+                        }
+                    
+                    # Add link
+                    links.append({
+                        'source': pid,
+                        'target': oid,
+                        'value': 1, # Visual weight
+                        'count': 1,
+                        'link_type': 'role', # New link type
+                        'role_name': m.role
+                    })
 
         # ============================================
         # Add meeting attendees as nodes and links

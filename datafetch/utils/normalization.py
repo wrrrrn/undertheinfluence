@@ -10,6 +10,11 @@ Phase 3.1 Implementation - Weighted Alias System
 import re
 from typing import Tuple
 
+# Common titles/honorifics to strip during weak normalization
+TITLES = [
+    'lord', 'baroness', 'sir', 'dame', 'dr', 'prof', 'mr', 'mrs', 'ms', 'cllr',
+    'rt', 'hon', 'rev', 'viscount', 'earl', 'countess', 'duke', 'duchess'
+]
 
 def normalize_actor_name(name: str, strength: str = 'weak') -> str:
     """
@@ -104,7 +109,11 @@ def normalize_actor_name(name: str, strength: str = 'weak') -> str:
             normalized = re.sub(suffix, '', normalized)
 
         # Remove common words that add no meaning
-        normalized = re.sub(r'\b(the|and|of|for|in|at|on)\b', '', normalized)
+        normalized = re.sub(r'\b(the|and|of|for)\b', '', normalized)
+
+        # Remove titles/honorifics
+        titles_pattern = r'\b(' + '|'.join(TITLES) + r')\b'
+        normalized = re.sub(titles_pattern, '', normalized)
 
         # Collapse whitespace
         normalized = re.sub(r'\s+', ' ', normalized)
@@ -153,8 +162,11 @@ def build_search_key(name: str) -> str:
     if not name:
         return ""
 
-    # Remove all non-alphanumeric characters and convert to lowercase
-    clean = re.sub(r'[^\w\s]', '', name.lower())
+    # Normalize first (weak mode strips titles/punctuation)
+    clean = normalize_actor_name(name, strength='weak')
+
+    # Remove all non-alphanumeric characters (just in case normalize left any, though it shouldn't)
+    clean = re.sub(r'[^\w\s]', '', clean)
 
     # Split into words and sort alphabetically
     words = sorted(clean.split())

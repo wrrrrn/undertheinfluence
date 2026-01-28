@@ -36,6 +36,33 @@
   let simulation: any;
   let simulationReady = $state(false);
 
+  // Physics Settings (State)
+  let chargeStrength = $state(-70);
+  let ministerCharge = $state(-430);
+  let linkDistance = $state(190);
+  let roleLinkDistance = $state(150);
+  let gravityX = $state(0.14);
+  let gravityY = $state(0.27);
+  let collisionPadding = $state(6);
+  let showSettings = $state(false);
+
+  function updatePhysics() {
+    if (!simulation) return;
+    
+    simulation.force('link').distance((d: any) => d.link_type === 'role' ? roleLinkDistance : linkDistance);
+    simulation.force('charge').strength((d: any) => d.type === 'minister' ? ministerCharge : chargeStrength);
+    simulation.force('x').strength(gravityX);
+    simulation.force('y').strength(gravityY);
+    simulation.force('collide').radius((d: any) => {
+      const r = (d.type === 'director' || d.type === 'psc')
+        ? 5 + (d.role_degree || 0) * 6
+        : radiusScale(d.total_value);
+      return r + collisionPadding;
+    });
+    
+    simulation.alpha(0.3).restart();
+  }
+
   // Active node is pinned if exists, otherwise hovered
   const activeNode = $derived(pinnedNode || hoveredNode);
 
@@ -51,7 +78,9 @@
     minister: '#C54B3C',    // Terracotta red
     person: '#4A6741',      // Forest green
     organization: '#6B5B4F', // Warm brown
-    donor: '#4A6741'        // Forest green (default for donors)
+    donor: '#4A6741',       // Forest green (default for donors)
+    director: '#5B7F95',    // Slate blue
+    psc: '#B89B5F'          // Gold
   };
 
   async function fetchData() {
@@ -71,22 +100,57 @@
 
       const data = await response.json();
 
+      // Filter out meetings from the graph (keep donations and roles)
+      data.links = data.links.filter((l: any) => l.link_type === 'donation' || l.link_type === 'role');
+
+      // Filter out nodes that are only meeting attendees (no donations and not a minister)
+      // Keep ministers, donors (value > 0), directors, and pscs
+      data.nodes = data.nodes.filter((n: any) => 
+        n.type === 'minister' || 
+        n.total_value > 0 || 
+        n.type === 'director' || 
+        n.type === 'psc'
+      );
+
+      // Calculate role degree (connections) for directors/PSCs
+      const roleCounts: Record<string, number> = {};
+      data.links.forEach((l: any) => {
+        if (l.link_type === 'role') {
+          // Source is the person ID
+          roleCounts[l.source] = (roleCounts[l.source] || 0) + 1;
+        }
+      });
+
+      data.nodes.forEach((n: any) => {
+        if (n.type === 'director' || n.type === 'psc') {
+          n.role_degree = roleCounts[n.id] || 0;
+        }
+      });
+
       // Initialize positions before setting state
       const nodesWithPositions = data.nodes.map((node: any, i: number) => {
         if (node.type === 'minister') {
-          // Ministers in center
+          // Ministers in a wide circle in center
+          const angle = (i / data.nodes.length) * 2 * Math.PI;
           return {
             ...node,
-            x: width / 2 + (Math.random() - 0.5) * 100,
-            y: height / 2 + (Math.random() - 0.5) * 100
+            x: width / 2 + Math.cos(angle) * 150,
+            y: height / 2 + Math.sin(angle) * 150
+          };
+        } else if (node.type === 'director' || node.type === 'psc') {
+          // Directors/PSCs start near center too, pulled by force
+          return {
+            ...node,
+            x: width / 2 + (Math.random() - 0.5) * 300,
+            y: height / 2 + (Math.random() - 0.5) * 300
           };
         } else {
           // Donors around the edge
           const angle = (i / data.nodes.length) * 2 * Math.PI;
           return {
             ...node,
-            x: width / 2 + Math.cos(angle) * 300,
-            y: height / 2 + Math.sin(angle) * 300
+            x: width / 2 + Math.cos(angle) * 450,
+            y: height / 2 + Math.sin(angle) * 450
           };
         }
       });
@@ -122,22 +186,34 @@
     })).filter(l => l.source && l.target);
 
     // Create force simulation - tighter packing for more nodes
-    const padding = 50;
+    const padding = 100;
+
+    if (simulation) simulation.stop();
 
     simulation = forceSimulation(nodes)
+      .alphaDecay(0.01) // Slower decay for more settling time
       .force('link', forceLink(processedLinks)
         .id((d: any) => d.id)
-        .distance(70)
-        .strength(0.4))
+        .distance((d: any) => d.link_type === 'role' ? roleLinkDistance : linkDistance)
+        .strength(0.3))
       .force('charge', forceManyBody()
-        .strength((d: any) => d.type === 'minister' ? -60 : -20))
-      .force('center', forceCenter(width / 2, height / 2).strength(0.25))
+        .strength((d: any) => d.type === 'minister' ? ministerCharge : chargeStrength))
+      .force('center', forceCenter(width / 2, height / 2).strength(0.05))
+      .force('x', d3.forceX(width / 2).strength(gravityX))
+      .force('y', d3.forceY(height / 2).strength(gravityY))
       .force('collide', forceCollide()
-        .radius((d: any) => radiusScale(d.total_value) + 5))
+        .radius((d: any) => {
+          const r = (d.type === 'director' || d.type === 'psc')
+            ? 5 + (d.role_degree || 0) * 6
+            : radiusScale(d.total_value);
+          return r + collisionPadding; // Add buffer
+        }))
       .on('tick', () => {
         // Keep nodes within bounds
         nodes.forEach(node => {
-          const r = radiusScale(node.total_value);
+          const r = (node.type === 'director' || node.type === 'psc')
+            ? 5 + (node.role_degree || 0) * 3
+            : radiusScale(node.total_value);
           node.x = Math.max(padding + r, Math.min(width - padding - r, node.x));
           node.y = Math.max(padding + r, Math.min(height - padding - r, node.y));
         });
@@ -206,19 +282,20 @@
         {#each processedLinks as link}
           {#if link.source?.x && link.target?.x}
             {@const isDonation = link.link_type === 'donation'}
+            {@const isRole = link.link_type === 'role'}
             <line
               x1={link.source.x}
               y1={link.source.y}
               x2={link.target.x}
               y2={link.target.y}
-              stroke={isDonation ? '#6B5B4F' : '#7B9E87'}
+              stroke={isDonation ? '#6B5B4F' : (isRole ? '#5B7F95' : '#7B9E87')}
               stroke-opacity={activeNode ?
                 (activeNode.id === link.source.id || activeNode.id === link.target.id ? 0.7 : 0.03)
                 : 0.15}
               stroke-width={isDonation
                 ? Math.max(0.5, Math.log10(link.value / 1000) * 0.8)
-                : Math.max(0.5, Math.log10(link.count + 1) * 1.2)}
-              stroke-dasharray={isDonation ? 'none' : '4,2'}
+                : (isRole ? 1 : Math.max(0.5, Math.log10(link.count + 1) * 1.2))}
+              stroke-dasharray={isDonation ? 'none' : (isRole ? '2,2' : '4,2')}
             />
           {/if}
         {/each}
@@ -230,7 +307,10 @@
           {#if node.x && node.y}
             {@const isActive = activeNode?.id === node.id}
             {@const isPinned = pinnedNode?.id === node.id}
-            {@const baseRadius = radiusScale(node.total_value)}
+            {@const isConnector = (node.type === 'director' || node.type === 'psc') && node.role_degree > 1}
+            {@const baseRadius = (node.type === 'director' || node.type === 'psc')
+              ? 5 + (node.role_degree || 0) * 6
+              : radiusScale(node.total_value)}
             {@const displayRadius = isActive ? baseRadius * 1.15 : baseRadius}
             <g
               class="node"
@@ -246,17 +326,22 @@
               <circle
                 r={displayRadius}
                 fill={colorMap[node.type] || '#9A9285'}
-                stroke={isPinned ? '#2C2C2C' : (node.type === 'minister' ? '#8B3A2F' : 'none')}
-                stroke-width={isPinned ? 2 : (node.type === 'minister' ? 1.5 : 0)}
+                stroke={isPinned || isConnector ? '#2C2C2C' : (node.type === 'minister' ? '#8B3A2F' : 'none')}
+                stroke-width={isPinned || isConnector ? 3 : (node.type === 'minister' ? 1.5 : 0)}
                 class="node-circle"
               />
-              {#if node.type === 'minister' || baseRadius > 12 || isActive}
+              {#if node.type === 'minister' || baseRadius > 12 || isActive || isConnector}
                 <text
                   y={displayRadius + 12}
                   text-anchor="middle"
                   class="node-label"
                   fill="#2C2C2C"
-                  font-weight={isActive ? '600' : '500'}
+                  font-weight={isActive || isConnector ? '600' : '500'}
+                  paint-order="stroke"
+                  stroke="#FAF8F5"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
                   {node.name.length > 20 ? node.name.slice(0, 18) + '...' : node.name}
                 </text>
@@ -274,6 +359,9 @@
       )}
       {@const meetingLinks = processedLinks.filter(l =>
         (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'meeting'
+      )}
+      {@const roleLinks = processedLinks.filter(l =>
+        (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'role'
       )}
       {@const donationCount = activeNode.donation_count || donationLinks.reduce((sum, l) => sum + l.count, 0)}
       {@const meetingCount = activeNode.meeting_count || meetingLinks.reduce((sum, l) => sum + l.count, 0)}
@@ -302,6 +390,12 @@
               <span class="detail-stat-label">meetings</span>
             </div>
           {/if}
+          {#if roleLinks.length > 0}
+             <div class="detail-stat">
+              <span class="detail-stat-value">{roleLinks.length}</span>
+              <span class="detail-stat-label">associations</span>
+            </div>
+          {/if}
           {#if donationLinks.length > 0 || meetingLinks.length > 0}
             <div class="detail-stat">
               <span class="detail-stat-value">{donationLinks.length + meetingLinks.length}</span>
@@ -310,11 +404,77 @@
           {/if}
         </div>
 
+        {#if activeNode.companies_house_number}
+          <a
+            href="https://find-and-update.company-information.service.gov.uk/company/{activeNode.companies_house_number}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="detail-link"
+            style="margin-top: 8px; display: block;"
+          >
+            View on Companies House →
+          </a>
+        {/if}
+
         <a href={activeNode.url} class="detail-link">
           View full profile →
         </a>
       </div>
     {/if}
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" class:open={showSettings}>
+      <button class="settings-toggle" onclick={() => showSettings = !showSettings}>
+        {showSettings ? 'Hide Settings' : 'Tweak Physics'}
+      </button>
+      
+      {#if showSettings}
+        <div class="settings-content">
+          <div class="setting-group">
+            <label>
+              Global Repulsion: {chargeStrength}
+              <input type="range" min="-500" max="-10" step="10" bind:value={chargeStrength} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Minister Repulsion: {ministerCharge}
+              <input type="range" min="-1000" max="-50" step="10" bind:value={ministerCharge} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Donation Link Length: {linkDistance}
+              <input type="range" min="50" max="400" step="10" bind:value={linkDistance} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Role Link Length: {roleLinkDistance}
+              <input type="range" min="10" max="150" step="5" bind:value={roleLinkDistance} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Gravity X: {gravityX}
+              <input type="range" min="0.01" max="1" step="0.01" bind:value={gravityX} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Gravity Y: {gravityY}
+              <input type="range" min="0.01" max="1" step="0.01" bind:value={gravityY} oninput={updatePhysics} />
+            </label>
+          </div>
+          <div class="setting-group">
+            <label>
+              Collision Padding: {collisionPadding}
+              <input type="range" min="0" max="20" step="1" bind:value={collisionPadding} oninput={updatePhysics} />
+            </label>
+          </div>
+        </div>
+      {/if}
+    </div>
 
     <!-- Legend -->
     <div class="legend">
@@ -326,19 +486,17 @@
         <span class="legend-dot" style="background: #4A6741;"></span>
         <span>Donors ({stats.total_donors || 0})</span>
       </div>
-      {#if stats.total_attendees > 0}
-        <div class="legend-item">
-          <span class="legend-dot" style="background: #7B9E87;"></span>
-          <span>Meeting attendees ({stats.total_attendees})</span>
-        </div>
-      {/if}
+      <div class="legend-item">
+        <span class="legend-dot" style="background: #5B7F95;"></span>
+        <span>Directors</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot" style="background: #B89B5F;"></span>
+        <span>PSCs (Significant Control)</span>
+      </div>
       <div class="legend-item">
         <span class="legend-line"></span>
         <span>{stats.donation_connections || 0} donations</span>
-      </div>
-      <div class="legend-item">
-        <span class="legend-line" style="background: #7B9E87; border-style: dashed;"></span>
-        <span>{stats.meeting_connections || 0} meetings</span>
       </div>
     </div>
   {/if}
@@ -482,6 +640,54 @@
 
   .detail-link:hover {
     text-decoration: underline;
+  }
+
+  .settings-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    font-family: 'Satoshi', sans-serif;
+  }
+
+  .settings-toggle {
+    background: #FAF8F5;
+    border: 1px solid #2C2C2C;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .settings-content {
+    background: #FAF8F5;
+    border: 1px solid #2C2C2C;
+    padding: 16px;
+    margin-top: 8px;
+    width: 250px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+
+  .setting-group {
+    margin-bottom: 12px;
+  }
+
+  .setting-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .setting-group label {
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    font-weight: 500;
+    color: #5A5A5A;
+  }
+
+  .setting-group input {
+    margin-top: 4px;
+    width: 100%;
   }
 
   .legend {

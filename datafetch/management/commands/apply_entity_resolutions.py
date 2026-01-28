@@ -98,30 +98,67 @@ class Command(BaseCommand):
                 f"(confidence: {resolution.confidence:.2f}, {resolution.match_reason})"
             )
 
-            # Find all meeting attendees with either actor
-            attendees = models.MeetingAttendee.objects.filter(
-                Q(actor=resolution.actor1) | Q(actor=resolution.actor2)
-            )
-
-            attendee_count = attendees.count()
+            # Find and update records for either actor
+            actors_to_update = [resolution.actor1, resolution.actor2]
 
             if not dry_run:
                 with transaction.atomic():
-                    # Update all attendees to point to canonical actor
-                    updated = attendees.update(canonical_actor=resolution.canonical_actor)
+                    # 1. Update MeetingAttendee (actor)
+                    updated_attendees = models.MeetingAttendee.objects.filter(
+                        actor__in=actors_to_update
+                    ).update(canonical_actor=resolution.canonical_actor)
 
-                    stats['attendees_updated'] += updated
+                    # 2. Update Donation (donor)
+                    updated_donors = models.Donation.objects.filter(
+                        donor__in=actors_to_update
+                    ).update(canonical_donor=resolution.canonical_actor)
+
+                    # 3. Update Donation (recipient)
+                    updated_recipients = models.Donation.objects.filter(
+                        recipient__in=actors_to_update
+                    ).update(canonical_recipient=resolution.canonical_actor)
+
+                    # 4. Update Consultancy (client)
+                    updated_clients = models.Consultancy.objects.filter(
+                        client__in=actors_to_update
+                    ).update(canonical_client=resolution.canonical_actor)
+
+                    # 5. Update Consultancy (agency)
+                    updated_agencies = models.Consultancy.objects.filter(
+                        agency__in=actors_to_update
+                    ).update(canonical_agency=resolution.canonical_actor)
+
+                    # Update stats
+                    stats['attendees_updated'] += updated_attendees
                     stats['resolutions_applied'] += 1
 
                     # Count affected meetings
-                    meetings = models.MinisterialMeeting.objects.filter(
-                        attendees__in=attendees
-                    ).distinct()
-                    stats['meetings_affected'] += meetings.count()
+                    meetings_count = models.MinisterialMeeting.objects.filter(
+                        attendees__actor__in=actors_to_update
+                    ).distinct().count()
+                    stats['meetings_affected'] += meetings_count
+
+                    # Log detail if significant changes
+                    total_changes = (updated_attendees + updated_donors + updated_recipients +
+                                     updated_clients + updated_agencies)
+
+                    if total_changes > 0:
+                        self.stdout.write(f"    Updated: {updated_attendees} attendees, "
+                                          f"{updated_donors} donors, {updated_recipients} recipients, "
+                                          f"{updated_clients} clients, {updated_agencies} agencies")
 
             else:
-                self.stdout.write(f"    [DRY RUN] Would update {attendee_count} attendees")
-                stats['attendees_updated'] += attendee_count
+                # Dry run counts
+                updated_attendees = models.MeetingAttendee.objects.filter(actor__in=actors_to_update).count()
+                updated_donors = models.Donation.objects.filter(donor__in=actors_to_update).count()
+                updated_recipients = models.Donation.objects.filter(recipient__in=actors_to_update).count()
+                updated_clients = models.Consultancy.objects.filter(client__in=actors_to_update).count()
+                updated_agencies = models.Consultancy.objects.filter(agency__in=actors_to_update).count()
+
+                self.stdout.write(f"    [DRY RUN] Would update: {updated_attendees} attendees, "
+                                  f"{updated_donors} donors, {updated_recipients} recipients, "
+                                  f"{updated_clients} clients, {updated_agencies} agencies")
+                stats['attendees_updated'] += updated_attendees
                 stats['resolutions_applied'] += 1
 
         # Summary
