@@ -37,19 +37,17 @@
   let simulationReady = $state(false);
 
   // Physics Settings (State)
-  let chargeStrength = $state(-70);
-  let ministerCharge = $state(-430);
+  let chargeStrength = $state(-40);
+  let ministerCharge = $state(-590);
   let linkDistance = $state(190);
   let roleLinkDistance = $state(150);
   let gravityX = $state(0.14);
-  let gravityY = $state(0.27);
+  let gravityY = $state(0.25);
   let collisionPadding = $state(6);
   let showSettings = $state(false);
   let highlightBridges = $state(true);
 
-  // Compute circular bubbles for minister-pair clusters
-  // Groups shared connections by which minister PAIR they connect
-  // Compute bridge nodes: nodes that connect to 2+ ministers
+  // Compute bridge nodes: donors/orgs that connect to 2+ ministers
   const bridgeNodeIds = $derived.by(() => {
     if (nodes.length === 0 || processedLinks.length === 0) return new Set<number>();
 
@@ -85,6 +83,44 @@
     return bridges;
   });
 
+  // Compute corporate bridge nodes: directors/PSCs that connect to 2+ companies
+  const corporateBridgeIds = $derived.by(() => {
+    if (nodes.length === 0 || processedLinks.length === 0) return new Set<number>();
+
+    // Build map: director/PSC -> set of organizations they connect to
+    const personToOrgs = new Map<number, Set<number>>();
+    const directorPscIds = new Set(nodes.filter(n => n.type === 'director' || n.type === 'psc').map(n => n.id));
+    const orgIds = new Set(nodes.filter(n => n.type === 'organization').map(n => n.id));
+
+    processedLinks.forEach(link => {
+      if (link.link_type === 'role') {
+        const src = link.source;
+        const tgt = link.target;
+        if (src && tgt) {
+          // Director/PSC -> Organization links
+          if (directorPscIds.has(src.id) && orgIds.has(tgt.id)) {
+            if (!personToOrgs.has(src.id)) personToOrgs.set(src.id, new Set());
+            personToOrgs.get(src.id)!.add(tgt.id);
+          }
+          if (directorPscIds.has(tgt.id) && orgIds.has(src.id)) {
+            if (!personToOrgs.has(tgt.id)) personToOrgs.set(tgt.id, new Set());
+            personToOrgs.get(tgt.id)!.add(src.id);
+          }
+        }
+      }
+    });
+
+    // Find directors/PSCs connecting 2+ organizations
+    const bridges = new Set<number>();
+    personToOrgs.forEach((orgs, personId) => {
+      if (orgs.size >= 2) {
+        bridges.add(personId);
+      }
+    });
+
+    return bridges;
+  });
+
   function updatePhysics() {
     if (!simulation) return;
 
@@ -104,6 +140,74 @@
 
   // Active node is pinned if exists, otherwise hovered
   const activeNode = $derived(pinnedNode || hoveredNode);
+
+  // Compute connected node IDs for the active node (including 2-hop connections)
+  const connectedNodeIds = $derived.by(() => {
+    if (!activeNode || processedLinks.length === 0) return new Set<number>();
+
+    const connected = new Set<number>();
+    connected.add(activeNode.id); // Include the active node itself
+
+    // First pass: direct connections
+    const directConnections = new Set<number>();
+    processedLinks.forEach(link => {
+      if (link.source?.id === activeNode.id) {
+        directConnections.add(link.target.id);
+        connected.add(link.target.id);
+      } else if (link.target?.id === activeNode.id) {
+        directConnections.add(link.source.id);
+        connected.add(link.source.id);
+      }
+    });
+
+    // Second pass: 2-hop connections through organizations
+    // If hovering minister -> show directors/PSCs of donor orgs
+    // If hovering director/PSC -> show ministers their org donated to
+    // If hovering org -> show both ministers and directors/PSCs
+    const orgIds = new Set(nodes.filter(n => n.type === 'organization').map(n => n.id));
+    const ministerIds = new Set(nodes.filter(n => n.type === 'minister').map(n => n.id));
+
+    directConnections.forEach(connectedId => {
+      // If the direct connection is an organization, find its directors/PSCs and ministers
+      if (orgIds.has(connectedId)) {
+        processedLinks.forEach(link => {
+          // Role links connect directors/PSCs to organizations
+          if (link.link_type === 'role') {
+            if (link.source?.id === connectedId) connected.add(link.target.id);
+            if (link.target?.id === connectedId) connected.add(link.source.id);
+          }
+          // Donation links connect organizations to ministers
+          if (link.link_type === 'donation') {
+            if (link.source?.id === connectedId) connected.add(link.target.id);
+            if (link.target?.id === connectedId) connected.add(link.source.id);
+          }
+        });
+      }
+      // If the direct connection is a minister, find orgs that donated and their directors
+      if (ministerIds.has(connectedId)) {
+        processedLinks.forEach(link => {
+          if (link.link_type === 'donation') {
+            let orgId: number | null = null;
+            if (link.target?.id === connectedId && orgIds.has(link.source?.id)) {
+              orgId = link.source.id;
+            }
+            if (orgId) {
+              connected.add(orgId);
+              // Now find directors/PSCs of this org
+              processedLinks.forEach(roleLink => {
+                if (roleLink.link_type === 'role') {
+                  if (roleLink.source?.id === orgId) connected.add(roleLink.target.id);
+                  if (roleLink.target?.id === orgId) connected.add(roleLink.source.id);
+                }
+              });
+            }
+          }
+        });
+      }
+    });
+
+    return connected;
+  });
 
   // Scale for node radius based on value - smaller for denser packing
   const radiusScale = $derived(
@@ -202,25 +306,31 @@
       });
 
       // Initialize positions before setting state
-      const nodesWithPositions = data.nodes.map((node: any, i: number) => {
+      // Group by type first for proper circular distribution
+      const ministers = data.nodes.filter((n: any) => n.type === 'minister');
+      const directors = data.nodes.filter((n: any) => n.type === 'director' || n.type === 'psc');
+      const others = data.nodes.filter((n: any) => n.type !== 'minister' && n.type !== 'director' && n.type !== 'psc');
+
+      const nodesWithPositions = data.nodes.map((node: any) => {
         if (node.type === 'minister') {
-          // Ministers in a wide circle in center
-          const angle = (i / data.nodes.length) * 2 * Math.PI;
+          const idx = ministers.indexOf(node);
+          const angle = (idx / ministers.length) * 2 * Math.PI;
           return {
             ...node,
-            x: width / 2 + Math.cos(angle) * 150,
-            y: height / 2 + Math.sin(angle) * 150
+            x: width / 2 + Math.cos(angle) * 200,
+            y: height / 2 + Math.sin(angle) * 200
           };
         } else if (node.type === 'director' || node.type === 'psc') {
-          // Directors/PSCs start near center too, pulled by force
+          const idx = directors.indexOf(node);
+          const angle = (idx / directors.length) * 2 * Math.PI;
           return {
             ...node,
-            x: width / 2 + (Math.random() - 0.5) * 300,
-            y: height / 2 + (Math.random() - 0.5) * 300
+            x: width / 2 + Math.cos(angle) * 300,
+            y: height / 2 + Math.sin(angle) * 300
           };
         } else {
-          // Donors around the edge
-          const angle = (i / data.nodes.length) * 2 * Math.PI;
+          const idx = others.indexOf(node);
+          const angle = (idx / others.length) * 2 * Math.PI;
           return {
             ...node,
             x: width / 2 + Math.cos(angle) * 450,
@@ -259,20 +369,20 @@
       target: nodeById.get(l.target)
     })).filter(l => l.source && l.target);
 
-    // Create force simulation - tighter packing for more nodes
-    const padding = 100;
+    // Create force simulation - allow overflow past edges
+    const padding = -50; // Negative padding allows overflow
 
     if (simulation) simulation.stop();
 
     simulation = forceSimulation(nodes)
-      .alphaDecay(0.01) // Slower decay for more settling time
+      .alphaDecay(0.02) // Faster decay so it settles
       .force('link', forceLink(processedLinks)
         .id((d: any) => d.id)
         .distance((d: any) => d.link_type === 'role' ? roleLinkDistance : linkDistance)
         .strength(0.3))
       .force('charge', forceManyBody()
         .strength((d: any) => d.type === 'minister' ? ministerCharge : chargeStrength))
-      .force('center', forceCenter(width / 2, height / 2).strength(0.05))
+      // Use only forceX/Y for centering (not forceCenter which shifts center of mass)
       .force('x', d3.forceX(width / 2).strength(gravityX))
       .force('y', d3.forceY(height / 2).strength(gravityY))
       .force('collide', forceCollide()
@@ -283,38 +393,8 @@
           return r + collisionPadding; // Add buffer
         }))
       .on('tick', () => {
-        // Keep nodes within bounds
-        nodes.forEach(node => {
-          const r = (node.type === 'director' || node.type === 'psc')
-            ? 5 + (node.role_degree || 0) * 3
-            : radiusScale(node.total_value);
-          node.x = Math.max(padding + r, Math.min(width - padding - r, node.x));
-          node.y = Math.max(padding + r, Math.min(height - padding - r, node.y));
-        });
-
-        // Bridge nodes repel each other slightly to spread out
-        if (highlightBridges && bridgeNodeIds.size > 0) {
-          const bridgeNodes = nodes.filter(n => bridgeNodeIds.has(n.id));
-          const repelStrength = 0.5;
-
-          for (let i = 0; i < bridgeNodes.length; i++) {
-            for (let j = i + 1; j < bridgeNodes.length; j++) {
-              const a = bridgeNodes[i];
-              const b = bridgeNodes[j];
-              const dx = b.x - a.x;
-              const dy = b.y - a.y;
-              const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-              if (dist < 150) { // Only repel if close
-                const force = (150 - dist) / dist * repelStrength;
-                a.x -= dx * force * 0.5;
-                a.y -= dy * force * 0.5;
-                b.x += dx * force * 0.5;
-                b.y += dy * force * 0.5;
-              }
-            }
-          }
-        }
+        // No manual boundary handling - let D3 forces handle it
+        // The forceX/Y will keep nodes centered
 
         // Trigger Svelte reactivity by creating new array references
         nodes = [...nodes];
@@ -372,7 +452,7 @@
     <!-- SVG Visualization -->
     <svg
       bind:this={svg}
-      viewBox="0 0 {width} {height}"
+      viewBox="-100 -50 {width + 200} {height + 100}"
       class="network-svg"
       style="min-height: 600px;"
     >
@@ -391,6 +471,24 @@
               stroke="rgba(218, 165, 32, 0.8)"
               stroke-width="3"
               class="bridge-ring"
+            />
+          {/each}
+        </g>
+      {/if}
+
+      <!-- Corporate bridge rings (directors/PSCs connecting 2+ companies) -->
+      {#if highlightBridges}
+        <g class="corporate-bridge-rings">
+          {#each nodes.filter(n => corporateBridgeIds.has(n.id)) as node}
+            {@const r = 5 + (node.role_degree || 0) * 6}
+            <circle
+              cx={node.x}
+              cy={node.y}
+              r={r + 6}
+              fill="none"
+              stroke="rgba(91, 127, 149, 0.8)"
+              stroke-width="3"
+              class="corporate-bridge-ring"
             />
           {/each}
         </g>
@@ -431,22 +529,24 @@
               ? 5 + (node.role_degree || 0) * 6
               : radiusScale(node.total_value)}
             {@const displayRadius = isActive ? baseRadius * 1.15 : baseRadius}
+            {@const isConnected = connectedNodeIds.has(node.id)}
             <g
               class="node"
               class:active={isActive}
               class:pinned={isPinned}
+              class:connected={isConnected && !isActive}
               transform="translate({node.x}, {node.y})"
               onmouseenter={() => handleNodeHover(node)}
               onmouseleave={handleNodeLeave}
               onclick={() => handleNodeClick(node)}
               style="cursor: pointer;"
-              opacity={activeNode ? (isActive ? 1 : 0.35) : 1}
+              opacity={activeNode ? (isConnected ? 1 : 0.2) : 1}
             >
               <circle
                 r={displayRadius}
                 fill={colorMap[node.type] || '#9A9285'}
-                stroke={isPinned || isConnector ? '#2C2C2C' : (node.type === 'minister' ? '#8B3A2F' : 'none')}
-                stroke-width={isPinned || isConnector ? 3 : (node.type === 'minister' ? 1.5 : 0)}
+                stroke={isPinned || isConnector ? '#2C2C2C' : (isConnected && !isActive ? '#2C2C2C' : (node.type === 'minister' ? '#8B3A2F' : 'none'))}
+                stroke-width={isPinned || isConnector ? 3 : (isConnected && !isActive ? 1.5 : (node.type === 'minister' ? 1.5 : 0))}
                 class="node-circle"
               />
               {#if node.type === 'minister' || baseRadius > 12 || isActive || isConnector}
@@ -493,7 +593,15 @@
         <p class="detail-type">{activeNode.type}</p>
         <h3 class="detail-name">{activeNode.name}</h3>
         {#if activeNode.role}
-          <p class="detail-role">{activeNode.role}</p>
+          {@const position = activeNode.role
+            .replace(/,\s*(Department\s+)?(for\s+)?[\w\s]+$/, '')
+            .replace(/\s*\([^)]+\)\s*$/, '')
+            .replace(/^The\s+/, '')
+            .trim()}
+          <p class="detail-role">{position}</p>
+        {/if}
+        {#if activeNode.department}
+          <p class="detail-department">{activeNode.department.name}</p>
         {/if}
 
         <div class="detail-stats">
@@ -629,6 +737,12 @@
           <span>Key Connectors ({bridgeNodeIds.size} connect 2+ ministers)</span>
         </div>
       {/if}
+      {#if highlightBridges && corporateBridgeIds.size > 0}
+        <div class="legend-item">
+          <span class="legend-ring corporate"></span>
+          <span>Corporate Bridges ({corporateBridgeIds.size} connect 2+ companies)</span>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -637,6 +751,7 @@
   .minister-network {
     position: relative;
     width: 100%;
+    overflow: visible;
   }
 
   .loading, .error {
@@ -650,6 +765,7 @@
     width: 100%;
     height: auto;
     max-height: 80vh;
+    overflow: visible;
   }
 
   .node-label {
@@ -727,6 +843,16 @@
     font-size: 13px;
     color: #5A5A5A;
     margin-top: 4px;
+  }
+
+  .detail-department {
+    font-family: 'Satoshi', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #8A8A8A;
+    margin-top: 2px;
   }
 
   .detail-stats {
@@ -857,6 +983,10 @@
     height: 12px;
     border: 3px solid rgba(218, 165, 32, 0.8);
     border-radius: 50%;
+  }
+
+  .legend-ring.corporate {
+    border-color: rgba(91, 127, 149, 0.8);
   }
 
   .checkbox-label {

@@ -157,6 +157,28 @@
     color: #6b6b6b;
   }
 
+  /* Accent color (Economist red) */
+  .text-accent {
+    color: #C54B3C;
+  }
+
+  .bg-accent {
+    background-color: #C54B3C;
+  }
+
+  .border-accent {
+    border-color: #C54B3C;
+  }
+
+  /* Minister node color (for backgrounds) */
+  .bg-minister {
+    background-color: #B85450;
+  }
+
+  .border-minister {
+    border-color: #B85450;
+  }
+
   /* Tabular numbers for data */
   .tabular {
     font-variant-numeric: tabular-nums;

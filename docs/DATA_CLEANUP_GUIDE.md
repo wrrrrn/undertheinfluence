@@ -32,6 +32,11 @@ docker compose exec api python manage.py clean_data --fix=duplicate_donations
 
 # Fix invalid membership date formats
 docker compose exec api python manage.py clean_data --fix=invalid_dates
+
+# Remove placeholder lobbying clients from APPC import
+# These are boilerplate text like "(i) Client description available" that got
+# imported as real organizations. Sets client=NULL on consultancies, deletes actors.
+docker compose exec api python manage.py clean_data --fix=placeholder_clients
 ```
 
 ### Phase 1: Split Concatenated Entries

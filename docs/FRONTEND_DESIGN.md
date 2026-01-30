@@ -1,37 +1,43 @@
 # Frontend Design System
 
-**Date:** January 15, 2026
-**Version:** 1.1 (Editorial Edition)
+**Date:** January 28, 2026
+**Version:** 2.0 (Natural History Edition)
 **Status:** Living Document
-**Based on:** [Frontend Implementation Plan](FRONTEND_IMPLEMENTATION.md), [visual-design-interpretation.html](design/visual-design-interpretation.html)
+**Inspiration:** Victorian natural history illustrations, vintage newspaper infographics, scientific taxonomy plates
 
-**Version 1.1 Updates (Editorial Edition):**
-- ✨ **Major Typography Upgrade**: Replaced system fonts with Playfair Display (editorial serif) + Inter (modern sans-serif)
-- Added network visualization color palette (Section 2.1)
-- Refined card design with softer shadows and larger radius (Section 3.1)
-- Added Politician Card component specification (Section 3.1.C)
-- Expanded timeline/activity feed design (Section 5.2)
-- Added comprehensive network graph specifications (Section 5.3)
-- Added Politicians Directory page pattern (Section 6.4)
-- Added Politician Profile page pattern (Section 6.5)
+**Version 2.0 Updates (Natural History Edition):**
+- **Major Aesthetic Shift**: From modern editorial to vintage natural history information design
+- Warm cream/parchment backgrounds replacing stark whites
+- Earth-tone color palette with muted reds, browns, and botanical greens
+- Dense, layered information design inspired by scientific illustrations
+- Network visualizations styled as taxonomic relationship diagrams
+- Typography emphasizing timeless authority over modern minimalism
 
 **Design Philosophy Shift:**
-This version embraces **"Editorial Authority meets Data Depth"** - using high-contrast serif typography to signal journalistic trustworthiness while maintaining accessibility and progressive complexity.
+This version embraces **"Clean Data Journalism"** - the precision of Victorian natural history illustration meets the restraint of modern newspaper design. Dense information, minimal chrome.
 
 ---
 
 ## 1. Design Philosophy
 
-**"Radical Transparency, Accessible Depth"**
+**"Let the Data Breathe"**
 
-The design language of *UnderTheInfluence* serves two distinct masters: **journalistic authority** and **civic accessibility**. It must look trustworthy enough to be cited by the BBC, yet inviting enough for a concerned citizen to explore on their phone.
+The design language of *UnderTheInfluence* combines two traditions: the meticulous classification systems of Victorian naturalists, and the clean typography-driven layouts of quality newspapers. No decorative boxes. No heavy shadows. Just clear hierarchy through type, whitespace, and restrained color.
 
 ### Core Principles
 
-1.  **Data is the Hero**: The interface recedes; data comes forward. We use whitespace and typographic hierarchy to make dense information scannable.
-2.  **Intellectual Honesty**: We do not use "dark patterns" or misleading visualizations. Visual hierarchy reflects actual importance, not just aesthetic preference.
-3.  **Progressive Complexity**: Surfaces are simple (cards, headlines), but depths are rich (tables, filters, raw data).
-4.  **Systemic Consistency**: A politician's face, a party's color, or a donation amount looks the same whether it's on the homepage, a search result, or an editorial article.
+1. **Typography Over Chrome**: Establish hierarchy through font size, weight, and spacing - not boxes and borders.
+2. **Density Without Clutter**: Pack information tightly, but give it room to breathe. Like a well-designed newspaper spread.
+3. **One Accent Color**: A single red (`#C54B3C`) for section labels and highlights. Everything else is ink on paper.
+4. **Warm Paper, Dark Ink**: The off-white background (`#FAF9F6`) and near-black text (`#1a1a1a`) create comfortable contrast.
+5. **Data as the Hero**: Visualizations and numbers take center stage. The interface recedes.
+
+### Inspirations
+
+- **Natural History Illustration**: Ernst Haeckel's *Kunstformen der Natur*, Audubon's bird studies - the precision of scientific classification applied to political relationships
+- **Victorian Infographics**: Charles Minard's flow maps, Florence Nightingale's rose diagrams - data visualization as a serious discipline
+- **Quality Newspapers**: The Economist, Financial Times - clean typography, dense but readable, restrained use of color
+- **Scientific Diagrams**: Botanical taxonomy charts, anatomical plates - everything labeled, nothing ambiguous
 
 ---
 
@@ -39,458 +45,481 @@ The design language of *UnderTheInfluence* serves two distinct masters: **journa
 
 ### 2.1 Color Palette
 
-We utilize a modified Bootstrap 5 palette, extended with semantic colors for political entities and data visualizations.
+A restrained palette that lets data and typography do the work. Warm paper background, near-black ink, and a single accent color.
 
-#### Primary Brand Colors
-Used for navigation, active states, and primary actions.
+#### Surface & Text Colors
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Influence Blue** | `#0f172a` | (Slate 900) Primary navigation, footer backgrounds, text headings. Serious, authoritative. |
-| **Action Blue** | `#0d6efd` | (Bootstrap Primary) Links, buttons, active states. |
-| **Canvas White** | `#ffffff` | Page backgrounds, card backgrounds. |
-| **Wash Gray** | `#f8f9fa` | (Bootstrap Light) Section backgrounds, subtle differentiation. |
+| **Paper** | `#FAF9F6` | Page background - warm off-white |
+| **Ink** | `#1a1a1a` | Primary text, headlines |
+| **Ink Light** | `#4a4a4a` | Secondary text, body copy |
+| **Ink Muted** | `#6b6b6b` | Tertiary text, metadata, sources |
 
-#### Political Party Identity (Accessibility Verified)
-Party colors are iconic but often fail WCAG AA contrast on white. We use **variants** for text/borders vs. backgrounds.
+#### Accent Color
 
-| Party | Brand Color | Accessible Text Variant (on White) | Background Context |
-|-------|-------------|------------------------------------|-------------------|
-| **Conservative** | `#0087DC` | `#005B94` | Donation bars, party badges |
-| **Labour** | `#E4003B` | `#B0002E` | Donation bars, party badges |
-| **Lib Dem** | `#FAA61A` | `#A86500` | Donation bars, party badges |
-| **Green** | `#6AB023` | `#3D6E0E` | Donation bars, party badges |
-| **SNP** | `#FDF38E` | `#8B8200` | Donation bars, party badges |
-| **Reform** | `#12B6CF` | `#0C7A8B` | Donation bars, party badges |
+| Name | Hex | Usage |
+|------|-----|-------|
+| **Accent Red** | `#C54B3C` | Section labels, highlights, selection, leader dots |
 
-*Rule: Never use raw brand colors for text on white backgrounds unless they pass WCAG AA (4.5:1).*
-
-#### Data Visualization Colors
-Used for charts and indicators.
-
-| Name | Hex | Meaning |
-|------|-----|---------|
-| **Inequality Red** | `#dc3545` | Extreme concentration, "danger" thresholds. |
-| **Growth Green** | `#198754` | Positive trends, transparency score high. |
-| **Neutral Gray** | `#6c757d` | "Other" categories, null states. |
-| **Lobbying Gold** | `#ffc107` | Dual-influence indicators (caution/attention). |
+This red is used sparingly - for section labels, text selection, and small accent elements. It's the only "brand" color.
 
 #### Network Visualization Colors
-Used specifically for network graphs and relationship mapping.
+Muted, natural tones that work together harmoniously.
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Network Node - Person** | `#3b82f6` | (Blue 500) Person nodes in network graphs |
-| **Network Node - Organization** | `#10b981` | (Green 500) Organization nodes in network graphs |
-| **Network Node - Default** | `#94a3b8` | (Slate 400) Generic/unknown actor type |
-| **Network Edge - Donation** | `#8b5cf6` | (Purple 500) Donation relationship edges |
-| **Network Edge - Membership** | `#6c757d` | (Gray 600) Organizational membership edges |
-| **Network Edge - Lobbying** | `#f59e0b` | (Amber 500) Consultancy/lobbying edges |
-| **Cluster Highlight** | `rgba(59, 130, 246, 0.1)` | Semi-transparent blue for cluster boundaries |
+| **Minister Node** | `#B85450` | Minister/politician nodes (warm red) |
+| **Donor Node** | `#5B7355` | Donor organization/person nodes (botanical green) |
+| **Director Node** | `#4A7BA7` | Director relationship nodes (steel blue) |
+| **PSC Node** | `#B87333` | Persons of Significant Control (copper) |
+| **Donation Edge** | `#2C2C2C` | Donation relationship lines (dark, 30% opacity) |
+| **Role Edge** | `#8B7355` | Director/membership lines (tan, dashed) |
+| **Key Connector Ring** | `#DAA520` | Bridge node highlight (goldenrod) |
 
-*Design rationale: Network colors use saturated, distinct hues to differentiate relationship types at a glance. Opacity variations indicate strength/importance.*
+#### Political Party Colors (Muted)
+Party colors are desaturated to avoid visual noise while remaining recognizable.
+
+| Party | Muted Color | Usage |
+|-------|-------------|-------|
+| **Conservative** | `#4A7BA7` | Nodes, badges |
+| **Labour** | `#B85450` | Nodes, badges |
+| **Lib Dem** | `#C9A227` | Nodes, badges |
+| **Green** | `#5B7355` | Nodes, badges |
+| **SNP** | `#C9B84A` | Nodes, badges |
+| **Reform** | `#4A8B9E` | Nodes, badges |
 
 ---
 
-### 2.2 Typography (Editorial Edition)
+### 2.2 Typography
 
-We use a **dual-font strategy** that combines editorial authority with interface clarity:
+We use a **clean dual-font strategy** from Fontshare - contemporary fonts with editorial authority:
 
 **Font Stack**:
 ```scss
-// Primary Serif (Editorial Headings)
---font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+// Display/Headlines - Editorial serif
+--font-display: 'Zodiak', serif;
 
-// Primary Sans-Serif (Interface & Body)
---font-sans: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+// Body/UI - Clean geometric sans
+--font-body: 'Satoshi', sans-serif;
 ```
 
 **Why These Fonts?**
-- **Playfair Display**: High-contrast serif with journalistic authority. Used by major publications for gravitas and readability. Provides instant "serious journalism" credibility.
-- **Inter**: Modern sans-serif designed specifically for UI. Variable font with excellent rendering at all sizes. Industry standard for data applications (GitHub, Vercel, Linear).
+- **Zodiak**: A contemporary serif with sharp, elegant letterforms. Authoritative without being stuffy. Variable weight for flexibility.
+- **Satoshi**: Clean geometric sans-serif designed for interfaces. Highly legible at all sizes, neutral but not cold.
 
-**Font Loading** (Google Fonts):
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+Both fonts are from [Fontshare](https://www.fontshare.com/) (free for commercial use).
+
+**Font Loading** (Self-hosted):
+```scss
+/* Zodiak - Display/Headlines */
+@font-face {
+  font-family: 'Zodiak';
+  src: url('/fonts/Zodiak-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Satoshi - Body/UI */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
 ```
 
-**Type Scale (Mobile / Desktop)**:
+**Type Scale**:
 
-| Level | Size | Weight | Font Family | Letter-Spacing | Usage |
-|-------|------|--------|-------------|----------------|-------|
-| **Hero** | 2rem / 3.5rem | 800 | Playfair Display | -0.02em | Homepage hero, major page titles |
-| **H1** | 1.75rem / 2.5rem | 800 | Playfair Display | -0.02em | Actor names, page headers |
-| **H2** | 1.5rem / 2rem | 700 | Playfair Display | -0.01em | Section headers |
-| **H3** | 1.25rem / 1.5rem | 600 | Playfair Display | normal | Card titles, subsections |
-| **Body** | 1rem / 1rem | 400 | Inter | normal | Standard text, paragraphs |
-| **Small** | 0.875rem | 400 | Inter | normal | Metadata, secondary text |
-| **Tiny** | 0.75rem | 500 | Inter | 0.05em | Labels, uppercase accents |
+| Level | Size | Weight | Font | Usage |
+|-------|------|--------|------|-------|
+| **Display** | 4rem | 700 | Zodiak | Hero headlines, major page titles |
+| **H1** | 2.5rem | 700 | Zodiak | Section headers, actor names |
+| **H2** | 1.75rem | 600 | Zodiak | Card titles, subsections |
+| **H3** | 1.25rem | 600 | Zodiak | Tertiary headers |
+| **Body** | 1rem | 400 | Satoshi | Paragraphs, UI text |
+| **Small** | 0.875rem | 400 | Satoshi | Metadata, captions |
+| **Label** | 0.75rem | 600 | Satoshi | Section labels, uppercase |
+| **Stat Figure** | 4rem | 700 | Zodiak | Large numbers, metrics |
 
-**Typography Rules**:
+**Typography Patterns**:
 
-1. **Editorial Headings** (Playfair Display):
-   - Use for all `<h1>`, `<h2>`, `<h3>` elements
-   - Apply tight letter-spacing (`-0.02em` to `-0.01em`)
-   - Heavy weights (700-900) for impact
-   - Color: `--influence-blue` (#0f172a)
+1. **Headlines** (Zodiak):
+   - Tight letter-spacing (`-0.02em`) for display sizes
+   - Color: `#1a1a1a` (ink)
 
-2. **Interface Text** (Inter):
-   - Use for all body copy, UI labels, buttons, metadata
-   - Line-height: 1.6 for readability
-   - Color: `--influence-slate` (#1e293b) for body, `#64748b` for secondary
+2. **Body Text** (Satoshi):
+   - Line-height: 1.5-1.6 for comfortable reading
+   - Color: `#1a1a1a` for primary, `#4a4a4a` for secondary
 
-3. **Numeric Typography** (CRITICAL):
+3. **Section Labels**:
    ```scss
-   .tabular-nums {
+   .section-label {
+     font-family: 'Satoshi', sans-serif;
+     font-size: 0.75rem;
+     font-weight: 600;
+     text-transform: uppercase;
+     letter-spacing: 0.1em;
+     color: #C54B3C;  // Accent red
+   }
+   ```
+
+4. **Tabular Numbers** (for data):
+   ```scss
+   .tabular {
      font-variant-numeric: tabular-nums;
-     letter-spacing: -0.01em;
    }
    ```
-   - Apply to ALL financial figures, donation amounts, stats
-   - Ensures alignment in tables and grids
-   - Example: `<span class="tabular-nums">£1,240,500.00</span>`
-
-4. **Accent Text** (Editorial Italics):
-   ```scss
-   .text-accent {
-     font-style: italic;
-     font-family: var(--font-serif);
-     color: var(--action-blue);
-   }
-   ```
-   - Use for emphasis in editorial content
-   - Dates in timelines
-   - Pull quotes or callouts
 
 ---
 
 ## 3. Component Design System
 
-### 3.1 Cards (The "Atomic" Unit - Editorial Edition)
+**Design Principle: Typography Over Chrome**
 
-Cards are the primary container for entities. The Editorial Edition uses **softer, more sophisticated shadows** and **larger radii** for a premium, journalistic feel.
+We avoid decorative boxes, heavy shadows, and ornate borders. Information hierarchy is established through typography, whitespace, and subtle color accents. This follows the clean newspaper tradition - let the content speak.
 
-**Base Card Styles (`.uti-card`)**:
+### 3.1 Stats as Typography (Not Cards)
+
+Large metrics are displayed as pure typography, not contained in boxes.
+
 ```scss
-.uti-card {
-  background: white;
-  border: 1px solid rgba(15, 23, 42, 0.05);  // Subtle hairline
-  border-radius: 20px;  // Larger, softer corners
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.01),
-    0 10px 15px -3px rgba(15, 23, 42, 0.05);  // Layered depth
-  padding: 2rem;  // Generous padding
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);  // Smooth easing
+.stat-figure {
+  font-family: 'Zodiak', serif;
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #1a1a1a;
+  font-variant-numeric: tabular-nums;
+}
 
-  &:hover {
-    transform: translateY(-5px);  // Stronger lift
-    box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.1);
-  }
+.stat-label {
+  font-family: 'Satoshi', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #6b6b6b;
 }
 ```
 
-**Why This Design?**
-- **20px radius**: Modern, friendly, premium (vs. 12px which feels generic)
-- **Layered shadows**: Creates realistic depth without being heavy
-- **Cubic-bezier easing**: Smoother, more natural motion than linear
-- **Stronger hover lift**: More tactile, confirms interactivity
+### 3.2 Section Labels
 
-**Background Context**:
-- **Page Background**: Wash Gray (`#f8fafc`) - lighter, cleaner
-- **Card Background**: Pure white (`#ffffff`) - creates strong elevation
+Red accent labels mark section boundaries - the primary use of accent color.
 
-#### A. Actor Card (Person/Organization)
-Standard representation of any entity in lists or search.
+```scss
+.section-label {
+  font-family: 'Satoshi', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #C54B3C;  // Economist red
+}
+```
 
-*   **Avatar**:
-    *   **Person**: Circle (`rounded-circle`, 72px diameter in Editorial Edition).
-    *   **Organization**: Squircle (`rounded-3`) – better fits corporate logos/crests.
-*   **Layout**:
-    *   **Horizontal**: Avatar left, Name + Classification center, Stats right
-    *   **Vertical (Compact)**: Avatar top, Name + Classification below, Stats bottom
-*   **Border Accent**: Optional 5px colored top border for party affiliation
+### 3.3 Rules & Dividers
 
-#### B. Stat Card (Metrics)
-Used in dashboards and summary strips.
+Simple horizontal lines - no ornamentation.
 
-*   **Layout**: Big Number (Top), Sparkline/Trend (Middle), Label (Bottom).
-*   **Style**: Minimalist, focusing on the numeral.
+```scss
+.rule {
+  border-top: 1px solid rgba(26, 26, 26, 0.1);
+  margin: 2rem 0;
+}
 
-#### C. Politician Card (Enhanced Actor Card)
-Specialized variant for politician listings. Emphasizes party affiliation and current role.
+.rule-thick {
+  border-top: 2px solid #1a1a1a;
+  margin: 2rem 0;
+}
+```
 
-*   **Avatar**: Circle (`rounded-circle`) for person photos.
-*   **Party Color Accent**: Left border (4px) in party's brand color OR pastel background (party color at 10% opacity).
-*   **Layout (Full Mode)**:
-    *   **Header**: Photo + Name + Current Position (e.g., "MP for Bristol West")
-    *   **Badges**: Party badge + Role badge ("Minister", "Shadow Cabinet", etc.)
-    *   **Stats Row**: Donations Received | Donations Made
-*   **Layout (Compact Mode)**: Photo + Name + Party badge only
-*   **Party Badge Style**: Pastel background with accessible text variant
-    *   Example (Labour): `background: #fae6ea; color: #b0002e; border-radius: 1rem; padding: 0.25rem 0.75rem`
+### 3.4 Accent Borders
 
-**Why Different from Actor Card?**
-Politicians need party context immediately visible. The party color accent provides at-a-glance affiliation without overwhelming the design.
+Left border accent for emphasis (pull quotes, highlighted sections).
 
----
+```scss
+.accent-border-left {
+  border-left: 4px solid #C54B3C;
+  padding-left: 1rem;
+}
+```
 
-### 3.2 UI Elements
+### 3.5 Annotations
 
-#### Badges & Chips
-We avoid heavy solid-color badges in favor of **Pastel/Subtle** badges (`dashboard-02.png`) for better legibility and lower visual noise.
+Small explanatory text with leader lines pointing to visualizations.
 
-*   **Structure**: Light background (10-15% opacity), dark text (100% opacity).
-*   **Example (Labour)**: `bg-red-100` (`#fae6ea`) text `text-red-800` (`#b0002e`).
-*   **Shape**: `rounded-pill` for status, `rounded` for categories.
+```scss
+.annotation {
+  font-family: 'Satoshi', sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  max-width: 200px;
+  color: #4a4a4a;
+}
 
-#### Filter Panel (The "Control Room")
-*   **Background**: White card.
-*   **Input Style**: Standard Bootstrap form controls, but with refined borders (`#ced4da`).
+.leader-dot {
+  fill: #C54B3C;  // Red dot at annotation endpoint
+}
+```
 
 ---
 
 ## 4. Layout & Spacing
 
-### 4.1 Grid System
-We adhere strictly to the **Bootstrap 5 12-column grid**.
+### 4.1 The Newspaper Grid
 
-*   **Container**: `container-xl` (Max width 1320px) for most pages.
-*   **Page Background**: `#f8f9fa` (Wash Gray) is mandatory to support the white card design.
+We embrace dense, multi-column layouts inspired by broadsheet newspapers.
 
-### 4.2 Spacing Scale (Rem-based)
-Consistent spacing ensures rhythm.
+- **Container**: Max width 1400px, generous side margins
+- **Page Background**: `--parchment` (#F5F0E8) always
+- **Columns**: 12-column grid, but favor asymmetric layouts (8+4, 5+7, 3+6+3)
 
-*   **Tight**: `0.5rem` (8px) - Between list items, tags.
-*   **Card**: `1.5rem` (24px) - Standard card padding.
-*   **Section**: `4rem` (64px) - Vertical space between major page sections.
+### 4.2 Spacing Scale
+
+| Name | Size | Usage |
+|------|------|-------|
+| **Hairline** | 0.25rem (4px) | Between inline elements |
+| **Tight** | 0.5rem (8px) | List items, badge margins |
+| **Base** | 1rem (16px) | Default paragraph spacing |
+| **Comfortable** | 1.5rem (24px) | Card padding, section gaps |
+| **Generous** | 2.5rem (40px) | Major section breaks |
+| **Spread** | 4rem (64px) | Page section dividers |
 
 ---
 
 ## 5. Visualizations
 
-Charts must be comprehensible at a glance but reveal detail on hover (`dashboard-03.png`).
+### 5.1 Design Principles
 
-### 5.1 Rules of Engagement
-1.  **Direct Labeling**: Avoid legends where possible; label lines/bars directly.
-2.  **Tooltips**: Essential for "long tail" data where bars are small.
-3.  **Palette**: Use desaturated/sophisticated variants of political colors to avoid visual vibration.
+Inspired by Victorian scientific illustration and quality newspaper graphics:
 
-### 5.2 Specific Charts
+1. **Direct Labeling**: Label elements on the visualization, not in separate legends where possible
+2. **Density With Clarity**: Pack information tightly, but maintain clear visual hierarchy
+3. **Muted Palette**: Earth tones that work together, no jarring contrast
+4. **Annotation**: Explanatory text with leader lines pointing to specific elements
 
-#### The "Activity Feed" (Timeline)
-*   **Inspiration**: `timeline.png` (cardiology timeline design)
-*   **Structure**: Vertical line connecting chronological nodes
-*   **Visual Elements**:
-    *   **Timeline Spine**: 2px vertical line in Neutral Gray (`#6c757d`)
-    *   **Event Nodes**: Circles (24px diameter) with icon glyphs inside
-        *   Donation: `£` symbol or money bag icon
-        *   Lobbying: Handshake icon
-        *   Membership: Building/organization icon
-        *   Appointment: Star or badge icon
-    *   **Node Colors**: Match event type (donation = purple, lobbying = amber, etc.)
-    *   **Connection Lines**: Horizontal connector from spine to event card (1px, same color as node)
-*   **Grouping**: Events grouped by Year/Month with section headers
-*   **Event Cards**: Mini cards with:
-    *   Date (small, gray text)
-    *   Event description (e.g., "Received £50,000 from Unite the Union")
-    *   Related party badge (if applicable)
-*   **Responsive**: On mobile, cards stack directly on timeline; on desktop, alternating left/right
+### 5.2 Network Graph
 
-**Use Cases**: Politician profile "Timeline" tab, donor activity history, organization event chronology
+The centerpiece visualization - a force-directed relationship diagram.
 
-#### The "Concentration" Bar (Pareto)
-*   **Concept**: A stacked bar showing the "Whale" vs. "Minnow" split.
-*   **Style**: Top segment in **Inequality Red**, rest in **Neutral Gray**.
-*   **Labels**: Direct labeling with percentage annotations
-*   **Interactivity**: Hover to see exact figures and donor names
+**Node Styling**:
+- Solid fill with subtle cream stroke
+- Size encodes importance/value
+- Color encodes type (minister, donor, director, PSC)
 
-### 5.3 Network Visualizations
+**Edge Styling**:
+- Thin lines (1-2px) in muted colors
+- Donation links: solid, dark
+- Role links: dashed, tan
+- Opacity reduces visual noise
 
-#### Network Graph (Force-Directed Layout)
-**Inspiration**: D3.js force simulations, but with political data context
+**Key Connector Highlight**:
+- Gold ring (`#DAA520`) around bridge nodes
+- Bridge nodes = entities connecting 2+ ministers
+- Slight repulsion keeps them visible
 
-**Core Elements**:
-*   **Nodes**:
-    *   **Size**: Proportional to `log10(total_donations + 1)` — prevents outlier domination
-    *   **Minimum**: 15px radius (legibility)
-    *   **Maximum**: 40px radius (prevents overwhelming small nodes)
-    *   **Color**: Person (blue), Organization (green), by actor type
-    *   **Stroke**: White 2px outline for separation
-    *   **Label**: Last name only for people, abbreviated name for orgs (prevents clutter)
-*   **Edges (Relationships)**:
-    *   **Color**: Donation (purple), Membership (gray), Lobbying (amber)
-    *   **Width**: Proportional to relationship strength (donation value, # of connections)
-    *   **Minimum**: 1px (low-value relationships visible but subtle)
-    *   **Maximum**: 5px (major relationships prominent)
-    *   **Opacity**: 60% to reduce visual noise
-*   **Layout Algorithm**:
-    *   D3 force simulation with:
-        *   **Link force**: Stronger relationships = shorter distance
-        *   **Charge force**: -300 repulsion (prevents overlap)
-        *   **Center force**: Keeps graph centered
-        *   **Collision force**: 30px radius (prevents node overlap)
-
-**Interactions**:
-*   **Drag**: Rearrange nodes (pin with double-click)
-*   **Zoom/Pan**: Standard D3 zoom behavior (0.5x - 3x scale)
-*   **Click Node**: Highlight ego network, show detail panel
-*   **Hover Node**: Enlarge + show tooltip with stats
-*   **Hover Edge**: Highlight + show relationship details
-
-**Controls**:
-*   **Degrees Slider**: 1-3 hops (default 2)
-*   **Relationship Filter**: Toggle donation/membership/lobbying edges
-*   **Layout Preset**: "Force" | "Hierarchical" | "Circular"
+**Interactivity**:
+- Hover: Enlarge node, highlight all connected nodes (2-hop traversal for minister→org→director/PSC chains)
+- Click: Pin detail panel, dim unconnected nodes
+- Connected highlighting uses reduced opacity on non-connected nodes
 
 **Legend**:
-*   Visual key for node types and edge types (positioned top-right)
+- Bottom-left position
+- Uses actual SVG elements matching the graph
+- Compact, unobtrusive
 
-**Performance Considerations**:
-*   Limit to 100 nodes max (paginate or cluster beyond that)
-*   Use canvas rendering for >50 nodes (SVG for smaller networks)
-*   Debounce force simulation updates
+### 5.3 Radial Charts
 
-#### Cluster View (Community Detection)
-**Concept**: Highlight tightly-connected groups within the network
+For categorical breakdowns (party donations, donor types), use radial/polar layouts inspired by Florence Nightingale.
 
-*   **Visual Treatment**: Convex hulls around clusters (semi-transparent party color fill)
-*   **Cluster Labels**: Centered text showing cluster name (e.g., "Trade Union Donors")
-*   **Color Coding**: Each cluster gets a distinct pastel background
-*   **Interaction**: Click cluster to expand/focus on that subgraph
+**Style**:
+- Segments radiate from center
+- Width encodes value (not radius - avoids area distortion)
+- Muted colors from the specimen palette
+- Direct labeling on or near segments
 
-#### Influence Path Diagram (Sankey)
-**Concept**: Show money flows from donor → intermediaries → politician through the network
+### 5.4 Timeline
 
-**Why Sankey (Not Tree/Hierarchy)?**
-- Sankey diagrams excel at showing **flow magnitude** through paths
-- Width visually encodes donation amounts — immediately shows "big money" routes
-- Supports **convergence** (multiple donors → one recipient) and **divergence** (one donor → multiple recipients)
-- Familiar from energy/resource flow visualizations
+Chronological data displayed as a vertical annotated timeline.
 
-**Visual Design**:
-*   **Layout**: Strict left-to-right flow in columns
-    *   **Column 1**: Source donors
-    *   **Columns 2-N**: Intermediate actors (if multi-hop)
-    *   **Final Column**: Target recipient (politician)
-*   **Node Representation**:
-    *   Rectangles (not circles) with actor name
-    *   Height proportional to total flow through that node
-    *   Color by actor type (person blue, organization green)
-*   **Link/Flow Representation**:
-    *   **Width**: Proportional to £ value (logarithmic scale for extreme outliers)
-    *   **Color**: Gradient from donor's party color → recipient's party color
-        *   Neutral gray if no party affiliation
-        *   For multi-hop: intermediate color blending
-    *   **Opacity**: 50% to allow overlaps to be visible
-*   **Labels**:
-    *   Actor names inside node rectangles (truncate if needed)
-    *   Donation amounts on hover (tooltip)
-    *   Total flow amounts on node labels
-*   **Multiple Paths**: All paths shown simultaneously (stacked flows)
-*   **Interactivity**:
-    *   **Hover link**: Highlight path, show exact amount
-    *   **Hover node**: Highlight all flows through that node
-    *   **Click node**: Filter to show only paths involving that actor
-    *   **Toggle**: Show top N paths only (default top 10 by value)
-
-**Implementation Notes**:
-- Use D3.js `d3-sankey` plugin
-- Set `nodeWidth: 20px` for consistent node sizing
-- Set `nodePadding: 10px` for vertical spacing
-- Enable `iterations: 32` for optimal layout
-- Responsive: Stack vertically on mobile (<768px)
-
-**Data Requirements**:
-- Input: Array of paths from `/api/v2/actors/{id}/paths-to/{target}/`
-- Transform to Sankey format:
-  ```javascript
-  {
-    nodes: [{id: "123", name: "Unite the Union", party: null}],
-    links: [{source: 0, target: 1, value: 50000}]
-  }
-  ```
-
-**Use Cases**:
-1. "How does money from Corporation X reach Politician Y?"
-2. "Show all indirect funding routes to this MP"
-3. "Trace lobbying firm's influence through donation chains"
-
-**Example**:
-```
-Hedge Fund A (£500K) ━━━━━━━━┓
-                             ┣━━━> Consulting Firm B (£800K) ━━━> MP Jones (£800K)
-Trade Union C (£300K) ━━━━━━━┛
-```
+**Visual Elements**:
+- Central spine: 2px line in muted color
+- Event nodes: Small circles in event-type color
+- Connection lines: Horizontal stems to event descriptions
+- Year markers: Bold labels
+- Event descriptions: Date + description + value
 
 ---
 
-## 6. Page Types & Patterns
+## 6. Page Patterns
 
 ### 6.1 Homepage
-*   **Pattern**: "Dashboard First". Hero → Metrics → Narrative → Exploration.
-*   **Key**: High-contrast metrics strip to establish the scale of data immediately.
 
-### 6.2 Entity Profile (Person/Org)
-*   **Pattern**: "Identity Header". Large name, clear classification badges.
-*   **Tabs**: "Overview", "Donations", "Lobbying", "Network".
-*   **Sidebar**: Related entities, "See Also" (CMS links).
+**Pattern**: "The Front Page" - newspaper-style density with clear hierarchy.
 
-### 6.3 Search Results / Explore
-*   **Pattern**: "Faceted Browsing".
-*   **Left Column**: Sticky Filter Panel.
-*   **Right Column**: Infinite scroll or paginated cards.
-*   **Empty States**: "No donors found matching these criteria." with a "Reset Filters" CTA.
+**Sections**:
+1. **Header**: Site title (Zodiak), navigation, search
+2. **Hero**: Large headline + subhead establishing the investigation
+3. **Metrics Strip**: Key numbers as large typography (donations tracked, total value, dual-influence count)
+4. **Lead Visualization**: The Government Ministers Network - full-width force-directed graph
+5. **Content Columns**: Three-column layout with Top Recipients + Deep Dive cards
+6. **Methodology**: Source attribution and explanation
+7. **Footer**: Links, legal, data access
 
-### 6.4 Politicians Directory
-*   **Pattern**: "Grouped Listings". Three-tier hierarchy: Government Status → Party → Individuals
-*   **Page Structure**:
-    *   **Header**: Page title "Politicians" + total count
-    *   **Filter Sidebar** (Left, 3 columns): Party, Role (MP/Minister), Status, Date range
-    *   **Content Area** (Right, 9 columns): Three sections:
-        1. **Government** (MPs + Ministers in governing party/coalition)
-        2. **Opposition** (MPs in non-governing parties)
-        3. **Other** (Former MPs, non-MPs with political activity)
-*   **Within Each Section**:
-    *   **Party Subheadings**: "Labour (213)" with party color accent bar
-    *   **Politician Grid**: 3-4 columns of compact PoliticianCards
-*   **Empty State**: "No politicians match these filters" with party/role suggestions
-*   **Responsive**: Stack to 2 columns on tablet, 1 column on mobile
+**Top Recipients Column**:
+- Ranked list of top 20 MP donation recipients
+- Each entry: rank, name, party affiliation, total received, donation count
+- Links to individual actor pages
 
-**Why This Pattern?**
-Users primarily navigate UK politics by government vs. opposition, then by party. This mirrors mental models and reduces cognitive load compared to alphabetical listing.
+**Deep Dive Section** (spans 2 columns):
+Three analysis teaser cards, each with:
+- Section label (red uppercase)
+- Headline + editorial quote
+- Data visualization preview
+- "Explore" link with arrow
 
-### 6.5 Politician Profile (Enhanced Entity Profile)
-*   **Pattern**: "Identity + Network". Emphasizes relationships over biography.
-*   **Header Section**:
-    *   Large photo (150px circle)
-    *   Name (H1) + Current Position (H3)
-    *   Party Badge + Role Badges ("Minister", "Shadow Cabinet", etc.)
-    *   Quick Stats Row: Donations Received | Donations Made | Network Size
-*   **Tab Navigation**:
-    1. **Overview**: Bio, key stats, recent activity summary
-    2. **Network** (Default View): Interactive network graph
-    3. **Donations Received**: Paginated table/cards
-    4. **Donations Made**: Paginated table/cards (if any)
-    5. **Timeline**: Chronological activity feed
-    6. **Lobbying**: Connected consultancy relationships (if any)
-*   **Sidebar** (Right, 3 columns):
-    *   Related Politicians (network neighbors)
-    *   Party Information card
-    *   Constituency Map (for MPs)
-    *   Related Articles (from CMS)
-*   **Responsive**: Sidebar moves below tabs on mobile
+| Card | Visualization Style |
+|------|---------------------|
+| **Party Funding** | Horizontal bar chart showing donations by party |
+| **Ministerial Access** | Department list with meeting counts + top attendees |
+| **Lobbying Influence** | Organization list with their agencies (see below) |
 
-**Why Network Tab is Default?**
-The network view immediately answers "Who influences this politician?" — the core question of the site. Bio information is secondary context.
+**Lobbying Clients Display Pattern**:
+Shows top clients and the agencies they've hired:
+```
+SANOFI                           16 agencies
+M&F Health · Incisive Health · Brands2Life · ...
+
+NOVARTIS                         14 agencies
+Weber Shandwick · Burson · FTI Consulting · ...
+```
+- Organization name (bold) with agency count on right
+- Full list of agencies below, separated by middle dots (·)
+- Left border accent in muted red
+
+### 6.2 Entity Profile
+
+**Pattern**: Typography-driven single-entity view.
+
+**Layout**:
+- **Header**: Large name (Zodiak), section label, key stats
+- **Sidebar**: Related entities, external links
+- **Main**: Tabbed content (Network, Donations, Timeline)
+- **Annotations**: Contextual notes where needed
+
+### 6.3 Network Visualization Page
+
+**Pattern**: Full-canvas interactive diagram.
+
+**Layout**:
+- **Canvas**: Full-width network visualization on paper background
+- **Legend**: Bottom-left, always visible
+- **Controls**: Top-right, collapsible settings panel
+- **Detail Panel**: Right sidebar, slides in on selection
 
 ---
 
-## 7. Accessibility Checklist
+## 7. Implementation Notes
 
-*   **Focus Indicators**: Default browser focus outline preserved or enhanced (thick blue ring), never removed.
-*   **Contrast**: Text `< Small` size must be `#495057` or darker on white.
-*   **Motion**: `prefers-reduced-motion` media query respected (disable hover lifts/chart animations).
-*   **Semantic HTML**: Proper `<h1>` through `<h6>` hierarchy, `<ul>` for lists, `<button>` for actions.
-*   **Data Tables**: `<th>` with scope attributes, captions for complex data.
+### Current Implementation (MinisterNetwork.svelte)
+
+The network graph currently implements:
+
+**Node Types & Colors**:
+- Ministers: `#B85450` (warm red)
+- Donors: `#5B7355` (botanical green)
+- Directors: `#4A7BA7` (steel blue)
+- PSCs: `#B87333` (copper)
+
+**Key Features**:
+- Bridge node detection (nodes connecting 2+ ministers)
+- Gold ring highlight for key connectors (`#DAA520`)
+- Slight repulsion between bridge nodes for visibility
+- Force-directed layout with configurable physics
+- Detail panel on node selection showing:
+  - For ministers: name, position (parsed from role), department, total received
+  - For donors: name, classification, total donated, donation count
+  - For directors/PSCs: name, role, connected organizations
+- 2-hop connected node highlighting on hover
+
+**Settings Panel**:
+- Global repulsion strength
+- Minister repulsion (keeps ministers spread)
+- Link distances (donation vs role)
+- Gravity (x/y center pull)
+- Collision padding
+- Key connector highlight toggle
+
+---
+
+## 8. Accessibility
+
+Clean design and accessibility go hand in hand:
+
+- **Contrast**: All text meets WCAG AA (4.5:1 for body, 3:1 for large)
+- **Color Independence**: Never rely on color alone - use shapes, labels, patterns
+- **Focus States**: Visible focus rings on all interactive elements
+- **Motion**: Respect `prefers-reduced-motion` for animations
+- **Screen Readers**: Proper ARIA labels, especially for data visualizations
+- **Keyboard Navigation**: Full keyboard support for network graph
+
+---
+
+## Appendix: Color Reference
+
+### Quick Copy Palette
+
+```scss
+// Surfaces
+--bg-paper: #FAF9F6;
+
+// Text
+--ink: #1a1a1a;
+--ink-light: #4a4a4a;
+--ink-muted: #6b6b6b;
+
+// Accent
+--accent-red: #C54B3C;
+
+// Network nodes
+--minister-node: #B85450;
+--donor-node: #5B7355;
+--director-node: #4A7BA7;
+--psc-node: #B87333;
+--key-connector: #DAA520;
+
+// Network edges
+--edge-donation: rgba(44, 44, 44, 0.3);
+--edge-role: #8B7355;
+
+// Party colors (muted)
+--party-conservative: #4A7BA7;
+--party-labour: #B85450;
+--party-libdem: #C9A227;
+--party-green: #5B7355;
+--party-snp: #C9B84A;
+--party-reform: #4A8B9E;
+```
+
+### CSS Custom Properties (from global.css)
+
+```css
+html {
+  font-family: 'Satoshi', sans-serif;
+  color: #1a1a1a;
+  background-color: #FAF9F6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Zodiak', serif;
+}
+
+::selection {
+  background-color: #C54B3C;
+  color: white;
+}
+```

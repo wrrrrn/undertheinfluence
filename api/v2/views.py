@@ -191,6 +191,30 @@ class TopRecipientsView(generics.ListAPIView):
 
         return aggregated
 
+    def _get_party_memberships(self, person_ids):
+        """
+        Look up current party for a list of person IDs.
+        Party comes from Membership.on_behalf_of where the membership is active.
+        Returns dict mapping person_id -> party Organization (or None).
+        """
+        from datafetch.models import Membership
+
+        # Get memberships with on_behalf_of (party) set, prefer current ones
+        # First try to find current memberships (no end_date)
+        memberships = Membership.objects.filter(
+            person_id__in=person_ids,
+            on_behalf_of__isnull=False,
+            on_behalf_of__classification='Political Party'
+        ).select_related('on_behalf_of').order_by('person_id', '-start_date')
+
+        # Build dict - take the most recent membership for each person
+        result = {}
+        for m in memberships:
+            if m.person_id not in result:
+                result[m.person_id] = m.on_behalf_of
+
+        return result
+
     def list(self, request, *args, **kwargs):
         """
         Override list to handle aggregation and pagination efficiently.
@@ -215,6 +239,13 @@ class TopRecipientsView(generics.ListAPIView):
                 for actor in models.Actor.objects.filter(id__in=recipient_ids)
             }
 
+            # Identify person IDs and fetch their party memberships
+            person_ids = [
+                actor_id for actor_id, actor in actors_dict.items()
+                if actor.polymorphic_ctype.model == 'person'
+            ]
+            party_dict = self._get_party_memberships(person_ids) if person_ids else {}
+
             # Build result list with actor objects
             results = []
             for item in page:
@@ -223,7 +254,8 @@ class TopRecipientsView(generics.ListAPIView):
                     results.append({
                         'actor': actors_dict[recipient_id],
                         'total_received': item['total_received'] or 0,
-                        'donation_count': item['donation_count']
+                        'donation_count': item['donation_count'],
+                        'current_party': party_dict.get(recipient_id)
                     })
 
             serializer = self.get_serializer(results, many=True)
@@ -235,11 +267,18 @@ class TopRecipientsView(generics.ListAPIView):
             actor.id: actor
             for actor in models.Actor.objects.filter(id__in=recipient_ids)
         }
+        person_ids = [
+            actor_id for actor_id, actor in actors_dict.items()
+            if actor.polymorphic_ctype.model == 'person'
+        ]
+        party_dict = self._get_party_memberships(person_ids) if person_ids else {}
+
         results = [
             {
                 'actor': actors_dict[item['effective_recipient_id']],
                 'total_received': item['total_received'] or 0,
-                'donation_count': item['donation_count']
+                'donation_count': item['donation_count'],
+                'current_party': party_dict.get(item['effective_recipient_id'])
             }
             for item in aggregated_qs
             if item['effective_recipient_id'] in actors_dict
@@ -334,12 +373,13 @@ class PartyDonationsView(generics.ListAPIView):
         """
         Aggregate donations to political party organizations.
 
+        Uses canonical recipient resolution to properly aggregate donations
+        to parties that may have multiple actor records.
+
         Returns: party, total_received, donation_count, donor_count
         """
-        # Filter for political party organizations only
-        queryset = models.Donation.objects.filter(
-            recipient__organization__classification='Political Party'
-        ).exclude(recipient__isnull=True)
+        # Start with all donations that have recipients
+        queryset = models.Donation.objects.exclude(recipient__isnull=True)
 
         # Apply date filters
         filterset = filters.DonationFilterSet(
@@ -348,24 +388,44 @@ class PartyDonationsView(generics.ListAPIView):
         )
         queryset = filterset.qs
 
-        # Aggregate by party (recipient)
-        aggregated = queryset.values('recipient_id', 'recipient__name').annotate(
+        # Annotate with effective recipient ID (canonical if available, else original)
+        queryset = queryset.annotate(
+            effective_recipient_id=Coalesce('canonical_recipient_id', 'recipient_id')
+        )
+
+        # Get IDs of all Political Party organizations
+        party_ids = set(
+            models.Organization.objects.filter(
+                classification='Political Party'
+            ).values_list('id', flat=True)
+        )
+
+        # Filter to only include donations where effective recipient is a party
+        # We need to do this in Python since we can't easily filter on the annotated field
+        # against a related table classification
+        aggregated = queryset.values('effective_recipient_id').annotate(
             total_received=Sum('value'),
             donation_count=Count('id'),
             donor_count=Count('donor_id', distinct=True)
         ).order_by('-total_received')
 
+        # Filter to political parties only
+        aggregated = [
+            item for item in aggregated
+            if item['effective_recipient_id'] in party_ids
+        ]
+
         return aggregated
 
     def list(self, request, *args, **kwargs):
         """Handle pagination and actor fetching efficiently."""
-        aggregated_qs = self.get_queryset()
+        aggregated_qs = self.get_queryset()  # This is now a list
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(aggregated_qs, request, view=self)
 
         if page is not None:
             # Fetch party actors for paginated results only
-            party_ids = [item['recipient_id'] for item in page]
+            party_ids = [item['effective_recipient_id'] for item in page]
             parties_dict = {
                 actor.id: actor
                 for actor in models.Actor.objects.filter(id__in=party_ids)
@@ -373,7 +433,7 @@ class PartyDonationsView(generics.ListAPIView):
 
             results = []
             for item in page:
-                party_id = item['recipient_id']
+                party_id = item['effective_recipient_id']
                 if party_id in parties_dict:
                     results.append({
                         'party': parties_dict[party_id],
@@ -386,20 +446,20 @@ class PartyDonationsView(generics.ListAPIView):
             return paginator.get_paginated_response(serializer.data)
 
         # Fallback without pagination
-        party_ids = [item['recipient_id'] for item in aggregated_qs]
+        party_ids = [item['effective_recipient_id'] for item in aggregated_qs]
         parties_dict = {
             actor.id: actor
             for actor in models.Actor.objects.filter(id__in=party_ids)
         }
         results = [
             {
-                'party': parties_dict[item['recipient_id']],
+                'party': parties_dict[item['effective_recipient_id']],
                 'total_received': item['total_received'] or 0,
                 'donation_count': item['donation_count'],
                 'donor_count': item['donor_count'],
             }
             for item in aggregated_qs
-            if item['recipient_id'] in parties_dict
+            if item['effective_recipient_id'] in parties_dict
         ]
         serializer = self.get_serializer(results, many=True)
         return Response(serializer.data)
@@ -567,6 +627,243 @@ class DualInfluenceView(generics.ListAPIView):
             if item['actor_id'] in actors_dict
         ]
         serializer = self.get_serializer(enriched_results, many=True)
+        return Response(serializer.data)
+
+
+class TopLobbyingClientsView(generics.ListAPIView):
+    """
+    GET /api/v2/aggregates/top-lobbying-clients/
+
+    Returns organizations ranked by number of lobbying agencies they hire.
+
+    Query Parameters:
+    - limit: Number of results (default: 50, max: 200)
+    - offset: Pagination offset
+
+    Example:
+        GET /api/v2/aggregates/top-lobbying-clients/?limit=10
+    """
+    serializer_class = serializers.TopLobbyingClientSerializer
+    pagination_class = pagination.AggregatePagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """
+        Aggregate consultancies by effective client, counting unique agencies.
+        """
+        # Group by effective client (using canonical_client if available)
+        aggregated_qs = models.Consultancy.objects.exclude(
+            client__isnull=True
+        ).annotate(
+            effective_client_id=Coalesce('canonical_client_id', 'client_id')
+        ).values('effective_client_id').annotate(
+            agency_count=Count('agency_id', distinct=True)
+        ).order_by('-agency_count')
+
+        return aggregated_qs
+
+    def list(self, request, *args, **kwargs):
+        """Handle pagination and actor fetching."""
+        aggregated_qs = self.get_queryset()
+
+        # Manual pagination
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(list(aggregated_qs), request, view=self)
+
+        if page is not None:
+            client_ids = [item['effective_client_id'] for item in page]
+            actors_dict = {
+                actor.id: actor
+                for actor in models.Actor.objects.filter(id__in=client_ids)
+            }
+
+            # Fetch agencies for each client
+            client_agencies = {}
+            for client_id in client_ids:
+                agencies = models.Consultancy.objects.filter(
+                    Q(client_id=client_id) | Q(canonical_client_id=client_id)
+                ).values('agency__name').annotate(
+                    count=Count('id')
+                ).order_by('-count')[:10]  # Top 10 agencies per client
+                client_agencies[client_id] = [a['agency__name'] for a in agencies if a['agency__name']]
+
+            results = []
+            for item in page:
+                client_id = item['effective_client_id']
+                if client_id in actors_dict:
+                    results.append({
+                        'actor': actors_dict[client_id],
+                        'agency_count': item['agency_count'],
+                        'agencies': client_agencies.get(client_id, []),
+                    })
+
+            serializer = self.get_serializer(results, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback without pagination
+        client_ids = [item['effective_client_id'] for item in aggregated_qs]
+        actors_dict = {
+            actor.id: actor
+            for actor in models.Actor.objects.filter(id__in=client_ids)
+        }
+        results = [
+            {
+                'actor': actors_dict[item['effective_client_id']],
+                'agency_count': item['agency_count'],
+                'agencies': [],
+            }
+            for item in aggregated_qs
+            if item['effective_client_id'] in actors_dict
+        ]
+        serializer = self.get_serializer(results, many=True)
+        return Response(serializer.data)
+
+
+class DepartmentMeetingsView(generics.ListAPIView):
+    """
+    GET /api/v2/aggregates/department-meetings/
+
+    Returns government departments ranked by number of ministerial meetings,
+    with top attendees for each department.
+
+    Query Parameters:
+    - limit: Number of departments to return (default: 10, max: 50)
+    - offset: Pagination offset
+    - date_after: Filter meetings from this date (YYYY-MM-DD)
+    - date_before: Filter meetings up to this date (YYYY-MM-DD)
+    - top_attendees: Number of top attendees per department (default: 3, max: 10)
+
+    Example:
+        GET /api/v2/aggregates/department-meetings/?limit=5&top_attendees=3
+    """
+    serializer_class = serializers.DepartmentMeetingsSerializer
+    pagination_class = pagination.AggregatePagination
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """
+        Aggregate meetings by department, counting unique meetings.
+        """
+        # Get query parameters for date filtering
+        date_after = self.request.query_params.get('date_after')
+        date_before = self.request.query_params.get('date_before')
+
+        # Base queryset - all meetings
+        queryset = models.MinisterialMeeting.objects.all()
+
+        # Apply date filters
+        if date_after:
+            queryset = queryset.filter(meeting_date__gte=date_after)
+        if date_before:
+            queryset = queryset.filter(meeting_date__lte=date_before)
+
+        # Aggregate by department
+        aggregated = queryset.values('department_id').annotate(
+            total_meetings=Count('id', distinct=True)
+        ).order_by('-total_meetings')
+
+        return aggregated
+
+    def list(self, request, *args, **kwargs):
+        """Handle pagination, department fetching, and top attendees."""
+        aggregated_qs = self.get_queryset()
+
+        # Get parameters
+        date_after = request.query_params.get('date_after')
+        date_before = request.query_params.get('date_before')
+        top_attendees_count = min(int(request.query_params.get('top_attendees', 3)), 10)
+
+        # Manual pagination
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(list(aggregated_qs), request, view=self)
+
+        if page is not None:
+            dept_ids = [item['department_id'] for item in page]
+
+            # Fetch department actors
+            departments_dict = {
+                d.id: d for d in models.Actor.objects.filter(id__in=dept_ids)
+            }
+
+            # Get top attendees for each department
+            # Query attendees grouped by (department, effective_actor)
+            attendee_queryset = models.MeetingAttendee.objects.exclude(actor__isnull=True)
+            if date_after:
+                attendee_queryset = attendee_queryset.filter(meeting__meeting_date__gte=date_after)
+            if date_before:
+                attendee_queryset = attendee_queryset.filter(meeting__meeting_date__lte=date_before)
+
+            attendee_breakdown = attendee_queryset.filter(
+                meeting__department_id__in=dept_ids
+            ).annotate(
+                effective_actor_id=Coalesce('canonical_actor_id', 'actor_id')
+            ).values(
+                'meeting__department_id', 'effective_actor_id'
+            ).annotate(
+                meeting_count=Count('meeting_id', distinct=True)
+            ).order_by('meeting__department_id', '-meeting_count')
+
+            # Build dict: department_id -> [{actor_id, meeting_count}, ...]
+            attendees_by_dept = {}
+            for item in attendee_breakdown:
+                did = item['meeting__department_id']
+                if did not in attendees_by_dept:
+                    attendees_by_dept[did] = []
+                # Only keep top N attendees per department
+                if len(attendees_by_dept[did]) < top_attendees_count:
+                    attendees_by_dept[did].append({
+                        'actor_id': item['effective_actor_id'],
+                        'meeting_count': item['meeting_count']
+                    })
+
+            # Fetch all attendee actors
+            all_actor_ids = set()
+            for attendee_list in attendees_by_dept.values():
+                for a in attendee_list:
+                    all_actor_ids.add(a['actor_id'])
+
+            actors_dict = {
+                a.id: a for a in models.Actor.objects.filter(id__in=all_actor_ids)
+            }
+
+            # Build results
+            results = []
+            for item in page:
+                dept_id = item['department_id']
+                if dept_id in departments_dict:
+                    # Build top attendees with actor objects
+                    top_attendees = []
+                    for a in attendees_by_dept.get(dept_id, []):
+                        if a['actor_id'] in actors_dict:
+                            top_attendees.append({
+                                'actor': actors_dict[a['actor_id']],
+                                'meeting_count': a['meeting_count']
+                            })
+
+                    results.append({
+                        'department': departments_dict[dept_id],
+                        'total_meetings': item['total_meetings'],
+                        'top_attendees': top_attendees
+                    })
+
+            serializer = self.get_serializer(results, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        # Fallback without pagination
+        dept_ids = [item['department_id'] for item in aggregated_qs]
+        departments_dict = {
+            d.id: d for d in models.Actor.objects.filter(id__in=dept_ids)
+        }
+        results = [
+            {
+                'department': departments_dict[item['department_id']],
+                'total_meetings': item['total_meetings'],
+                'top_attendees': []
+            }
+            for item in aggregated_qs
+            if item['department_id'] in departments_dict
+        ]
+        serializer = self.get_serializer(results, many=True)
         return Response(serializer.data)
 
 
@@ -1100,12 +1397,27 @@ class MinisterNetworkView(views.APIView):
         if received_before:
             donations_qs = donations_qs.filter(received_date__lte=received_before)
 
-        # Get top ministers by total received - apply limit here
-        minister_totals = donations_qs.values('recipient_id').annotate(
-            total_received=Sum('value')
-        ).order_by('-total_received')[:limit]
+        # For current_only mode, include ALL current ministers (full government)
+        # Otherwise, limit to top N by donation value
+        if current_only:
+            # Include all current ministers - no limit
+            minister_totals = donations_qs.values('recipient_id').annotate(
+                total_received=Sum('value')
+            ).order_by('-total_received')
 
-        top_minister_ids = [m['recipient_id'] for m in minister_totals]
+            # Build dict of donation totals
+            minister_donation_totals = {m['recipient_id']: m['total_received'] for m in minister_totals}
+
+            # Use ALL minister_ids, not just those with donations
+            top_minister_ids = minister_ids
+        else:
+            # Original behavior: top N by donations
+            minister_totals = donations_qs.values('recipient_id').annotate(
+                total_received=Sum('value')
+            ).order_by('-total_received')[:limit]
+
+            minister_donation_totals = {m['recipient_id']: m['total_received'] for m in minister_totals}
+            top_minister_ids = [m['recipient_id'] for m in minister_totals]
         
         from django.db.models.functions import Coalesce
 
@@ -1128,11 +1440,11 @@ class MinisterNetworkView(views.APIView):
         nodes_dict = {}
         links = []
 
-        # Get all unique actor IDs
+        # Get all unique actor IDs (include ALL ministers, not just those with donations)
         donor_ids = set(c['effective_donor_id'] for c in connections)
         all_actor_ids = set(top_minister_ids) | donor_ids
 
-        # Fetch all actors
+        # Fetch all actors (ministers + donors)
         actors = {
             a.id: a for a in models.Actor.objects.filter(id__in=all_actor_ids)
         }
@@ -1157,14 +1469,94 @@ class MinisterNetworkView(views.APIView):
         for item in identifiers_qs:
             ch_identifiers[item['object_id']] = item['identifier']
 
-        # Get minister roles for display
+        # Get minister roles and departments for display
+        import re
+
+        def parse_department_from_role(role):
+            """Extract department name from ministerial role string."""
+            if not role:
+                return None
+
+            # Patterns to extract department:
+            # "The Minister of State, Home Department" -> "Home Department"
+            # "The Secretary of State for Northern Ireland" -> "Northern Ireland"
+            # "Parliamentary Under-Secretary (Department for Transport)" -> "Department for Transport"
+            # "Minister of State (Cabinet Office)" -> "Cabinet Office"
+
+            # Pattern 1: "Secretary of State for X" or "Secretary of State, X"
+            match = re.search(r'Secretary of State (?:for |, )(.+?)(?:\s*$|\s*\()', role)
+            if match:
+                return match.group(1).strip()
+
+            # Pattern 2: "Minister of State, X" or "Minister of State (X)"
+            match = re.search(r'Minister of State[,\s]+(.+?)(?:\s*$|\s*\()', role)
+            if match:
+                dept = match.group(1).strip()
+                if dept and not dept.startswith('('):
+                    return dept
+
+            # Pattern 3: Parentheses with department
+            match = re.search(r'\(([^)]+)\)\s*$', role)
+            if match:
+                return match.group(1).strip()
+
+            # Pattern 4: "Under-Secretary of State for X" or "Under-Secretary, X"
+            match = re.search(r'Under-Secretary[^,]*[,\s]+(?:for\s+)?(.+?)(?:\s*$|\s*\()', role)
+            if match:
+                return match.group(1).strip()
+
+            return None
+
         minister_roles = {}
-        for m in models.Membership.objects.filter(
-            person_id__in=top_minister_ids,
-            role__icontains='minister'
-        ).exclude(role__icontains='shadow').exclude(role__icontains='pps'):
+        minister_departments = {}
+        minister_memberships_detail = models.Membership.objects.filter(
+            person_id__in=top_minister_ids
+        ).filter(minister_q).exclude(
+            role__icontains='shadow'
+        ).exclude(
+            role__icontains='pps'
+        ).select_related('organization').order_by('-start_date')
+
+        if current_only:
+            minister_memberships_detail = minister_memberships_detail.filter(
+                Q(end_date__isnull=True) | Q(end_date='')
+            )
+
+        for m in minister_memberships_detail:
+            # Check if organization is an actual department (not Legislature)
+            is_department_org = m.organization and m.organization.classification not in ['Legislature', 'Political Party']
+
             if m.person_id not in minister_roles:
                 minister_roles[m.person_id] = m.role
+
+                if is_department_org:
+                    # Use the organization directly
+                    minister_departments[m.person_id] = {
+                        'id': m.organization.id,
+                        'name': m.organization.name
+                    }
+                else:
+                    # Parse department from role string
+                    dept_name = parse_department_from_role(m.role)
+                    if dept_name:
+                        minister_departments[m.person_id] = {
+                            'id': None,
+                            'name': dept_name
+                        }
+            elif m.person_id not in minister_departments:
+                # We have a role but no department yet
+                if is_department_org:
+                    minister_departments[m.person_id] = {
+                        'id': m.organization.id,
+                        'name': m.organization.name
+                    }
+                else:
+                    dept_name = parse_department_from_role(m.role)
+                    if dept_name:
+                        minister_departments[m.person_id] = {
+                            'id': None,
+                            'name': dept_name
+                        }
 
         # Get meeting counts for ministers
         minister_meeting_counts = dict(
@@ -1196,9 +1588,8 @@ class MinisterNetworkView(views.APIView):
             if actor_id:
                 donor_meeting_counts[actor_id] = donor_meeting_counts.get(actor_id, 0) + count
 
-        # Build minister nodes
-        for m in minister_totals:
-            mid = m['recipient_id']
+        # Build minister nodes (all ministers, even those without donations)
+        for mid in top_minister_ids:
             if mid in actors:
                 actor = actors[mid]
                 nodes_dict[mid] = {
@@ -1206,7 +1597,8 @@ class MinisterNetworkView(views.APIView):
                     'name': actor.name,
                     'type': 'minister',
                     'role': minister_roles.get(mid, 'Minister'),
-                    'total_value': float(m['total_received']),
+                    'department': minister_departments.get(mid),
+                    'total_value': float(minister_donation_totals.get(mid, 0) or 0),
                     'meeting_count': minister_meeting_counts.get(mid, 0),
                     'companies_house_number': ch_identifiers.get(mid),
                     'url': f'/person/{mid}/'

@@ -121,11 +121,12 @@ class TopRecipientSerializer(serializers.Serializer):
     """
     Serializer for top recipient aggregate results.
 
-    Returns: actor (summary), total_received, donation_count
+    Returns: actor (summary), total_received, donation_count, current_party (for persons)
     """
     actor = ActorSummarySerializer()
     total_received = serializers.DecimalField(max_digits=15, decimal_places=2)
     donation_count = serializers.IntegerField()
+    current_party = ActorSummarySerializer(required=False, allow_null=True)
 
 
 class PartyDonationSerializer(serializers.Serializer):
@@ -152,6 +153,36 @@ class DualInfluenceSerializer(serializers.Serializer):
     lobbying_count = serializers.IntegerField()
     first_activity = serializers.DateField()
     last_activity = serializers.DateField()
+
+
+class TopLobbyingClientSerializer(serializers.Serializer):
+    """
+    Serializer for top lobbying clients by number of agencies hired.
+
+    Returns: actor (summary), agency_count, agencies (list of names)
+    """
+    actor = ActorSummarySerializer()
+    agency_count = serializers.IntegerField()
+    agencies = serializers.ListField(child=serializers.CharField(), required=False)
+
+
+class DepartmentAttendeeSerializer(serializers.Serializer):
+    """
+    Serializer for a top attendee within a department.
+    """
+    actor = ActorSummarySerializer()
+    meeting_count = serializers.IntegerField()
+
+
+class DepartmentMeetingsSerializer(serializers.Serializer):
+    """
+    Serializer for departments ranked by meeting count, with top attendees.
+
+    Returns: department (summary), total_meetings, top_attendees
+    """
+    department = ActorSummarySerializer()
+    total_meetings = serializers.IntegerField()
+    top_attendees = DepartmentAttendeeSerializer(many=True)
 
 
 class NetworkStatsSerializer(serializers.Serializer):

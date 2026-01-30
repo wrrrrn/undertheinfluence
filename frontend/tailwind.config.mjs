@@ -11,26 +11,32 @@ export default {
       colors: {
         // Natural history / organic palette
         'accent': {
-          DEFAULT: '#C54B3C',  // Muted terracotta
+          DEFAULT: '#C54B3C',  // Muted terracotta (Economist red)
           dark: '#8B3A2F',
           light: '#E07B6C',
         },
         'ink': {
-          DEFAULT: '#2C2C2C',
-          light: '#5A5A5A',
-          muted: '#8A8A8A',
+          DEFAULT: '#1a1a1a',  // Near black for text
+          light: '#4a4a4a',
+          muted: '#6b6b6b',
         },
         'paper': {
-          DEFAULT: '#FAF8F5',  // Warm parchment
+          DEFAULT: '#FAF9F6',  // Warm parchment
           cream: '#F4F1EB',
           warm: '#EDE8E0',
         },
-        // Organic data visualization colors
+        // Network visualization node colors (top-level for opacity modifiers)
+        'minister': '#B85450',   // Warm red
+        'donor': '#5B7355',      // Botanical green
+        'director': '#4A7BA7',   // Steel blue
+        'psc': '#B87333',        // Copper
+        // Organic data visualization colors (grouped)
         'data': {
-          minister: '#C54B3C',    // Terracotta red
-          donor: '#4A6741',       // Forest green
+          minister: '#B85450',    // Warm red
+          donor: '#5B7355',       // Botanical green
+          director: '#4A7BA7',    // Steel blue
           organization: '#6B5B4F', // Warm brown
-          highlight: '#D4A84B',   // Golden ochre
+          highlight: '#DAA520',   // Goldenrod (bridge nodes)
           muted: '#9A9285',       // Stone grey
         },
       },

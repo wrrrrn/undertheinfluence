@@ -29,8 +29,10 @@ urlpatterns = [
     path('aggregates/network-stats/', views.NetworkStatsView.as_view(), name='network-stats'),
     path('aggregates/party-donations/', views.PartyDonationsView.as_view(), name='party-donations'),
     path('aggregates/dual-influence/', views.DualInfluenceView.as_view(), name='dual-influence'),
+    path('aggregates/top-lobbying-clients/', views.TopLobbyingClientsView.as_view(), name='top-lobbying-clients'),
     path('aggregates/donor-concentration/', views.DonorConcentrationView.as_view(), name='donor-concentration'),
     path('aggregates/minister-network/', views.MinisterNetworkView.as_view(), name='minister-network'),
+    path('aggregates/department-meetings/', views.DepartmentMeetingsView.as_view(), name='department-meetings'),
 
     # Actor detail endpoints
     path('actors/<int:pk>/', views.ActorDetailView.as_view(), name='actor-detail'),
