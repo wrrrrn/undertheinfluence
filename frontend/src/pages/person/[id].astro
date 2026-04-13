@@ -1,0 +1,568 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ActorTimeline from '../../components/ActorTimeline.svelte';
+import { API_URL, formatCurrency, pluralize, isPartyInGovernment } from '../../lib/utils';
+
+const { id } = Astro.params;
+
+// Fetch actor detail first, then conditionally fetch based on type
+let actor: any = null;
+let donations: any = { count: 0, results: [] };
+let donationsMade: any = { count: 0, results: [] };
+let memberships: any = { count: 0, results: [] };
+let meetings: any = { count: 0, results: [] };
+let consultancies: any = { count: 0, results: [] };
+let agencyClients: any = { count: 0, results: [] };
+let crossConnections: any = { count: 0, results: [] };
+let fundingSummary: any = null;
+
+try {
+  const actorRes = await fetch(`${API_URL}/actors/${id}/`);
+  if (!actorRes.ok) return Astro.redirect('/404');
+  actor = await actorRes.json();
+
+  const isPartyActor = actor.actor_type === 'organization' && actor.classification === 'Political Party';
+
+  if (isPartyActor) {
+    // Parties: fetch aggregate summary only — timeline loads donations per year on demand
+    const [fundingRes, crossConnectionsRes] = await Promise.all([
+      fetch(`${API_URL}/actors/${id}/funding-summary/`),
+      fetch(`${API_URL}/actors/${id}/cross-connections/`),
+    ]);
+    if (fundingRes.ok) fundingSummary = await fundingRes.json();
+    if (crossConnectionsRes.ok) crossConnections = await crossConnectionsRes.json();
+  } else {
+    // All other actor types: standard parallel fetch
+    const [donationsRes, donationsMadeRes, membershipsRes, meetingsRes, consultanciesRes, agencyClientsRes, crossConnectionsRes] = await Promise.all([
+      fetch(`${API_URL}/actors/${id}/donations-received/?limit=50`),
+      fetch(`${API_URL}/actors/${id}/donations-made/?limit=200`),
+      fetch(`${API_URL}/actors/${id}/memberships/?limit=50`),
+      fetch(`${API_URL}/actors/${id}/meetings/?limit=300`),
+      fetch(`${API_URL}/actors/${id}/consultancies/?limit=200`),
+      fetch(`${API_URL}/actors/${id}/agency-clients/?limit=20`),
+      fetch(`${API_URL}/actors/${id}/cross-connections/`),
+    ]);
+    if (donationsRes.ok) donations = await donationsRes.json();
+    if (donationsMadeRes.ok) donationsMade = await donationsMadeRes.json();
+    if (membershipsRes.ok) memberships = await membershipsRes.json();
+    if (meetingsRes.ok) meetings = await meetingsRes.json();
+    if (consultanciesRes.ok) consultancies = await consultanciesRes.json();
+    if (agencyClientsRes.ok) agencyClients = await agencyClientsRes.json();
+    if (crossConnectionsRes.ok) crossConnections = await crossConnectionsRes.json();
+  }
+} catch (error) {
+  console.error('Failed to fetch actor data:', error);
+  return Astro.redirect('/404');
+}
+
+const isPerson = actor.actor_type === 'person';
+const pageTitle = actor.name;
+
+// Determine current role and party from memberships
+const ministerialRoles = memberships.results.filter((m: any) =>
+  m.role && (m.role.includes('Secretary of State') || m.role.includes('Minister') || m.role.includes('Mayor'))
+  && !m.role.startsWith('Member of Parliament') && !m.role.startsWith('Member of the ')
+);
+const parliamentaryRoles = memberships.results.filter((m: any) =>
+  m.role && (m.role.startsWith('Member of Parliament') || m.role.startsWith('Member of the '))
+);
+const partyMembership = memberships.results.find((m: any) =>
+  m.on_behalf_of?.classification === 'Political Party'
+);
+// For persons: show latest role with date range. Priority: ministerial > MP > any role
+// For orgs: no role line (classification shown instead)
+const latestRoleMembership = isPerson
+  ? (ministerialRoles.length > 0
+      ? ministerialRoles[0]
+      : parliamentaryRoles.length > 0
+        ? parliamentaryRoles[0]
+        : memberships.results.length > 0
+          ? memberships.results[0]
+          : null)
+  : null;
+const latestRole = latestRoleMembership?.role || null;
+const latestRoleDates = latestRoleMembership
+  ? (() => {
+      const fmt = (d: string) => {
+        if (!d) return null;
+        const date = new Date(d + 'T00:00:00');
+        return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+      };
+      const start = fmt(latestRoleMembership.start_date);
+      const end = latestRoleMembership.end_date ? fmt(latestRoleMembership.end_date) : 'Present';
+      return start ? `${start} — ${end}` : null;
+    })()
+  : null;
+
+// Classification-based section label
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  'Private Limited Company': 'Company',
+  'Public Limited Company': 'Company',
+  'PLC': 'Company',
+  'Company': 'Company',
+  'Lobbying Agency': 'Lobbying Agency',
+  'Political Party': 'Political Party',
+  'Trade Union': 'Trade Union',
+  'Government Department': 'Government Department',
+  'Legislature': 'Legislature',
+};
+// For persons: detect if politician (has parliamentary roles) or director/PSC (Companies House only)
+const hasParliamentaryRole = isPerson && memberships.results.some((m: any) =>
+  m.role && (m.role.startsWith('Member of Parliament') || m.role.startsWith('Member of the ') ||
+    m.organization?.classification === 'Legislature')
+);
+const isDirectorOnly = isPerson && !hasParliamentaryRole && memberships.results.some((m: any) =>
+  m.role && (m.role === 'Director' || m.role?.includes('Beneficial Owner') || m.role?.includes('Person with Significant Control'))
+);
+const isMayor = isPerson && memberships.results.some((m: any) =>
+  m.role && m.role.includes('Mayor')
+);
+const isLobbyist = isPerson && !hasParliamentaryRole && !isMayor && !isDirectorOnly && memberships.results.some((m: any) =>
+  m.role === 'Lobbyist'
+);
+const isParty = !isPerson && actor.classification === 'Political Party';
+// Detect lobbying agency: either classified as one, or has significant agency consultancies
+const isLobbyingAgency = !isPerson && !isParty && (
+  actor.classification === 'Lobbying Agency' ||
+  (actor.consultancies_as_agency > 10 && actor.consultancies_as_agency > actor.consultancies_as_client)
+);
+const sectionLabel = isPerson
+  ? (hasParliamentaryRole ? 'Politician' : isMayor ? 'Mayor' : isDirectorOnly ? 'Director' : isLobbyist ? 'Lobbyist' : 'Person')
+  : isLobbyingAgency
+    ? 'Lobbying Agency'
+    : CLASSIFICATION_LABELS[actor.classification] || 'Organisation';
+
+const partyName = partyMembership?.on_behalf_of?.name || null;
+
+// Party colour mapping (muted, from design system)
+const PARTY_COLOURS: Record<string, string> = {
+  'Conservative': '#4A7BA7',
+  'Labour': '#B85450',
+  'Liberal Democrat': '#C9A227',
+  'Green': '#5B7355',
+  'Scottish National Party': '#C9B84A',
+  'Reform UK': '#4A8B9E',
+  'Plaid Cymru': '#5B7355',
+  'Democratic Unionist Party': '#4A4A4A',
+  'Sinn Féin': '#5B7355',
+  'Alliance': '#C9A227',
+};
+const partyColour = partyName ? PARTY_COLOURS[partyName] || null : null;
+
+// Build stats array (only show non-zero values, with context)
+const stats: Array<{ value: string; label: string }> = [];
+if (isParty && fundingSummary) {
+  // Party stats from aggregate endpoint
+  stats.push({ value: fundingSummary.donation_count.toLocaleString(), label: `${pluralize(fundingSummary.donation_count, 'donation')} from ${fundingSummary.unique_donors.toLocaleString()} ${pluralize(fundingSummary.unique_donors, 'donor')}` });
+} else if (donations.count > 0) {
+  const uniqueDonors = actor.unique_donors_count;
+  const label = uniqueDonors ? `${pluralize(donations.count, 'donation')} from ${uniqueDonors} ${pluralize(uniqueDonors, 'donor')}` : `${pluralize(donations.count, 'donation')} received`;
+  stats.push({ value: donations.count.toLocaleString(), label });
+}
+if (donationsMade.count > 0) stats.push({ value: donationsMade.count.toLocaleString(), label: `${pluralize(donationsMade.count, 'donation')} made` });
+if (meetings.count > 0) {
+  // For orgs: "meetings with X ministers"; for politicians: "meetings with X organisations"
+  if (isPerson && actor.unique_meeting_orgs_count) {
+    stats.push({ value: meetings.count.toLocaleString(), label: `${pluralize(meetings.count, 'meeting')} with ${actor.unique_meeting_orgs_count} ${pluralize(actor.unique_meeting_orgs_count, 'organisation')}` });
+  } else if (!isPerson && actor.unique_ministers_met_count) {
+    stats.push({ value: meetings.count.toLocaleString(), label: `${pluralize(meetings.count, 'meeting')} with ${actor.unique_ministers_met_count} ${pluralize(actor.unique_ministers_met_count, 'minister')}` });
+  } else {
+    stats.push({ value: meetings.count.toLocaleString(), label: pluralize(meetings.count, 'meeting') });
+  }
+}
+if (consultancies.count > 0) {
+  // Don't repeat client count in stats strip if it's already the headline stat
+  if (isLobbyingAgency) {
+    // Skip — client count is the headline stat
+  } else if (actor.consultancies_as_client > 0) {
+    const agencyCount = actor.consultancies_as_client;
+    stats.push({ value: agencyCount.toLocaleString(), label: `lobbying ${pluralize(agencyCount, 'agency', 'agencies')} hired` });
+  } else {
+    stats.push({ value: consultancies.count.toLocaleString(), label: `lobbying ${pluralize(consultancies.count, 'relationship')}` });
+  }
+}
+
+// Key people for org pages (directors, PSCs from Companies House)
+const keyPeople = !isPerson ? memberships.results
+  .filter((m: any) => m.role && (m.role.includes('Director') || m.role.includes('Beneficial Owner') || m.role.includes('Person with Significant Control')))
+  .slice(0, 6) : [];
+const totalKeyPeople = !isPerson ? memberships.results
+  .filter((m: any) => m.role && (m.role.includes('Director') || m.role.includes('Beneficial Owner') || m.role.includes('Person with Significant Control')))
+  .length : 0;
+
+// Lobbyists for agency pages
+const lobbyists = isLobbyingAgency ? memberships.results
+  .filter((m: any) => m.role === 'Lobbyist' || (!m.role && isLobbyingAgency))
+  .slice(0, 8) : [];
+const totalLobbyists = isLobbyingAgency ? memberships.results
+  .filter((m: any) => m.role === 'Lobbyist' || (!m.role && isLobbyingAgency))
+  .length : 0;
+---
+
+<BaseLayout title={pageTitle}>
+  <main class="min-h-screen">
+    <!-- Profile Header -->
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">{sectionLabel}</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
+        <!-- Name & Role -->
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-3">
+            {actor.name}
+          </h1>
+          {latestRole && (
+            <p class="text-lg text-ink-light font-medium">
+              {latestRole}
+              {latestRoleDates && <span class="text-sm text-ink-muted ml-2">{latestRoleDates}</span>}
+            </p>
+          )}
+          {partyName && (
+            <p class="text-sm text-ink-muted mt-1">
+              {partyColour && <span class="inline-block w-2.5 h-2.5 rounded-full mr-1.5 align-middle" style={`background:${partyColour}`}></span>}
+              {partyName}
+            </p>
+          )}
+          {!isPerson && actor.classification && actor.classification !== sectionLabel && (
+            <p class="text-sm text-ink-muted mt-1">{actor.classification}</p>
+          )}
+        </div>
+
+        <!-- Headline Stat: adaptive based on data profile -->
+        <div class="lg:col-span-4">
+          {isLobbyingAgency && actor.consultancies_as_agency > 0 ? (
+            <div>
+              <span class="stat-figure">{actor.consultancies_as_agency.toLocaleString()}</span>
+              <span class="stat-label block">Clients</span>
+            </div>
+          ) : actor.total_received && parseFloat(actor.total_received) > 0 ? (
+            <div>
+              <span class="stat-figure">{formatCurrency(actor.total_received)}</span>
+              <span class="stat-label block">Received</span>
+            </div>
+          ) : actor.total_donated && parseFloat(actor.total_donated) > 0 ? (
+            <div>
+              <span class="stat-figure">{formatCurrency(actor.total_donated)}</span>
+              <span class="stat-label block">Donated</span>
+            </div>
+          ) : actor.meeting_attendance_count > 0 ? (
+            <div>
+              <span class="stat-figure">{actor.meeting_attendance_count.toLocaleString()}</span>
+              <span class="stat-label block">Meetings</span>
+            </div>
+          ) : actor.consultancies_as_client > 0 ? (
+            <div>
+              <span class="stat-figure">{actor.consultancies_as_client.toLocaleString()}</span>
+              <span class="stat-label block">Lobbying {pluralize(actor.consultancies_as_client, 'Agency', 'Agencies')}</span>
+            </div>
+          ) : memberships.count > 0 ? (
+            <div>
+              <span class="stat-figure">{memberships.count.toLocaleString()}</span>
+              <span class="stat-label block">{isDirectorOnly ? 'Directorships' : 'Roles'}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <!-- Key People / Lobbyists — full width below the header grid -->
+      {keyPeople.length > 0 && (
+        <div class="mt-4">
+          <h2 class="text-[10px] font-body font-semibold uppercase tracking-widest text-ink-muted">Key People</h2>
+          <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+            {keyPeople.map((m: any) => (
+              <a href={`/person/${m.person.id}`} class="text-xs text-ink-light hover:text-accent transition-colors">
+                {m.person.name} <span class="text-ink-muted">({m.role === 'Director' ? 'Dir.' : 'PSC'})</span>
+              </a>
+            ))}
+            {totalKeyPeople > 6 && (
+              <span class="text-xs text-ink-muted">+{totalKeyPeople - 6} more</span>
+            )}
+          </div>
+        </div>
+      )}
+      {lobbyists.length > 0 && (
+        <div class="mt-3">
+          <h2 class="text-[10px] font-body font-semibold uppercase tracking-widest text-ink-muted">Registered Lobbyists ({totalLobbyists})</h2>
+          <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+            {lobbyists.map((m: any) => (
+              <a href={`/person/${m.person.id}`} class="text-xs text-ink-light hover:text-accent transition-colors">
+                {m.person.name}
+              </a>
+            ))}
+            {totalLobbyists > 8 && (
+              <span class="text-xs text-ink-muted">+{totalLobbyists - 8} more</span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+
+    <!-- Cross-connections: direction-aware rendering -->
+    {crossConnections.results.length > 0 && (
+      <section class="max-w-[1400px] mx-auto px-6 pt-4 pb-4">
+        <h2 class="section-label border-b border-accent pb-2 mb-3 inline-block">
+          {crossConnections.direction === 'person_to_orgs' ? 'Corporate Connections' : 'Staff With Political Ties'}
+        </h2>
+        <div class="space-y-2">
+          {crossConnections.direction === 'person_to_orgs'
+            ? crossConnections.results.map((c: any) => (
+                <div class="pl-3 border-l-2 border-accent/30">
+                  <a href={`/person/${c.id}`} class="text-sm font-display font-semibold hover:text-accent transition-colors">{c.name}</a>
+                  {c.role && <span class="text-xs text-ink-muted ml-1.5">— {c.role}</span>}
+                  {c.classification && <span class="text-xs text-ink-muted ml-1"> · {c.classification}</span>}
+                  <div class="text-xs text-ink-light mt-0.5 space-y-0.5">
+                    {c.consultancy_count > 0 && <div>Hired {c.consultancy_count} lobbying {pluralize(c.consultancy_count, 'agency', 'agencies')}</div>}
+                    {c.meeting_count > 0 && <div>Attended {c.meeting_count} ministerial {pluralize(c.meeting_count, 'meeting')}</div>}
+                    {c.total_donated > 0 && <div>Donated {formatCurrency(c.total_donated)}</div>}
+                    {c.total_received > 0 && <div>Received {formatCurrency(c.total_received)} in donations</div>}
+                  </div>
+                </div>
+              ))
+            : crossConnections.results.map((c: any) => (
+                <div class="pl-3 border-l-2 border-accent/30">
+                  <a href={`/person/${c.id}`} class="text-sm font-display font-semibold hover:text-accent transition-colors">{c.name}</a>
+                  {c.role && <span class="text-xs text-ink-muted ml-1.5">{c.role}</span>}
+                  {c.party && <span class="text-xs text-ink-muted ml-1">· {c.party}</span>}
+                  <div class="text-xs text-ink-light mt-0.5 space-y-0.5">
+                    {c.parliamentary_roles && <div>{c.parliamentary_roles.split(',')[0].trim()}</div>}
+                    {c.donation_count > 0 && <div>{pluralize(c.donation_count, 'political donation')} totalling £{Math.round(c.total_donated).toLocaleString()}</div>}
+                    {c.meeting_count > 0 && <div>Attended {c.meeting_count} ministerial {pluralize(c.meeting_count, 'meeting')}</div>}
+                  </div>
+                </div>
+              ))
+          }
+        </div>
+      </section>
+    )}
+
+    <!-- Stats Strip -->
+    {stats.length > 0 && (
+      <section class="max-w-[1400px] mx-auto px-6">
+        <div class:list={['grid gap-0 border-y border-ink/10 py-6', stats.length === 1 && 'grid-cols-1', stats.length === 2 && 'grid-cols-2', stats.length === 3 && 'grid-cols-3', stats.length >= 4 && 'grid-cols-2 md:grid-cols-4']}>
+          {stats.map((stat, i) => (
+            <div class:list={['flex flex-col items-center text-center px-4', i < stats.length - 1 && 'md:border-r border-ink/10']}>
+              <span class="font-display font-bold text-2xl tabular">{stat.value}</span>
+              <span class="stat-label">{stat.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <!-- Top Clients (agency pages only) -->
+    {agencyClients.results.length > 0 && (
+      <section class="max-w-[1400px] mx-auto px-6 pt-8">
+        <h2 class="section-label border-b border-accent pb-2 mb-4 inline-block">Top Clients by Political Activity</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+          {agencyClients.results.map((client: any) => (
+            <div class="flex items-baseline justify-between gap-2 py-1.5 border-b border-ink/5">
+              <a href={`/person/${client.id}`} class="font-display font-semibold text-sm hover:text-accent transition-colors truncate">
+                {client.name}
+              </a>
+              <div class="flex items-baseline gap-3 shrink-0 text-[10px] text-ink-muted tabular">
+                {client.meeting_count > 0 && <span>{client.meeting_count} meetings</span>}
+                {client.donation_count > 0 && <span>{client.donation_count} donations</span>}
+                {client.other_agencies_count > 0 && <span>+{client.other_agencies_count} agencies</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        {agencyClients.count > agencyClients.results.length && (
+          <p class="text-xs text-ink-muted mt-2">{agencyClients.count} clients total — showing top {agencyClients.results.length} by political activity</p>
+        )}
+      </section>
+    )}
+
+    {/* Party-specific funding sections */}
+    {isParty && fundingSummary && (
+      <>
+        {/* Top Donors */}
+        <section class="max-w-[1400px] mx-auto px-6 pt-8">
+          <h2 class="section-label border-b border-accent pb-2 mb-4 inline-block">Top Private Donors</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+            {fundingSummary.top_donors.map((donor: any, i: number) => (
+              <div class="py-2 border-b border-ink/5">
+                <div class="flex items-baseline justify-between gap-2">
+                  <div class="min-w-0">
+                    <span class="text-xs text-ink-muted tabular mr-2">{i + 1}.</span>
+                    <a href={`/person/${donor.id}`} class="font-display font-semibold text-sm hover:text-accent transition-colors">
+                      {donor.name}
+                    </a>
+                    <span class="text-[10px] text-ink-muted ml-1.5">{donor.count} {pluralize(donor.count, 'donation')}</span>
+                  </div>
+                  <span class="font-display font-bold tabular shrink-0">{formatCurrency(donor.total)}</span>
+                </div>
+                {donor.to_party_mps && (
+                  <div class="text-[10px] text-ink-muted mt-0.5 ml-6">Also funded {donor.mps_funded} {pluralize(donor.mps_funded, 'MP')}</div>
+                )}
+              </div>
+            ))}
+          </div>
+          {fundingSummary.unique_donors > 20 && (
+            <p class="text-xs text-ink-muted mt-2">{fundingSummary.unique_donors.toLocaleString()} donors total — showing top 20 by lifetime value</p>
+          )}
+        </section>
+
+        {/* Cross-Funding of MPs — donors who also fund individual party MPs */}
+        {(() => {
+          const crossFunders = fundingSummary.top_donors.filter((d: any) => d.to_party_mps && d.mps_funded > 0);
+          if (crossFunders.length === 0) return null;
+          const totalCrossFunding = crossFunders.reduce((sum: number, d: any) => sum + parseFloat(d.to_party_mps), 0);
+          const totalMPsFunded = new Set(crossFunders.flatMap((d: any) => d.mps_funded_ids || [])).size || Math.max(...crossFunders.map((d: any) => d.mps_funded));
+          return (
+            <section class="max-w-[1400px] mx-auto px-6 pt-8">
+              <h2 class="section-label border-b border-accent pb-2 mb-3 inline-block">Cross-Funding of MPs</h2>
+              <p class="text-xs text-ink-muted mb-3">Top party donors who also made separate donations to individual {actor.name} MPs — overlapping private and personal political funding.</p>
+              <div class="pl-3 border-l-2 border-ink/10">
+                <div class="flex items-baseline justify-between gap-4 mb-2">
+                  <span class="font-display font-bold text-lg">{formatCurrency(totalCrossFunding)}</span>
+                  <span class="text-xs text-ink-muted">from {crossFunders.length} {pluralize(crossFunders.length, 'donor')} to party MPs</span>
+                </div>
+                {crossFunders.sort((a: any, b: any) => parseFloat(b.to_party_mps) - parseFloat(a.to_party_mps)).slice(0, 10).map((donor: any) => (
+                  <div class="flex items-baseline justify-between gap-2 py-1">
+                    <div class="min-w-0">
+                      <a href={`/person/${donor.id}`} class="text-sm text-ink-light hover:text-accent transition-colors">{donor.name}</a>
+                      <span class="text-[10px] text-ink-muted ml-1.5">{donor.mps_funded} {pluralize(donor.mps_funded, 'MP')}</span>
+                    </div>
+                    <span class="text-xs text-ink-muted tabular">{formatCurrency(donor.to_party_mps)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* Trade Union Funding (separated from private donations) */}
+        {fundingSummary.union_funding && fundingSummary.union_funding.count > 0 && (
+          <section class="max-w-[1400px] mx-auto px-6 pt-8">
+            <h2 class="section-label border-b border-accent pb-2 mb-3 inline-block">Trade Union Funding</h2>
+            <p class="text-xs text-ink-muted mb-3">Donations from affiliated and non-affiliated trade unions — institutional political funding, distinct from individual or corporate donations.</p>
+            <div class="pl-3 border-l-2 border-ink/10">
+              <div class="flex items-baseline justify-between gap-4 mb-2">
+                <span class="font-display font-bold text-lg">{formatCurrency(fundingSummary.union_funding.total)}</span>
+                <span class="text-xs text-ink-muted">{fundingSummary.union_funding.count.toLocaleString()} {pluralize(fundingSummary.union_funding.count, 'donation')} from {fundingSummary.union_funding.sources} {pluralize(fundingSummary.union_funding.sources, 'union')}</span>
+              </div>
+              {fundingSummary.union_funding.top_sources.map((src: any) => (
+                <div class="flex items-baseline justify-between gap-2 py-1">
+                  <a href={`/person/${src.id}`} class="text-sm text-ink-light hover:text-accent transition-colors">{src.name}</a>
+                  <span class="text-xs text-ink-muted tabular">{formatCurrency(src.total)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Public Funds (separated from private donations) */}
+        {fundingSummary.public_funds && fundingSummary.public_funds.count > 0 && (
+          <section class="max-w-[1400px] mx-auto px-6 pt-8">
+            <h2 class="section-label border-b border-accent pb-2 mb-3 inline-block">Public Funding</h2>
+            <p class="text-xs text-ink-muted mb-3">Statutory public funds (Short Money, Policy Development Grants) allocated to qualifying parties — not private donations.</p>
+            <div class="pl-3 border-l-2 border-ink/10">
+              <div class="flex items-baseline justify-between gap-4 mb-2">
+                <span class="font-display font-bold text-lg">{formatCurrency(fundingSummary.public_funds.total)}</span>
+                <span class="text-xs text-ink-muted">{fundingSummary.public_funds.count} {pluralize(fundingSummary.public_funds.count, 'payment')} from {fundingSummary.public_funds.sources} {pluralize(fundingSummary.public_funds.sources, 'source')}</span>
+              </div>
+              {fundingSummary.public_funds.top_sources.map((src: any) => (
+                <div class="flex items-baseline justify-between gap-2 py-1">
+                  <a href={`/person/${src.id}`} class="text-sm text-ink-light hover:text-accent transition-colors">{src.name}</a>
+                  <span class="text-xs text-ink-muted tabular">{formatCurrency(src.total)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Funding by Donation Type */}
+        <section class="max-w-[1400px] mx-auto px-6 pt-8">
+          <h2 class="section-label border-b border-accent pb-2 mb-4 inline-block">Funding by Type</h2>
+          <div class="space-y-2">
+            {fundingSummary.category_breakdown.map((cat: any) => {
+              const totalReceived = parseFloat(fundingSummary.total_received) || 1;
+              const pct = Math.round((parseFloat(cat.total) / totalReceived) * 100);
+              return (
+                <div class="flex items-baseline justify-between gap-4">
+                  <div class="min-w-0">
+                    <span class="font-display font-semibold text-sm">{cat.category}</span>
+                    <span class="text-[10px] text-ink-muted ml-2">{cat.count.toLocaleString()} {pluralize(cat.count, 'donation')}</span>
+                  </div>
+                  <div class="flex items-baseline gap-3 shrink-0">
+                    <span class="text-xs text-ink-muted tabular">{pct}%</span>
+                    <span class="font-display font-bold tabular">{formatCurrency(cat.total)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Funding by Year — clickable bars expand to show top donors */}
+        <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-8">
+          <h2 class="section-label border-b border-accent pb-2 mb-4 inline-block">Funding by Year</h2>
+          <div class="space-y-0">
+            {fundingSummary.yearly_totals.map((yr: any) => {
+              const maxTotal = Math.max(...fundingSummary.yearly_totals.map((y: any) => parseFloat(y.total)));
+              const barWidth = maxTotal > 0 ? (parseFloat(yr.total) / maxTotal) * 100 : 0;
+              const yearNum = parseInt(yr.year);
+              const inGov = isPartyInGovernment(actor.name, yearNum);
+              const ELECTION_YEARS = [2001, 2005, 2010, 2015, 2017, 2019, 2024];
+              const isElection = ELECTION_YEARS.includes(yearNum);
+              const topDonors = yr.top_donors || [];
+              return (
+                <details class="group border-b border-ink/5">
+                  <summary class="flex items-center gap-3 py-1.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-ink/[0.02] transition-colors">
+                    <span class="font-display font-bold text-sm tabular w-12 shrink-0 group-open:text-accent">{yr.year}</span>
+                    <div class="flex-1 h-5 bg-ink/5 relative">
+                      <div class={`h-full ${inGov ? 'bg-accent/30' : 'bg-ink/10'}`} style={`width:${barWidth}%`}></div>
+                    </div>
+                    <span class="text-xs text-ink-muted tabular shrink-0 w-20 text-right">{formatCurrency(yr.total)}</span>
+                    <span class="text-[10px] text-ink-muted tabular shrink-0 w-20 text-right">{yr.unique_donors} {pluralize(yr.unique_donors, 'donor')}</span>
+                    <span class="text-[10px] tabular shrink-0 w-24 text-right">
+                      {isElection && <span class="text-accent font-semibold mr-1">Election</span>}
+                      {inGov === true && <span class="text-ink-muted">In govt</span>}
+                      {inGov === false && <span class="text-ink-muted">Opposition</span>}
+                    </span>
+                    <span class="text-[10px] text-ink-muted shrink-0 w-4 text-center group-open:hidden">▸</span>
+                    <span class="text-[10px] text-accent shrink-0 w-4 text-center hidden group-open:inline">▾</span>
+                  </summary>
+                  {topDonors.length > 0 && (
+                    <div class="pl-16 pb-3 pt-1 space-y-1">
+                      {topDonors.map((d: any) => (
+                        <div class="flex items-baseline justify-between gap-2">
+                          <a href={`/person/${d.id}`} class="text-xs font-display font-semibold hover:text-accent transition-colors truncate">{d.name}</a>
+                          <div class="flex items-baseline gap-3 shrink-0">
+                            <span class="text-[10px] text-ink-muted tabular">{d.count} {pluralize(d.count, 'donation')}</span>
+                            <span class="text-xs font-display font-bold tabular">{formatCurrency(d.total)}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {yr.unique_donors > 5 && (
+                        <p class="text-[10px] text-ink-muted">+ {yr.unique_donors - 5} more {pluralize(yr.unique_donors - 5, 'donor')}</p>
+                      )}
+                    </div>
+                  )}
+                </details>
+              );
+            })}
+          </div>
+        </section>
+      </>
+    )}
+
+    {/* Timeline */}
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-16">
+      <ActorTimeline
+        client:visible
+        {actor}
+        {donations}
+        {donationsMade}
+        {memberships}
+        {meetings}
+        {consultancies}
+        yearlyTotals={isParty && fundingSummary ? fundingSummary.yearly_totals : null}
+        actorId={actor.id}
+      />
+    </section>
+  </main>
+</BaseLayout>
