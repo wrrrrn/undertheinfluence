@@ -703,85 +703,84 @@
           {/if}
         </g>
       {/if}
+      <!-- Node detail as SVG annotation in corner of graph -->
+      {#if activeNode}
+        {@const donationLinks = processedLinks.filter(l =>
+          (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'donation'
+        )}
+        {@const meetingCount = activeNode.meeting_count || 0}
+        {@const detailX = detailOnLeft ? -60 : width + 60}
+        {@const anchor = detailOnLeft ? 'start' : 'end'}
+        {@const position = activeNode.role
+          ? activeNode.role
+              .replace(/,\s*(Department\s+)?(for\s+)?[\w\s]+$/, '')
+              .replace(/\s*\([^)]+\)\s*$/, '')
+              .replace(/^The\s+/, '')
+              .trim()
+          : null}
+        {@const profileUrl = activeNode.type === 'organization' ? `/organisation/${activeNode.id}` : `/person/${activeNode.id}`}
+        {@const statsY = (position ? 32 : 18) + (activeNode.department ? 14 : 0) + 8}
+        <g class="node-detail-annotation">
+          <!-- Leader line from node to annotation corner -->
+          <line x1={activeNode.x} y1={activeNode.y}
+                x2={detailX} y2={-20}
+                stroke="#6b6b6b" stroke-width="0.5" opacity="0.2" stroke-dasharray="3,3"/>
+          <circle cx={activeNode.x} cy={activeNode.y} r="3" fill="#C54B3C" opacity="0.5"/>
+
+          <!-- Type label -->
+          <text x={detailX} y={-20} text-anchor={anchor}
+                font-family="Satoshi, sans-serif" font-size="9" font-weight="600"
+                fill="#C54B3C" style="text-transform:uppercase;letter-spacing:0.1em">
+            {activeNode.type}
+          </text>
+          <!-- Name -->
+          <text x={detailX} y={2} text-anchor={anchor}
+                font-family="Zodiak, serif" font-size="18" font-weight="600" fill="#1a1a1a">
+            {activeNode.name.length > 28 ? activeNode.name.slice(0, 26) + '…' : activeNode.name}
+          </text>
+          <!-- Role -->
+          {#if position}
+            <text x={detailX} y={18} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="11" fill="#4a4a4a">
+              {position.length > 40 ? position.slice(0, 38) + '…' : position}
+            </text>
+          {/if}
+          {#if activeNode.department}
+            <text x={detailX} y={position ? 32 : 18} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="9" fill="#6b6b6b"
+                  style="text-transform:uppercase;letter-spacing:0.05em">
+              {activeNode.department.name}
+            </text>
+          {/if}
+
+          <!-- Stats -->
+          <line x1={detailOnLeft ? detailX : detailX - 180} y1={statsY}
+                x2={detailOnLeft ? detailX + 180 : detailX} y2={statsY}
+                stroke="#1a1a1a" stroke-width="0.5" opacity="0.1"/>
+          {#if activeNode.total_value > 0}
+            <text x={detailX} y={statsY + 18} text-anchor={anchor}
+                  font-family="Zodiak, serif" font-size="16" font-weight="600" fill="#1a1a1a">
+              {formatCurrency(activeNode.total_value)}
+            </text>
+            <text x={detailX} y={statsY + 30} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="8" fill="#6b6b6b"
+                  style="text-transform:uppercase;letter-spacing:0.05em">
+              {activeNode.type === 'minister' ? 'received' : 'donated'}
+            </text>
+          {/if}
+
+          <!-- Profile link -->
+          <a href={profileUrl}>
+            <text x={detailX} y={statsY + 48} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="11" fill="#C54B3C"
+                  style="cursor:pointer">
+              View full profile →
+            </text>
+          </a>
+        </g>
+      {/if}
     </svg>
 
-    <!-- Node detail panel (shown on hover or pin) -->
-    {#if activeNode}
-      {@const donationLinks = processedLinks.filter(l =>
-        (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'donation'
-      )}
-      {@const meetingLinks = processedLinks.filter(l =>
-        (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'meeting'
-      )}
-      {@const roleLinks = processedLinks.filter(l =>
-        (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'role'
-      )}
-      {@const donationCount = activeNode.donation_count || donationLinks.reduce((sum, l) => sum + l.count, 0)}
-      {@const meetingCount = activeNode.meeting_count || meetingLinks.reduce((sum, l) => sum + l.count, 0)}
-      <div class="node-detail" class:pinned={pinnedNode} class:detail-left={detailOnLeft}>
-        {#if pinnedNode}
-          <button class="detail-close" onclick={handleCloseDetail} aria-label="Close">
-            ×
-          </button>
-        {/if}
-        <p class="detail-type">{activeNode.type}</p>
-        <h3 class="detail-name">{activeNode.name}</h3>
-        {#if activeNode.role}
-          {@const position = activeNode.role
-            .replace(/,\s*(Department\s+)?(for\s+)?[\w\s]+$/, '')
-            .replace(/\s*\([^)]+\)\s*$/, '')
-            .replace(/^The\s+/, '')
-            .trim()}
-          <p class="detail-role">{position}</p>
-        {/if}
-        {#if activeNode.department}
-          <p class="detail-department">{activeNode.department.name}</p>
-        {/if}
-
-        <div class="detail-stats">
-          {#if activeNode.total_value > 0}
-            <div class="detail-stat">
-              <span class="detail-stat-value">{formatCurrency(activeNode.total_value)}</span>
-              <span class="detail-stat-label">{activeNode.type === 'minister' ? 'received' : 'donated'}</span>
-            </div>
-          {/if}
-          {#if meetingCount > 0}
-            <div class="detail-stat">
-              <span class="detail-stat-value">{meetingCount.toLocaleString()}</span>
-              <span class="detail-stat-label">meetings</span>
-            </div>
-          {/if}
-          {#if roleLinks.length > 0}
-             <div class="detail-stat">
-              <span class="detail-stat-value">{roleLinks.length}</span>
-              <span class="detail-stat-label">associations</span>
-            </div>
-          {/if}
-          {#if donationLinks.length > 0 || meetingLinks.length > 0}
-            <div class="detail-stat">
-              <span class="detail-stat-value">{donationLinks.length + meetingLinks.length}</span>
-              <span class="detail-stat-label">{activeNode.type === 'minister' ? 'connections' : 'ministers'}</span>
-            </div>
-          {/if}
-        </div>
-
-        {#if activeNode.companies_house_number}
-          <a
-            href="https://find-and-update.company-information.service.gov.uk/company/{activeNode.companies_house_number}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="detail-link"
-            style="margin-top: 8px; display: block;"
-          >
-            View on Companies House →
-          </a>
-        {/if}
-
-        <a href={activeNode.type === 'minister' ? `/person/${activeNode.id}` : activeNode.type === 'organization' ? `/organisation/${activeNode.id}` : `/person/${activeNode.id}`} class="detail-link">
-          View full profile →
-        </a>
-      </div>
-    {/if}
 
     <!-- Settings Panel -->
     <div class="settings-panel" class:open={showSettings}>
@@ -918,26 +917,6 @@
     transition: opacity 0.15s ease-out;
   }
 
-  .node-detail {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: #FAF8F5;
-    border-left: 3px solid #C54B3C;
-    padding: 16px 20px;
-    max-width: 280px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  }
-
-  .node-detail.pinned {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-  }
-
-  .node-detail.detail-left {
-    right: auto;
-    left: 20px;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .node-circle {
       transition: none;
@@ -945,107 +924,6 @@
     .node {
       transition: none;
     }
-  }
-
-  .detail-close {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 24px;
-    height: 24px;
-    border: none;
-    background: transparent;
-    font-size: 20px;
-    line-height: 1;
-    color: #8A8A8A;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-  }
-
-  .detail-close:hover {
-    background: rgba(0,0,0,0.05);
-    color: #2C2C2C;
-  }
-
-  .detail-type {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #C54B3C;
-  }
-
-  .detail-name {
-    font-family: 'Zodiak', serif;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #2C2C2C;
-    margin-top: 4px;
-  }
-
-  .detail-role {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 13px;
-    color: #5A5A5A;
-    margin-top: 4px;
-  }
-
-  .detail-department {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #8A8A8A;
-    margin-top: 2px;
-  }
-
-  .detail-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-    gap: 12px;
-    margin: 16px 0;
-    padding: 12px 0;
-    border-top: 1px solid rgba(0,0,0,0.08);
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-  }
-
-  .detail-stat {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .detail-stat-value {
-    font-family: 'Zodiak', serif;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #2C2C2C;
-  }
-
-  .detail-stat-label {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #8A8A8A;
-    margin-top: 2px;
-  }
-
-  .detail-link {
-    font-family: 'Satoshi', sans-serif;
-    font-size: 13px;
-    color: #C54B3C;
-    text-decoration: none;
-    display: inline-block;
-    margin-top: 12px;
-  }
-
-  .detail-link:hover {
-    text-decoration: underline;
   }
 
   .settings-panel {
