@@ -709,8 +709,8 @@
           (l.source?.id === activeNode.id || l.target?.id === activeNode.id) && l.link_type === 'donation'
         )}
         {@const meetingCount = activeNode.meeting_count || 0}
-        {@const detailX = detailOnLeft ? -60 : width + 60}
-        {@const anchor = detailOnLeft ? 'start' : 'end'}
+        {@const detailX = width + 60}
+        {@const anchor = 'end'}
         {@const position = activeNode.role
           ? activeNode.role
               .replace(/,\s*(Department\s+)?(for\s+)?[\w\s]+$/, '')
@@ -754,8 +754,8 @@
           {/if}
 
           <!-- Stats -->
-          <line x1={detailOnLeft ? detailX : detailX - 180} y1={statsY}
-                x2={detailOnLeft ? detailX + 180 : detailX} y2={statsY}
+          <line x1={detailX - 180} y1={statsY}
+                x2={detailX} y2={statsY}
                 stroke="#1a1a1a" stroke-width="0.5" opacity="0.1"/>
           {#if activeNode.total_value > 0}
             <text x={detailX} y={statsY + 18} text-anchor={anchor}
