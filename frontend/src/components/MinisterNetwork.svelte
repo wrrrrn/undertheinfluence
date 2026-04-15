@@ -442,7 +442,42 @@
 <div class="minister-network" bind:this={container}>
   {#if loading}
     <div class="loading">
-      <p class="text-ink-muted text-caption uppercase tracking-wider">Loading network data...</p>
+      <!-- Taxonomic skeleton: faint dot-cloud suggesting graph shape -->
+      <svg viewBox="0 0 800 400" class="w-full max-w-[800px] opacity-25" style="min-height: 300px;">
+        <defs>
+          <pattern id="skel-stipple" width="6" height="6" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="0.5" fill="#6b6b6b" opacity="0.3"/>
+            <circle cx="5" cy="5" r="0.4" fill="#6b6b6b" opacity="0.2"/>
+          </pattern>
+        </defs>
+        <!-- Central cluster -->
+        <circle cx="400" cy="200" r="45" fill="url(#skel-stipple)"/>
+        <circle cx="340" cy="170" r="25" fill="url(#skel-stipple)"/>
+        <circle cx="460" cy="230" r="30" fill="url(#skel-stipple)"/>
+        <circle cx="350" cy="250" r="20" fill="url(#skel-stipple)"/>
+        <circle cx="450" cy="160" r="22" fill="url(#skel-stipple)"/>
+        <!-- Outer nodes -->
+        <circle cx="240" cy="140" r="14" fill="url(#skel-stipple)"/>
+        <circle cx="560" cy="260" r="16" fill="url(#skel-stipple)"/>
+        <circle cx="280" cy="300" r="12" fill="url(#skel-stipple)"/>
+        <circle cx="520" cy="120" r="13" fill="url(#skel-stipple)"/>
+        <circle cx="180" cy="220" r="10" fill="url(#skel-stipple)"/>
+        <circle cx="620" cy="180" r="11" fill="url(#skel-stipple)"/>
+        <!-- Leader lines to empty labels -->
+        <line x1="240" y1="140" x2="170" y2="110" stroke="#6b6b6b" stroke-width="0.5" opacity="0.3"/>
+        <rect x="110" y="105" width="58" height="8" fill="#6b6b6b" opacity="0.08" rx="1"/>
+        <line x1="560" y1="260" x2="630" y2="290" stroke="#6b6b6b" stroke-width="0.5" opacity="0.3"/>
+        <rect x="632" y="285" width="50" height="8" fill="#6b6b6b" opacity="0.08" rx="1"/>
+        <line x1="520" y1="120" x2="580" y2="90" stroke="#6b6b6b" stroke-width="0.5" opacity="0.3"/>
+        <rect x="582" y="85" width="45" height="8" fill="#6b6b6b" opacity="0.08" rx="1"/>
+        <!-- Faint connection lines -->
+        <line x1="340" y1="170" x2="400" y2="200" stroke="#6b6b6b" stroke-width="0.5" opacity="0.15"/>
+        <line x1="400" y1="200" x2="460" y2="230" stroke="#6b6b6b" stroke-width="0.5" opacity="0.15"/>
+        <line x1="350" y1="250" x2="400" y2="200" stroke="#6b6b6b" stroke-width="0.5" opacity="0.15"/>
+        <line x1="240" y1="140" x2="340" y2="170" stroke="#6b6b6b" stroke-width="0.5" opacity="0.1"/>
+        <line x1="460" y1="230" x2="560" y2="260" stroke="#6b6b6b" stroke-width="0.5" opacity="0.1"/>
+      </svg>
+      <p class="text-ink-muted text-caption uppercase tracking-wider mt-4">Cataloguing connections...</p>
     </div>
   {:else if error}
     <div class="error">
@@ -456,6 +491,30 @@
       class="network-svg"
       style="min-height: 600px;"
     >
+      <!-- Stipple pattern defs for node halos -->
+      <defs>
+        <pattern id="stipple-minister" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="#C54B3C" opacity="0.2"/>
+          <circle cx="3" cy="3" r="0.5" fill="#C54B3C" opacity="0.15"/>
+        </pattern>
+        <pattern id="stipple-donor" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="#4A6741" opacity="0.2"/>
+          <circle cx="3" cy="3" r="0.5" fill="#4A6741" opacity="0.15"/>
+        </pattern>
+        <pattern id="stipple-director" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="#5B7F95" opacity="0.2"/>
+          <circle cx="3" cy="3" r="0.5" fill="#5B7F95" opacity="0.15"/>
+        </pattern>
+        <pattern id="stipple-psc" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="#B89B5F" opacity="0.2"/>
+          <circle cx="3" cy="3" r="0.5" fill="#B89B5F" opacity="0.15"/>
+        </pattern>
+        <pattern id="stipple-organization" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.6" fill="#6B5B4F" opacity="0.2"/>
+          <circle cx="3" cy="3" r="0.5" fill="#6B5B4F" opacity="0.15"/>
+        </pattern>
+      </defs>
+
       <!-- Bridge node highlight rings (nodes connecting 2+ ministers) -->
       {#if highlightBridges}
         <g class="bridge-rings">
@@ -542,11 +601,20 @@
               style="cursor: pointer;"
               opacity={activeNode ? (isConnected ? 1 : 0.2) : 1}
             >
+              <!-- Stippled halo -->
+              {#if displayRadius > 6}
+                <circle
+                  r={displayRadius + 5}
+                  fill={`url(#stipple-${node.type})`}
+                  opacity={activeNode ? (isConnected ? 0.5 : 0.1) : 0.4}
+                />
+              {/if}
+              <!-- Node circle with paper stroke for depth -->
               <circle
                 r={displayRadius}
                 fill={colorMap[node.type] || '#9A9285'}
-                stroke={isPinned || isConnector ? '#2C2C2C' : (isConnected && !isActive ? '#2C2C2C' : (node.type === 'minister' ? '#8B3A2F' : 'none'))}
-                stroke-width={isPinned || isConnector ? 3 : (isConnected && !isActive ? 1.5 : (node.type === 'minister' ? 1.5 : 0))}
+                stroke={isPinned || isConnector ? '#2C2C2C' : (isConnected && !isActive ? '#2C2C2C' : '#FAF9F6')}
+                stroke-width={isPinned || isConnector ? 3 : (isConnected && !isActive ? 1.5 : 1.5)}
                 class="node-circle"
               />
               {#if node.type === 'minister' || baseRadius > 12 || isActive || isConnector}

@@ -24,13 +24,25 @@ This version embraces **"Clean Data Journalism"** - the precision of Victorian n
 
 The design language of *UnderTheInfluence* combines two traditions: the meticulous classification systems of Victorian naturalists, and the clean typography-driven layouts of quality newspapers. No decorative boxes. No heavy shadows. Just clear hierarchy through type, whitespace, and restrained color.
 
+### Graph Thinking
+
+This project was originally conceived to run on a graph database, where connections between entities — people, companies, donations, meetings, lobbying relationships — would be first-class objects, trivially traversable and always visible. The relational database we use today stores the same relationships, but the design must work harder to surface them. Every design decision should be measured against the question: **does this make a connection visible that would otherwise be hidden?**
+
+This means:
+- Every entity name that can link to a profile page *must* link to it. An unlinked name is a dead end in the graph.
+- Profile pages should show not just an actor's direct activity, but their **cross-connections** — the political activity of the organisations they direct, the corporate ties of their staff, the lobbying relationships of their donors.
+- Navigation should feel like traversing a network, not browsing a catalogue. One click from a politician to a company they direct, another click to see that company's lobbying agency, another to see that agency's other clients who met the same minister.
+
+The data's value is in its interconnectedness. The UI's job is to make that interconnectedness effortless to explore.
+
 ### Core Principles
 
-1. **Typography Over Chrome**: Establish hierarchy through font size, weight, and spacing - not boxes and borders.
-2. **Density Without Clutter**: Pack information tightly, but give it room to breathe. Like a well-designed newspaper spread.
-3. **One Accent Color**: A single red (`#C54B3C`) for section labels and highlights. Everything else is ink on paper.
-4. **Warm Paper, Dark Ink**: The off-white background (`#FAF9F6`) and near-black text (`#1a1a1a`) create comfortable contrast.
-5. **Data as the Hero**: Visualizations and numbers take center stage. The interface recedes.
+1. **Connections Are the Story**: The relationship between entities matters more than any single entity. Surface cross-connections, shared affiliations, and indirect influence paths wherever the data supports it.
+2. **Typography Over Chrome**: Establish hierarchy through font size, weight, and spacing - not boxes and borders.
+3. **Density Without Clutter**: Pack information tightly, but give it room to breathe. Like a well-designed newspaper spread.
+4. **One Accent Color**: A single red (`#C54B3C`) for section labels and highlights. Everything else is ink on paper.
+5. **Warm Paper, Dark Ink**: The off-white background (`#FAF9F6`) and near-black text (`#1a1a1a`) create comfortable contrast.
+6. **Data as the Hero**: Visualizations and numbers take center stage. The interface recedes.
 
 ### Inspirations
 
@@ -295,14 +307,69 @@ We embrace dense, multi-column layouts inspired by broadsheet newspapers.
 
 ### 5.1 Design Principles
 
-Inspired by Victorian scientific illustration and quality newspaper graphics:
+Inspired by Victorian scientific illustration and quality newspaper graphics. The goal is **diagrammatic density** — not clean, sparse dashboards.
 
-1. **Direct Labeling**: Label elements on the visualization, not in separate legends where possible
-2. **Density With Clarity**: Pack information tightly, but maintain clear visual hierarchy
-3. **Muted Palette**: Earth tones that work together, no jarring contrast
-4. **Annotation**: Explanatory text with leader lines pointing to specific elements
+1. **Direct Labeling**: Label elements *on* the visualization, not in separate legends. Every data point should be self-explanatory without eye movement to a key.
+2. **Density With Clarity**: Pack information tightly, but maintain clear visual hierarchy. Fill margins with contextual annotations rather than leaving whitespace.
+3. **Muted Palette**: Earth tones that work together, no jarring contrast.
+4. **Annotation with Leader Lines**: Explanatory text connected by thin SVG leader lines (stroke `#6b6b6b`, opacity 0.5) to the element they describe. Terminal dots use accent red (`.leader-dot`).
+5. **Textured Fills**: Bar charts, area fills, and backgrounds use SVG `<pattern>` fills — diagonal hatching, cross-hatching, stipple dots — instead of flat solid colours. This mimics hand-coloured lithographic plates and is the single strongest signal that distinguishes this aesthetic from generic dashboards.
+6. **Specimen Plate Styling**: Ranked lists as specimen catalogues (prominent rank numeral, thin rules between entries). Year markers as plate headers. Loading skeletons as taxonomic placeholders with leader lines to empty labels.
 
-### 5.2 Network Graph
+### 5.2 SVG Pattern Library
+
+Reusable SVG `<pattern>` definitions for textured fills. These replace flat solid colours throughout charts, bars, and backgrounds.
+
+**Diagonal Hatching** (primary pattern for bar charts):
+```svg
+<pattern id="hatch-{color-name}" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+  <line x1="0" y1="0" x2="0" y2="4" stroke="{color}" stroke-width="1" opacity="0.6"/>
+</pattern>
+```
+
+**Cross Hatching** (for emphasis or secondary fills):
+```svg
+<pattern id="crosshatch-{color-name}" width="4" height="4" patternUnits="userSpaceOnUse">
+  <line x1="0" y1="0" x2="4" y2="4" stroke="{color}" stroke-width="0.5" opacity="0.4"/>
+  <line x1="4" y1="0" x2="0" y2="4" stroke="{color}" stroke-width="0.5" opacity="0.4"/>
+</pattern>
+```
+
+**Stipple Dots** (for node halos, backgrounds, loading skeletons):
+```svg
+<pattern id="stipple-{color-name}" width="6" height="6" patternUnits="userSpaceOnUse">
+  <circle cx="1" cy="1" r="0.6" fill="{color}" opacity="0.2"/>
+  <circle cx="4" cy="4" r="0.6" fill="{color}" opacity="0.15"/>
+</pattern>
+```
+
+**Party-Specific Patterns** (for party funding bar charts):
+
+| Party | Color | Pattern | ID |
+|-------|-------|---------|-----|
+| Conservative | `#4A7BA7` | Diagonal hatch (45°) | `hatch-conservative` |
+| Labour | `#B85450` | Diagonal hatch (135°) | `hatch-labour` |
+| Lib Dem | `#C9A227` | Cross hatch | `crosshatch-libdem` |
+| Green | `#5B7355` | Stipple dots | `stipple-green` |
+| SNP | `#C9B84A` | Horizontal lines | `hatch-snp` |
+| Reform | `#4A8B9E` | Diagonal hatch (45°) | `hatch-reform` |
+
+**CSS usage** (for non-SVG elements):
+```css
+.bar-conservative {
+  background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Cline x1='0' y1='0' x2='0' y2='4' stroke='%234A7BA7' stroke-width='1' opacity='0.6' transform='rotate(45 2 2)'/%3E%3C/svg%3E");
+  background-color: rgba(74, 123, 167, 0.08);
+}
+```
+
+**Leader Line Pattern**:
+```svg
+<line x1="{start}" y1="{start}" x2="{end}" y2="{end}"
+      stroke="#6b6b6b" stroke-width="1" opacity="0.5"/>
+<circle cx="{end}" cy="{end}" r="2" fill="#C54B3C"/>  <!-- .leader-dot -->
+```
+
+### 5.3 Network Graph
 
 The centerpiece visualization - a force-directed relationship diagram.
 

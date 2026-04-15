@@ -1,9 +1,8 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import MinisterNetwork from '../components/MinisterNetwork.svelte';
+import { API_URL, formatCurrency, getActorUrl } from '../lib/utils';
 
-// Fetch stats from Django API (SSR)
-const API_URL = import.meta.env.DATA_API_URL || 'http://api:8000/api/v2';
 
 let stats = {
   total_donations: 0,
@@ -13,31 +12,54 @@ let stats = {
 
 // Top recipients (MPs only)
 let topRecipients: Array<{
-  actor: { id: number; name: string; actor_type: string };
+  actor: { id: number; name: string; actor_type: string; classification?: string };
   total_received: string;
   donation_count: number;
-  current_party: { name: string } | null;
+  current_party: { id: number; name: string; classification?: string } | null;
 }> = [];
 
-// Top parties for bar chart
-let topParties: Array<{ name: string; total: number; percentage: number }> = [];
+// Top parties for bar chart — now with id for linking
+let topParties: Array<{ id: number; name: string; displayName: string; total: number; percentage: number }> = [];
 
 // Top lobbying clients with their agencies
-let topLobbyingClients: Array<{ name: string; agency_count: number; agencies: string[] }> = [];
+let topLobbyingClients: Array<{
+  id: number;
+  name: string;
+  actor_type: string;
+  classification?: string;
+  agency_count: number;
+  agencies: Array<string | { id: number; name: string }>;
+}> = [];
 
-// Department meetings with top attendees
+// Department meetings with top attendees — now with actor data
 let departmentMeetings: Array<{
   department_name: string;
   total_meetings: number;
-  top_attendees: Array<{ name: string; meeting_count: number }>;
+  top_attendees: Array<{
+    name: string;
+    meeting_count: number;
+    actor?: { id: number; name: string; actor_type: string; classification?: string };
+  }>;
 }> = [];
+
+// Party colour + pattern mapping for lithographic bars
+const PARTY_PATTERNS: Record<string, { color: string; pattern: string }> = {
+  'Conservative': { color: '#4A7BA7', pattern: 'hatch-conservative' },
+  'Labour': { color: '#B85450', pattern: 'hatch-labour' },
+  'Liberal Democrats': { color: '#C9A227', pattern: 'crosshatch-libdem' },
+  'SNP': { color: '#C9B84A', pattern: 'hatch-snp' },
+  'Reform UK': { color: '#4A8B9E', pattern: 'hatch-reform' },
+  'Co-operative': { color: '#B85450', pattern: 'dense-hatch-coop' },
+  'UKIP': { color: '#4A8B9E', pattern: 'crosshatch-ukip' },
+  'Green': { color: '#5B7355', pattern: 'stipple-green' },
+};
 
 // Fetch all data in parallel
 try {
   const [statsRes, recipientsRes, partyRes, lobbyingRes, meetingsRes] = await Promise.all([
     fetch(`${API_URL}/aggregates/stats/`),
-    fetch(`${API_URL}/aggregates/top-recipients/?limit=100`), // Need more to find 10 persons after filtering out parties
-    fetch(`${API_URL}/aggregates/party-donations/?limit=10`), // Get more parties to include Green and Reform
+    fetch(`${API_URL}/aggregates/top-recipients/?limit=100`),
+    fetch(`${API_URL}/aggregates/party-donations/?limit=10`),
     fetch(`${API_URL}/aggregates/top-lobbying-clients/?limit=20`),
     fetch(`${API_URL}/aggregates/department-meetings/?limit=5&top_attendees=3`),
   ]);
@@ -48,7 +70,6 @@ try {
 
   if (recipientsRes.ok) {
     const data = await recipientsRes.json();
-    // Filter to persons (MPs) only and take top 20
     topRecipients = data.results
       .filter((r: any) => r.actor.actor_type === 'person')
       .slice(0, 20);
@@ -59,7 +80,6 @@ try {
     if (data.results && data.results.length > 0) {
       const maxValue = parseFloat(data.results[0].total_received);
 
-      // Clean up party names for display
       const cleanPartyName = (name: string) => {
         return name
           .replace('The Labour Party', 'Labour')
@@ -72,7 +92,9 @@ try {
       };
 
       topParties = data.results.slice(0, 8).map((r: any) => ({
-        name: cleanPartyName(r.party.name),
+        id: r.party.id,
+        name: r.party.name,
+        displayName: cleanPartyName(r.party.name),
         total: parseFloat(r.total_received),
         percentage: (parseFloat(r.total_received) / maxValue) * 100,
       }));
@@ -81,7 +103,6 @@ try {
 
   if (lobbyingRes.ok) {
     const data = await lobbyingRes.json();
-    // Filter out placeholder entries (names starting with "(" or containing "Pro-Bono")
     const realClients = data.results.filter((r: any) =>
       !r.actor.name.startsWith('(') &&
       !r.actor.name.includes('Pro-Bono') &&
@@ -89,7 +110,10 @@ try {
     );
     if (realClients.length > 0) {
       topLobbyingClients = realClients.slice(0, 10).map((r: any) => ({
+        id: r.actor.id,
         name: r.actor.name,
+        actor_type: r.actor.actor_type || 'organization',
+        classification: r.actor.classification,
         agency_count: r.agency_count,
         agencies: r.agencies || [],
       }));
@@ -98,7 +122,6 @@ try {
 
   if (meetingsRes.ok) {
     const data = await meetingsRes.json();
-    // Helper to shorten department names
     const shortenDeptName = (name: string) => {
       return name
         .replace('Department for ', '')
@@ -116,7 +139,8 @@ try {
       total_meetings: r.total_meetings,
       top_attendees: r.top_attendees.map((a: any) => ({
         name: a.actor.name,
-        meeting_count: a.meeting_count
+        meeting_count: a.meeting_count,
+        actor: a.actor
       }))
     }));
   }
@@ -124,55 +148,26 @@ try {
   console.error('Failed to fetch data:', error);
 }
 
-// Format currency
-const formatCurrency = (value: string | number) => {
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (num >= 1_000_000_000) return `£${(num / 1_000_000_000).toFixed(1)}bn`;
-  if (num >= 1_000_000) return `£${(num / 1_000_000).toFixed(1)}m`;
-  if (num >= 1_000) return `£${(num / 1_000).toFixed(0)}k`;
-  return `£${num.toLocaleString()}`;
+// Party dot colours for recipient list
+const PARTY_DOT_COLOURS: Record<string, string> = {
+  'Conservative': '#4A7BA7',
+  'Labour': '#B85450',
+  'Liberal Democrat': '#C9A227',
+  'Green': '#5B7355',
+  'Scottish National Party': '#C9B84A',
+  'Reform UK': '#4A8B9E',
 };
+
+// SVG bar chart dimensions
+const barChartWidth = 360;
+const barHeight = 10;
+const barGap = 32;
+const barLabelHeight = 14;
+
 ---
 
-<BaseLayout title="Mapping influence in British politics">
+<BaseLayout title="Mapping influence in British politics" currentPage="/">
   <main class="min-h-screen">
-    <!-- Top Metadata Bar -->
-    <header class="max-w-[1400px] mx-auto px-6 pt-4 flex justify-between items-center border-b border-ink/5 pb-2">
-      <span class="section-label">Investigation</span>
-      <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted">Date updated: January 2026</span>
-    </header>
-
-    <!-- Main Navigation -->
-    <nav class="max-w-[1400px] mx-auto px-6 py-6 flex justify-between items-center">
-      <div class="flex items-center gap-10">
-        <a href="/" class="text-2xl font-bold tracking-tighter uppercase font-display">
-          Under<span class="text-accent">The</span>Influence
-        </a>
-        <div class="hidden lg:flex gap-8 text-[11px] font-bold uppercase tracking-[0.15em]">
-          <a href="/" class="text-accent">The Web</a>
-          <a href="/directory" class="hover:text-accent transition-colors">Directory</a>
-          <a href="/analysis" class="hover:text-accent transition-colors">Analysis</a>
-        </div>
-      </div>
-      <div class="flex items-center gap-4">
-        <div class="relative hidden md:block">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-          <input
-            type="text"
-            placeholder="Search actors..."
-            class="bg-ink/5 border-none rounded-none py-2 pl-10 pr-4 text-xs focus:ring-1 focus:ring-accent focus:outline-none w-48 transition-all"
-          />
-        </div>
-        <button class="p-2 hover:bg-ink/5">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-          </svg>
-        </button>
-      </div>
-    </nav>
-
     <!-- Hero section -->
     <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-8">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-end">
@@ -181,7 +176,7 @@ const formatCurrency = (value: string | number) => {
             The web of money and<br />access in Westminster
           </h1>
           <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
-            Who funds British politics—and what do they get in return? This investigation
+            Who funds British politics&mdash;and what do they get in return? This investigation
             maps the financial relationships between donors and government ministers.
           </p>
         </div>
@@ -201,7 +196,7 @@ const formatCurrency = (value: string | number) => {
         </div>
         <div class="flex flex-col items-center text-center px-8">
           <span class="stat-figure tabular">{stats.dual_influence_count}</span>
-          <span class="stat-label">Dual-influence relationships</span>
+          <span class="stat-label" title="Entities that both donate to politicians and hire lobbying agencies">Donors who also lobby</span>
         </div>
       </div>
     </section>
@@ -211,7 +206,7 @@ const formatCurrency = (value: string | number) => {
       <div class="max-w-[1400px] mx-auto px-6 mb-6">
         <div class="flex flex-col md:flex-row justify-between items-baseline gap-4">
           <div>
-            <h3 class="text-2xl font-bold font-display">The Government Ministers Network</h3>
+            <h2 class="text-2xl font-bold font-display">The Government Ministers Network</h2>
             <p class="text-xs text-ink-muted mt-1 italic">
               Financial connections between donors and government ministers. Node size reflects total donation value.
             </p>
@@ -222,8 +217,8 @@ const formatCurrency = (value: string | number) => {
         </div>
       </div>
 
-      <!-- Full-width visualization container - overflow into margins for Victorian illustration feel -->
-      <div class="w-full bg-paper overflow-visible -mx-8 px-8" style="margin-top: -2rem; margin-bottom: -4rem;">
+      <!-- Desktop: full interactive network -->
+      <div class="w-full bg-paper overflow-visible -mx-8 px-8 hidden sm:block" style="margin-top: -2rem; margin-bottom: -4rem;">
         <MinisterNetwork
           client:visible
           apiUrl="http://localhost:8000/api/v2/aggregates/minister-network/"
@@ -234,47 +229,69 @@ const formatCurrency = (value: string | number) => {
           minMeetings={5}
         />
       </div>
+
+      <!-- Mobile: simplified alternative -->
+      <div class="sm:hidden max-w-[1400px] mx-auto px-6">
+        <div class="border border-ink/10 p-6 text-center">
+          <p class="text-sm text-ink-light mb-4">
+            The minister network maps 90 ministers, 298 donors, and 431 donation links
+            in an interactive force-directed graph.
+          </p>
+          <a href="/network" class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center justify-center gap-1">
+            View interactive network
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </a>
+        </div>
+      </div>
     </section>
 
     <!-- Top Recipients + Deep Dive Section -->
     <section class="max-w-[1400px] mx-auto px-6 mt-24">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
-        <!-- Top Recipients Column -->
+        <!-- Top Recipients Column — Specimen Plate styling -->
         <div class="space-y-4">
           <p class="section-label border-b border-accent pb-2">Top Recipients</p>
 
           {topRecipients.length > 0 ? (
-            <ol class="space-y-3">
-              {topRecipients.map((recipient, index) => (
-                <li class="group">
-                  <a href={`/person/${recipient.actor.id}`} class="flex items-baseline gap-3">
-                    <span class="text-[10px] font-bold text-ink-muted w-4">{index + 1}.</span>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex justify-between items-baseline gap-2">
-                        <div class="truncate">
-                          <span class="font-display font-semibold group-hover:text-accent transition-colors">
-                            {recipient.actor.name}
-                          </span>
-                          {recipient.current_party && (
-                            <span class="text-[10px] text-ink-muted ml-1">
-                              ({recipient.current_party.name})
+            <ol class="space-y-0">
+              {topRecipients.map((recipient, index) => {
+                const partyName = recipient.current_party?.name || '';
+                const dotColour = PARTY_DOT_COLOURS[partyName] || null;
+                return (
+                  <li class="group border-b border-ink/5">
+                    <a href={getActorUrl(recipient.actor)} class="flex items-baseline gap-2 py-2.5 hover:bg-ink/[0.02] transition-colors">
+                      <span class="font-display font-bold text-xs text-ink-muted w-7 text-right tabular shrink-0">{String(index + 1).padStart(2, '0')}.</span>
+                      {dotColour ? (
+                        <span class="w-1.5 h-1.5 rounded-full shrink-0 relative top-[-1px]" style={`background:${dotColour}`}></span>
+                      ) : (
+                        <span class="w-1.5 shrink-0"></span>
+                      )}
+                      <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline gap-2">
+                          <div class="truncate">
+                            <span class="font-display font-semibold group-hover:text-accent transition-colors">
+                              {recipient.actor.name}
                             </span>
-                          )}
+                            {recipient.current_party && (
+                              <span class="text-[10px] text-ink-muted ml-1">
+                                {recipient.current_party.name}
+                              </span>
+                            )}
+                          </div>
+                          <span class="font-display font-bold text-lg tabular shrink-0">
+                            {formatCurrency(recipient.total_received)}
+                          </span>
                         </div>
-                        <span class="font-display font-bold text-lg tabular shrink-0">
-                          {formatCurrency(recipient.total_received)}
-                        </span>
+                        <p class="text-[10px] text-ink-muted">
+                          {recipient.donation_count} donations
+                        </p>
                       </div>
-                      <p class="text-[10px] text-ink-muted">
-                        {recipient.donation_count} donations
-                      </p>
-                    </div>
-                  </a>
-                  {index < topRecipients.length - 1 && (
-                    <div class="h-px bg-ink/5 w-full mt-3"></div>
-                  )}
-                </li>
-              ))}
+                    </a>
+                  </li>
+                );
+              })}
             </ol>
           ) : (
             <p class="text-sm text-ink-muted italic">Loading recipients...</p>
@@ -285,125 +302,179 @@ const formatCurrency = (value: string | number) => {
         <div class="md:col-span-2 space-y-8">
           <p class="section-label border-b border-accent pb-2">Deep Dive</p>
 
-          <!-- Party Funding Card - Full Width -->
-          <a href="/parties" class="group block">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
-              <div class="space-y-3">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Party Funding</p>
-                <h4 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
-                  Follow the money by party
-                </h4>
-                <p class="text-sm text-ink-light leading-relaxed italic">
-                  "The Conservative Party has received more than double the funding of Labour since 2010."
-                </p>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
-                  Explore party funding
-                  <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                  </svg>
-                </span>
-              </div>
-              <div class="bg-ink/[0.02] p-5 border border-ink/5">
-                <h5 class="text-[10px] font-bold uppercase tracking-widest mb-4">Donations by Party</h5>
-                <div class="space-y-3">
-                  {topParties.map((party) => (
-                    <div>
-                      <div class="flex justify-between text-[10px] font-bold uppercase mb-1">
-                        <span>{party.name}</span>
-                        <span>{formatCurrency(party.total)}</span>
-                      </div>
-                      <div class="h-1.5 bg-ink/5">
-                        <div class="h-full bg-accent" style={`width: ${party.percentage}%`}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <!-- Party Funding Card — restructured: editorial link + data panel with entity links -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <a href="/parties" class="group space-y-3">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Party Funding</p>
+              <h3 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
+                Follow the money by party
+              </h3>
+              <p class="text-sm text-ink-light leading-relaxed italic">
+                "The Conservative Party has received more than double the funding of Labour since 2010."
+              </p>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
+                Explore party funding
+                <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </span>
+            </a>
+            <!-- Lithographic bar chart — SVG with hatched pattern fills -->
+            <div class="bg-ink/[0.02] p-5 border border-ink/5">
+              <h4 class="text-[10px] font-bold uppercase tracking-widest mb-4">Donations by Party</h4>
+              <svg width="100%" viewBox={`0 0 ${barChartWidth} ${topParties.length * barGap + 10}`} class="overflow-visible">
+                <defs>
+                  {/* Diagonal hatching patterns — tighter spacing (3px), heavier strokes for visibility */}
+                  <pattern id="hatch-conservative" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <line x1="0" y1="0" x2="0" y2="3" stroke="#4A7BA7" stroke-width="1.5" opacity="0.85"/>
+                  </pattern>
+                  <pattern id="hatch-labour" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+                    <line x1="0" y1="0" x2="0" y2="3" stroke="#B85450" stroke-width="1.5" opacity="0.85"/>
+                  </pattern>
+                  <pattern id="crosshatch-libdem" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="3.5" y2="3.5" stroke="#C9A227" stroke-width="0.8" opacity="0.7"/>
+                    <line x1="3.5" y1="0" x2="0" y2="3.5" stroke="#C9A227" stroke-width="0.8" opacity="0.7"/>
+                  </pattern>
+                  <pattern id="hatch-snp" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(0)">
+                    <line x1="0" y1="1.5" x2="3" y2="1.5" stroke="#C9B84A" stroke-width="1.5" opacity="0.8"/>
+                  </pattern>
+                  <pattern id="hatch-reform" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <line x1="0" y1="0" x2="0" y2="3" stroke="#4A8B9E" stroke-width="1.5" opacity="0.85"/>
+                  </pattern>
+                  <pattern id="dense-hatch-coop" width="2.5" height="2.5" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+                    <line x1="0" y1="0" x2="0" y2="2.5" stroke="#B85450" stroke-width="1.2" opacity="0.8"/>
+                  </pattern>
+                  <pattern id="crosshatch-ukip" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="3.5" y2="3.5" stroke="#4A8B9E" stroke-width="0.8" opacity="0.7"/>
+                    <line x1="3.5" y1="0" x2="0" y2="3.5" stroke="#4A8B9E" stroke-width="0.8" opacity="0.7"/>
+                  </pattern>
+                  <pattern id="stipple-green" width="4" height="4" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="0.8" fill="#5B7355" opacity="0.5"/>
+                    <circle cx="3" cy="3" r="0.8" fill="#5B7355" opacity="0.4"/>
+                  </pattern>
+                </defs>
+                {topParties.map((party, i) => {
+                  const y = i * barGap;
+                  const barWidth = (party.percentage / 100) * barChartWidth;
+                  const patternInfo = PARTY_PATTERNS[party.displayName];
+                  const patternId = patternInfo?.pattern || 'hatch-conservative';
+                  const strokeColor = patternInfo?.color || '#6b6b6b';
+                  return (
+                    <g>
+                      {/* Party name + amount labels */}
+                      <a href={`/party/${party.id}`}>
+                        <text x="0" y={y + barLabelHeight - 2} font-family="Satoshi, sans-serif" font-size="10" font-weight="700" fill="#1a1a1a" text-transform="uppercase" class="hover:fill-[#C54B3C]" style="text-transform:uppercase">
+                          {party.displayName}
+                        </text>
+                      </a>
+                      <text x={barChartWidth} y={y + barLabelHeight - 2} font-family="Satoshi, sans-serif" font-size="10" font-weight="700" fill="#1a1a1a" text-anchor="end">
+                        {formatCurrency(party.total)}
+                      </text>
+                      {/* Hatched bar */}
+                      <rect x="0" y={y + barLabelHeight + 1} width={barWidth} height={barHeight}
+                            fill={`url(#${patternId})`} stroke={strokeColor} stroke-width="0.75" stroke-opacity="0.5"/>
+                      {/* Background track */}
+                      <rect x={barWidth} y={y + barLabelHeight + 1} width={barChartWidth - barWidth} height={barHeight}
+                            fill="#1a1a1a" opacity="0.03"/>
+                    </g>
+                  );
+                })}
+              </svg>
             </div>
-            <div class="h-px bg-ink/10 w-full mt-8"></div>
-          </a>
+          </div>
+          <div class="h-px bg-ink/10 w-full"></div>
 
-          <!-- Ministerial Access Card - Full Width -->
-          <a href="/meetings" class="group block">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
-              <div class="space-y-3">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Ministerial Access</p>
-                <h4 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
-                  Who gets in the room?
-                </h4>
-                <p class="text-sm text-ink-light leading-relaxed italic">
-                  "Thousands of meetings between ministers and external organisations are disclosed quarterly."
-                </p>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
-                  Explore meetings
-                  <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                  </svg>
-                </span>
-              </div>
-              <!-- Departments by meeting count with top attendees -->
-              <div class="bg-ink/[0.02] p-5 border border-ink/5">
-                <h5 class="text-[10px] font-bold uppercase tracking-widest mb-4">Meetings by Department</h5>
-                <div class="space-y-4">
-                  {departmentMeetings.map((dept) => (
-                    <div>
-                      <div class="flex justify-between items-baseline mb-1.5">
-                        <span class="text-[11px] font-bold truncate" title={dept.department_name}>{dept.department_name}</span>
-                        <span class="text-sm font-display font-bold ml-2 shrink-0 tabular">{dept.total_meetings.toLocaleString()}</span>
-                      </div>
-                      <div class="space-y-0.5 pl-2 border-l-2 border-accent/20">
-                        {dept.top_attendees.map((attendee) => (
-                          <div class="flex justify-between items-baseline text-[9px] text-ink-muted">
+          <!-- Ministerial Access Card — restructured -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <a href="/meetings" class="group space-y-3">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Ministerial Access</p>
+              <h3 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
+                Who gets in the room?
+              </h3>
+              <p class="text-sm text-ink-light leading-relaxed italic">
+                "Thousands of meetings between ministers and external organisations are disclosed quarterly."
+              </p>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
+                Explore meetings
+                <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </span>
+            </a>
+            <!-- Department data panel — entity links on attendee names -->
+            <div class="bg-ink/[0.02] p-5 border border-ink/5">
+              <h4 class="text-[10px] font-bold uppercase tracking-widest mb-4">Meetings by Department</h4>
+              <div class="space-y-4">
+                {departmentMeetings.map((dept) => (
+                  <div>
+                    <div class="flex justify-between items-baseline mb-1.5">
+                      <span class="text-[11px] font-bold truncate" title={dept.department_name}>{dept.department_name}</span>
+                      <span class="text-sm font-display font-bold ml-2 shrink-0 tabular">{dept.total_meetings.toLocaleString()}</span>
+                    </div>
+                    <div class="space-y-0.5 pl-2 border-l-2 border-accent/20">
+                      {dept.top_attendees.map((attendee) => (
+                        <div class="flex justify-between items-baseline text-[9px] text-ink-muted">
+                          {attendee.actor?.id ? (
+                            <a href={getActorUrl(attendee.actor)} class="truncate hover:text-accent transition-colors" title={attendee.name}>{attendee.name}</a>
+                          ) : (
                             <span class="truncate" title={attendee.name}>{attendee.name}</span>
-                            <span class="ml-2 shrink-0 tabular">{attendee.meeting_count}</span>
-                          </div>
-                        ))}
-                      </div>
+                          )}
+                          <span class="ml-2 shrink-0 tabular">{attendee.meeting_count}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div class="h-px bg-ink/10 w-full mt-8"></div>
-          </a>
+          </div>
+          <div class="h-px bg-ink/10 w-full"></div>
 
-          <!-- Lobbying Influence Card - Full Width -->
-          <a href="/lobbying" class="group block">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
-              <div class="space-y-3">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Lobbying Influence</p>
-                <h4 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
-                  Who hires the lobbyists?
-                </h4>
-                <p class="text-sm text-ink-light leading-relaxed italic">
-                  "Major corporations employ multiple lobbying agencies to access government."
-                </p>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
-                  Explore lobbying
-                  <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                  </svg>
-                </span>
-              </div>
-              <!-- Organizations with their agencies -->
-              <div class="bg-ink/[0.02] p-5 border border-ink/5">
-                <h5 class="text-[10px] font-bold uppercase tracking-widest mb-4">Top Clients & Their Agencies</h5>
-                <div class="space-y-4">
-                  {topLobbyingClients.slice(0, 5).map((client) => (
-                    <div>
-                      <div class="flex justify-between items-baseline mb-1">
-                        <span class="text-[11px] font-bold truncate" title={client.name}>{client.name}</span>
-                        <span class="text-[10px] text-ink-muted ml-2 shrink-0">{client.agency_count} agencies</span>
-                      </div>
-                      <div class="text-[9px] text-ink-muted leading-relaxed pl-2 border-l-2 border-accent/20">
-                        {client.agencies.join(' · ')}
-                      </div>
+          <!-- Lobbying Influence Card — restructured -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <a href="/lobbying" class="group space-y-3">
+              <p class="text-[10px] font-bold uppercase tracking-widest text-accent">Lobbying Influence</p>
+              <h3 class="text-2xl font-bold font-display group-hover:text-accent transition-colors">
+                Who hires the lobbyists?
+              </h3>
+              <p class="text-sm text-ink-light leading-relaxed italic">
+                "Major corporations employ multiple lobbying agencies to access government."
+              </p>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 pt-2">
+                Explore lobbying
+                <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+              </span>
+            </a>
+            <!-- Client data panel — entity links on client names -->
+            <div class="bg-ink/[0.02] p-5 border border-ink/5">
+              <h4 class="text-[10px] font-bold uppercase tracking-widest mb-4">Top Clients & Their Agencies</h4>
+              <div class="space-y-4">
+                {topLobbyingClients.slice(0, 5).map((client) => (
+                  <div>
+                    <div class="flex justify-between items-baseline mb-1">
+                      <a href={getActorUrl(client)} class="text-[11px] font-bold truncate hover:text-accent transition-colors" title={client.name}>{client.name}</a>
+                      <span class="text-[10px] text-ink-muted ml-2 shrink-0">{client.agency_count} agencies</span>
                     </div>
-                  ))}
-                </div>
+                    <div class="text-[9px] text-ink-muted leading-relaxed pl-2 border-l-2 border-accent/20">
+                      {/* Agencies: render as links if objects with IDs, otherwise plain text */}
+                      {client.agencies.map((agency, i) => {
+                        const isObj = typeof agency === 'object' && agency !== null;
+                        const name = isObj ? agency.name : agency;
+                        const separator = i < client.agencies.length - 1 ? ' · ' : '';
+                        return isObj && agency.id ? (
+                          <><a href={getActorUrl({ id: agency.id, actor_type: 'organization' })} class="hover:text-accent transition-colors">{name}</a>{separator}</>
+                        ) : (
+                          <>{name}{separator}</>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </a>
+          </div>
         </div>
       </div>
     </section>
@@ -412,7 +483,7 @@ const formatCurrency = (value: string | number) => {
     <section class="max-w-[1400px] mx-auto px-6 mt-32 pt-12 border-t-2 border-ink">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
         <div>
-          <h5 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Methodology</h5>
+          <h3 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Methodology</h3>
         </div>
         <div class="md:col-span-3">
           <p class="text-sm text-ink-muted leading-relaxed mb-6">
@@ -429,14 +500,5 @@ const formatCurrency = (value: string | number) => {
       </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="max-w-[1400px] mx-auto px-6 mt-20 pb-12 flex flex-col sm:flex-row justify-between items-center gap-4 text-[9px] font-bold uppercase tracking-[0.3em] text-ink-muted">
-      <span>© 2026 UnderTheInfluence</span>
-      <div class="flex gap-8">
-        <a href="/privacy" class="hover:text-ink transition-colors">Privacy Policy</a>
-        <a href="/terms" class="hover:text-ink transition-colors">Terms of Use</a>
-        <a href="/data" class="hover:text-ink transition-colors">Data Access</a>
-      </div>
-    </footer>
   </main>
 </BaseLayout>

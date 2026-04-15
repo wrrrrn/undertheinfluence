@@ -1,0 +1,5 @@
+---
+export const prerender = false;
+// Semantic route for organisations — internally serves the same profile page
+return Astro.rewrite(`/person/${Astro.params.id}`);
+---
