@@ -719,7 +719,6 @@
               .trim()
           : null}
         {@const profileUrl = activeNode.type === 'organization' ? `/organisation/${activeNode.id}` : `/person/${activeNode.id}`}
-        {@const statsY = (position ? 32 : 18) + (activeNode.department ? 14 : 0) + 8}
         <g class="node-detail-annotation">
           <!-- Leader line from node to annotation corner -->
           <line x1={activeNode.x} y1={activeNode.y}
@@ -728,42 +727,43 @@
           <circle cx={activeNode.x} cy={activeNode.y} r="3" fill="#C54B3C" opacity="0.5"/>
 
           <!-- Type label -->
-          <text x={detailX} y={-20} text-anchor={anchor}
-                font-family="Satoshi, sans-serif" font-size="9" font-weight="600"
+          <text x={detailX} y={-24} text-anchor={anchor}
+                font-family="Satoshi, sans-serif" font-size="12" font-weight="600"
                 fill="#C54B3C" style="text-transform:uppercase;letter-spacing:0.1em">
             {activeNode.type}
           </text>
           <!-- Name -->
-          <text x={detailX} y={2} text-anchor={anchor}
-                font-family="Zodiak, serif" font-size="18" font-weight="600" fill="#1a1a1a">
-            {activeNode.name.length > 28 ? activeNode.name.slice(0, 26) + '…' : activeNode.name}
+          <text x={detailX} y={6} text-anchor={anchor}
+                font-family="Zodiak, serif" font-size="26" font-weight="600" fill="#1a1a1a">
+            {activeNode.name.length > 24 ? activeNode.name.slice(0, 22) + '…' : activeNode.name}
           </text>
           <!-- Role -->
           {#if position}
-            <text x={detailX} y={18} text-anchor={anchor}
-                  font-family="Satoshi, sans-serif" font-size="11" fill="#4a4a4a">
-              {position.length > 40 ? position.slice(0, 38) + '…' : position}
+            <text x={detailX} y={26} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="14" fill="#4a4a4a">
+              {position.length > 34 ? position.slice(0, 32) + '…' : position}
             </text>
           {/if}
           {#if activeNode.department}
-            <text x={detailX} y={position ? 32 : 18} text-anchor={anchor}
-                  font-family="Satoshi, sans-serif" font-size="9" fill="#6b6b6b"
+            <text x={detailX} y={position ? 44 : 26} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="11" fill="#6b6b6b"
                   style="text-transform:uppercase;letter-spacing:0.05em">
               {activeNode.department.name}
             </text>
           {/if}
 
           <!-- Stats -->
-          <line x1={detailX - 180} y1={statsY}
+          {@const statsY = (position ? 44 : 26) + (activeNode.department ? 18 : 0) + 12}
+          <line x1={detailX - 220} y1={statsY}
                 x2={detailX} y2={statsY}
                 stroke="#1a1a1a" stroke-width="0.5" opacity="0.1"/>
           {#if activeNode.total_value > 0}
-            <text x={detailX} y={statsY + 18} text-anchor={anchor}
-                  font-family="Zodiak, serif" font-size="16" font-weight="600" fill="#1a1a1a">
+            <text x={detailX} y={statsY + 26} text-anchor={anchor}
+                  font-family="Zodiak, serif" font-size="24" font-weight="600" fill="#1a1a1a">
               {formatCurrency(activeNode.total_value)}
             </text>
-            <text x={detailX} y={statsY + 30} text-anchor={anchor}
-                  font-family="Satoshi, sans-serif" font-size="8" fill="#6b6b6b"
+            <text x={detailX} y={statsY + 42} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="11" fill="#6b6b6b"
                   style="text-transform:uppercase;letter-spacing:0.05em">
               {activeNode.type === 'minister' ? 'received' : 'donated'}
             </text>
@@ -771,8 +771,8 @@
 
           <!-- Profile link -->
           <a href={profileUrl}>
-            <text x={detailX} y={statsY + 48} text-anchor={anchor}
-                  font-family="Satoshi, sans-serif" font-size="11" fill="#C54B3C"
+            <text x={detailX} y={statsY + 64} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="14" fill="#C54B3C"
                   style="cursor:pointer">
               View full profile →
             </text>
