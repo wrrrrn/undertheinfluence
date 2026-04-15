@@ -228,15 +228,45 @@
   // Use donorScale for non-ministers
   // ...
 
-  // Natural history color palette
+  // Natural history color palette — aligned with design system
   const colorMap: Record<string, string> = {
-    minister: '#C54B3C',    // Terracotta red
-    person: '#4A6741',      // Forest green
+    minister: '#B85450',    // Warm red (design system minister node)
+    person: '#5B7355',      // Botanical green
     organization: '#6B5B4F', // Warm brown
-    donor: '#4A6741',       // Forest green (default for donors)
-    director: '#5B7F95',    // Slate blue
-    psc: '#B89B5F'          // Gold
+    donor: '#5B7355',       // Botanical green
+    director: '#4A7BA7',    // Steel blue (design system director)
+    psc: '#B87333'          // Copper (design system PSC)
   };
+
+  // Detail panel position: left or right based on active node position
+  const detailOnLeft = $derived(activeNode ? activeNode.x > width * 0.55 : false);
+
+  // Compute annotation data for leader lines
+  const topBridge = $derived.by(() => {
+    if (nodes.length === 0) return null;
+    let best: any = null;
+    let bestCount = 0;
+    nodes.forEach(n => {
+      if (bridgeNodeIds.has(n.id) && n.ministerCount > bestCount) {
+        best = n;
+        bestCount = n.ministerCount;
+      }
+    });
+    return best;
+  });
+
+  const largestDonor = $derived.by(() => {
+    if (nodes.length === 0) return null;
+    let best: any = null;
+    let bestVal = 0;
+    nodes.forEach(n => {
+      if (n.type !== 'minister' && n.total_value > bestVal) {
+        best = n;
+        bestVal = n.total_value;
+      }
+    });
+    return best;
+  });
 
   async function fetchData() {
     loading = true;
@@ -494,24 +524,28 @@
       <!-- Stipple pattern defs for node halos -->
       <defs>
         <pattern id="stipple-minister" width="4" height="4" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill="#C54B3C" opacity="0.2"/>
-          <circle cx="3" cy="3" r="0.5" fill="#C54B3C" opacity="0.15"/>
+          <circle cx="1" cy="1" r="0.7" fill="#B85450" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#B85450" opacity="0.25"/>
         </pattern>
         <pattern id="stipple-donor" width="4" height="4" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill="#4A6741" opacity="0.2"/>
-          <circle cx="3" cy="3" r="0.5" fill="#4A6741" opacity="0.15"/>
+          <circle cx="1" cy="1" r="0.7" fill="#5B7355" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#5B7355" opacity="0.25"/>
+        </pattern>
+        <pattern id="stipple-person" width="4" height="4" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.7" fill="#5B7355" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#5B7355" opacity="0.25"/>
         </pattern>
         <pattern id="stipple-director" width="4" height="4" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill="#5B7F95" opacity="0.2"/>
-          <circle cx="3" cy="3" r="0.5" fill="#5B7F95" opacity="0.15"/>
+          <circle cx="1" cy="1" r="0.7" fill="#4A7BA7" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#4A7BA7" opacity="0.25"/>
         </pattern>
         <pattern id="stipple-psc" width="4" height="4" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill="#B89B5F" opacity="0.2"/>
-          <circle cx="3" cy="3" r="0.5" fill="#B89B5F" opacity="0.15"/>
+          <circle cx="1" cy="1" r="0.7" fill="#B87333" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#B87333" opacity="0.25"/>
         </pattern>
         <pattern id="stipple-organization" width="4" height="4" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.6" fill="#6B5B4F" opacity="0.2"/>
-          <circle cx="3" cy="3" r="0.5" fill="#6B5B4F" opacity="0.15"/>
+          <circle cx="1" cy="1" r="0.7" fill="#6B5B4F" opacity="0.35"/>
+          <circle cx="3" cy="3" r="0.6" fill="#6B5B4F" opacity="0.25"/>
         </pattern>
       </defs>
 
@@ -602,11 +636,11 @@
               opacity={activeNode ? (isConnected ? 1 : 0.2) : 1}
             >
               <!-- Stippled halo -->
-              {#if displayRadius > 6}
+              {#if displayRadius > 4}
                 <circle
-                  r={displayRadius + 5}
+                  r={displayRadius + 8}
                   fill={`url(#stipple-${node.type})`}
-                  opacity={activeNode ? (isConnected ? 0.5 : 0.1) : 0.4}
+                  opacity={activeNode ? (isConnected ? 0.6 : 0.08) : 0.5}
                 />
               {/if}
               <!-- Node circle with paper stroke for depth -->
@@ -637,6 +671,38 @@
           {/if}
         {/each}
       </g>
+
+      <!-- Leader line annotations — direct labels on the graph -->
+      {#if simulationReady && !activeNode}
+        <g class="annotations" opacity="0.7">
+          {#if topBridge?.x}
+            <line x1={topBridge.x} y1={topBridge.y - radiusScale(topBridge.total_value) - 8}
+                  x2={topBridge.x + 30} y2={topBridge.y - radiusScale(topBridge.total_value) - 28}
+                  stroke="#6b6b6b" stroke-width="0.75" stroke-dasharray="2,2"/>
+            <circle cx={topBridge.x} cy={topBridge.y - radiusScale(topBridge.total_value) - 8}
+                    r="2" fill="#C54B3C"/>
+            <text x={topBridge.x + 33} y={topBridge.y - radiusScale(topBridge.total_value) - 30}
+                  font-family="Satoshi, sans-serif" font-size="9" fill="#4a4a4a">
+              Connects {topBridge.ministerCount} ministers
+            </text>
+            <text x={topBridge.x + 33} y={topBridge.y - radiusScale(topBridge.total_value) - 20}
+                  font-family="Satoshi, sans-serif" font-size="8" fill="#6b6b6b" font-style="italic">
+              {topBridge.name}
+            </text>
+          {/if}
+          {#if largestDonor?.x && (!topBridge || largestDonor.id !== topBridge.id)}
+            <line x1={largestDonor.x} y1={largestDonor.y + radiusScale(largestDonor.total_value) + 8}
+                  x2={largestDonor.x - 25} y2={largestDonor.y + radiusScale(largestDonor.total_value) + 28}
+                  stroke="#6b6b6b" stroke-width="0.75" stroke-dasharray="2,2"/>
+            <circle cx={largestDonor.x} cy={largestDonor.y + radiusScale(largestDonor.total_value) + 8}
+                    r="2" fill="#C54B3C"/>
+            <text x={largestDonor.x - 28} y={largestDonor.y + radiusScale(largestDonor.total_value) + 32}
+                  font-family="Satoshi, sans-serif" font-size="9" fill="#4a4a4a" text-anchor="end">
+              {formatCurrency(largestDonor.total_value)} — largest donor
+            </text>
+          {/if}
+        </g>
+      {/if}
     </svg>
 
     <!-- Node detail panel (shown on hover or pin) -->
@@ -652,7 +718,7 @@
       )}
       {@const donationCount = activeNode.donation_count || donationLinks.reduce((sum, l) => sum + l.count, 0)}
       {@const meetingCount = activeNode.meeting_count || meetingLinks.reduce((sum, l) => sum + l.count, 0)}
-      <div class="node-detail" class:pinned={pinnedNode}>
+      <div class="node-detail" class:pinned={pinnedNode} class:detail-left={detailOnLeft}>
         {#if pinnedNode}
           <button class="detail-close" onclick={handleCloseDetail} aria-label="Close">
             ×
@@ -711,7 +777,7 @@
           </a>
         {/if}
 
-        <a href={activeNode.url} class="detail-link">
+        <a href={activeNode.type === 'minister' ? `/person/${activeNode.id}` : activeNode.type === 'organization' ? `/organisation/${activeNode.id}` : `/person/${activeNode.id}`} class="detail-link">
           View full profile →
         </a>
       </div>
@@ -780,19 +846,19 @@
     <!-- Legend -->
     <div class="legend">
       <div class="legend-item">
-        <span class="legend-dot" style="background: #C54B3C;"></span>
+        <span class="legend-dot" style="background: #B85450;"></span>
         <span>Ministers ({stats.total_ministers})</span>
       </div>
       <div class="legend-item">
-        <span class="legend-dot" style="background: #4A6741;"></span>
+        <span class="legend-dot" style="background: #5B7355;"></span>
         <span>Donors ({stats.total_donors || 0})</span>
       </div>
       <div class="legend-item">
-        <span class="legend-dot" style="background: #5B7F95;"></span>
+        <span class="legend-dot" style="background: #4A7BA7;"></span>
         <span>Directors</span>
       </div>
       <div class="legend-item">
-        <span class="legend-dot" style="background: #B89B5F;"></span>
+        <span class="legend-dot" style="background: #B87333;"></span>
         <span>PSCs (Significant Control)</span>
       </div>
       <div class="legend-item">
@@ -824,6 +890,7 @@
 
   .loading, .error {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 600px;
@@ -864,6 +931,20 @@
 
   .node-detail.pinned {
     box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  }
+
+  .node-detail.detail-left {
+    right: auto;
+    left: 20px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .node-circle {
+      transition: none;
+    }
+    .node {
+      transition: none;
+    }
   }
 
   .detail-close {
