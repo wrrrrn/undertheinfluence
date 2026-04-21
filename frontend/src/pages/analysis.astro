@@ -1,0 +1,110 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { API_URL, formatCurrency } from '../lib/utils';
+
+let stats: any = {};
+let networkStats: any = {};
+
+try {
+  const [statsRes, networkRes] = await Promise.all([
+    fetch(`${API_URL}/aggregates/stats/`),
+    fetch(`${API_URL}/aggregates/network-stats/`),
+  ]);
+  if (statsRes.ok) stats = await statsRes.json();
+  if (networkRes.ok) networkStats = await networkRes.json();
+} catch (error) {
+  console.error('Failed to fetch analysis data:', error);
+}
+
+const analyses = [
+  {
+    href: '/parties',
+    label: 'Party Funding',
+    title: 'Follow the money by party',
+    description: 'How donation flows differ across the political spectrum, from the Conservatives to Labour and beyond.',
+  },
+  {
+    href: '/meetings',
+    label: 'Ministerial Access',
+    title: 'Who gets in the room?',
+    description: 'Which organisations meet with government ministers most frequently, broken down by department.',
+  },
+  {
+    href: '/lobbying',
+    label: 'Lobbying Influence',
+    title: 'Who hires the lobbyists?',
+    description: 'The corporate clients behind the UK\'s lobbying agencies, and those who both donate and lobby.',
+  },
+  {
+    href: '/network',
+    label: 'Network',
+    title: 'The influence network',
+    description: 'An interactive force-directed graph showing the web of financial connections around government ministers.',
+  },
+];
+---
+
+<BaseLayout title="Analysis" currentPage="/analysis">
+  <main class="min-h-screen">
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Analysis</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-4">
+            Investigating influence
+          </h1>
+          <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
+            Explore the data behind political funding, ministerial access, and lobbying
+            in the United Kingdom.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Stats -->
+    <section class="max-w-[1400px] mx-auto px-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-0 border-y border-ink/10 py-8">
+        <div class="flex flex-col items-center text-center px-4 md:border-r border-ink/10">
+          <span class="stat-figure text-3xl">{(networkStats.total_persons || 0).toLocaleString()}</span>
+          <span class="stat-label">Politicians</span>
+        </div>
+        <div class="flex flex-col items-center text-center px-4 md:border-r border-ink/10">
+          <span class="stat-figure text-3xl">{(networkStats.total_organizations || 0).toLocaleString()}</span>
+          <span class="stat-label">Organisations</span>
+        </div>
+        <div class="flex flex-col items-center text-center px-4 md:border-r border-ink/10">
+          <span class="stat-figure text-3xl">{(stats.total_donations || 0).toLocaleString()}</span>
+          <span class="stat-label">Donations</span>
+        </div>
+        <div class="flex flex-col items-center text-center px-4">
+          <span class="stat-figure text-3xl">{formatCurrency(stats.total_value || 0)}</span>
+          <span class="stat-label">Total value</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analysis Cards -->
+    <section class="max-w-[1400px] mx-auto px-6 py-12">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+        {analyses.map((item) => (
+          <a href={item.href} class="group block pb-8 border-b border-ink/10">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">{item.label}</p>
+            <h2 class="text-2xl font-bold font-display group-hover:text-accent transition-colors mb-2">
+              {item.title}
+            </h2>
+            <p class="text-sm text-ink-light leading-relaxed">
+              {item.description}
+            </p>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-accent flex items-center gap-1 mt-3">
+              Explore
+              <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </a>
+        ))}
+      </div>
+    </section>
+  </main>
+</BaseLayout>

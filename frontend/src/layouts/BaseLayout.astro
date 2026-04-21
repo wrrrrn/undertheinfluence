@@ -1,12 +1,23 @@
 ---
 import '../styles/global.css';
+import SiteNav from '../components/SiteNav.astro';
+import SiteFooter from '../components/SiteFooter.astro';
 
 interface Props {
   title: string;
   description?: string;
+  currentPage?: string;
+  hideNav?: boolean;
+  hideFooter?: boolean;
 }
 
-const { title, description = 'Tracking lobbying influence in UK politics' } = Astro.props;
+const {
+  title,
+  description = 'Tracking lobbying influence in UK politics',
+  currentPage = '/',
+  hideNav = false,
+  hideFooter = false,
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -19,6 +30,8 @@ const { title, description = 'Tracking lobbying influence in UK politics' } = As
     <title>{title} | Under The Influence</title>
   </head>
   <body class="bg-paper min-h-screen">
+    {!hideNav && <SiteNav currentPage={currentPage} />}
     <slot />
+    {!hideFooter && <SiteFooter />}
   </body>
 </html>

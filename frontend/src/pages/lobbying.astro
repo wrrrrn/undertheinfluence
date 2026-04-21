@@ -1,0 +1,120 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { API_URL } from '../lib/utils';
+
+let lobbyingClients: Array<{
+  actor: { id: number; name: string; classification: string };
+  agency_count: number;
+  agencies: string[];
+}> = [];
+
+let dualInfluence: Array<{
+  organization: { id: number; name: string };
+  total_donated: string;
+  donation_count: number;
+  lobbying_count: number;
+}> = [];
+
+try {
+  const [lobbyingRes, dualRes] = await Promise.all([
+    fetch(`${API_URL}/aggregates/top-lobbying-clients/?limit=30`),
+    fetch(`${API_URL}/aggregates/dual-influence/?limit=20`),
+  ]);
+
+  if (lobbyingRes.ok) {
+    const data = await lobbyingRes.json();
+    // Filter out placeholder entries
+    lobbyingClients = (data.results || []).filter((r: any) =>
+      !r.actor.name.startsWith('(') &&
+      !r.actor.name.includes('Pro-Bono') &&
+      r.actor.classification !== 'Unknown'
+    );
+  }
+
+  if (dualRes.ok) {
+    const data = await dualRes.json();
+    dualInfluence = data.results || [];
+  }
+} catch (error) {
+  console.error('Failed to fetch lobbying data:', error);
+}
+
+function formatCurrency(value: string | number): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (num >= 1_000_000_000) return `£${(num / 1_000_000_000).toFixed(1)}bn`;
+  if (num >= 1_000_000) return `£${(num / 1_000_000).toFixed(1)}m`;
+  if (num >= 1_000) return `£${(num / 1_000).toFixed(0)}k`;
+  return `£${num.toLocaleString()}`;
+}
+---
+
+<BaseLayout title="Lobbying Influence" currentPage="/lobbying">
+  <main class="min-h-screen">
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Lobbying Influence</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-4">
+            Who hires the lobbyists?
+          </h1>
+          <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
+            Major corporations and organisations employ multiple lobbying agencies
+            to gain access to government. Some of the biggest spenders also donate directly to political parties.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="max-w-[1400px] mx-auto px-6"><div class="rule-thick"></div></div>
+
+    <div class="max-w-[1400px] mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <!-- Top Lobbying Clients -->
+      <div class="lg:col-span-7">
+        <h2 class="text-2xl font-bold font-display mb-8">Top Clients & Their Agencies</h2>
+        <div class="space-y-6">
+          {lobbyingClients.slice(0, 20).map((client, index) => (
+            <div>
+              <div class="flex justify-between items-baseline mb-1.5">
+                <div class="flex items-baseline gap-3 min-w-0">
+                  <span class="text-[10px] font-bold text-ink-muted w-5 shrink-0">{index + 1}.</span>
+                  <span class="font-display font-bold truncate" title={client.actor.name}>{client.actor.name}</span>
+                </div>
+                <span class="text-[10px] text-ink-muted ml-2 shrink-0">{client.agency_count} agencies</span>
+              </div>
+              <div class="text-[10px] text-ink-muted leading-relaxed pl-8 border-l-2 border-accent/20 ml-1">
+                {client.agencies.join(' · ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Dual Influence -->
+      <div class="lg:col-span-5">
+        <h2 class="text-2xl font-bold font-display mb-8">Dual Influence</h2>
+        <p class="text-sm text-ink-light leading-relaxed mb-6 italic">
+          Organisations that both donate to politicians and hire lobbying agencies — a dual route to influence.
+        </p>
+        {dualInfluence.length > 0 ? (
+          <div class="space-y-3">
+            {dualInfluence.map((org) => (
+              <div class="pb-3 border-b border-ink/5">
+                <a href={`/person/${org.organization.id}`} class="font-display font-semibold hover:text-accent transition-colors">
+                  {org.organization.name}
+                </a>
+                <div class="flex gap-4 text-[10px] text-ink-muted mt-1">
+                  <span>{formatCurrency(org.total_donated)} donated</span>
+                  <span>{org.donation_count} donations</span>
+                  <span>{org.lobbying_count} lobbying agencies</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p class="text-sm text-ink-muted italic">No dual-influence data available.</p>
+        )}
+      </div>
+    </div>
+  </main>
+</BaseLayout>

@@ -1,0 +1,109 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { API_URL, formatCurrency } from '../lib/utils';
+
+// Fetch party donations data
+let parties: Array<{
+  party: { id: number; name: string };
+  total_received: string;
+  donation_count: number;
+  donor_count: number;
+}> = [];
+
+try {
+  const res = await fetch(`${API_URL}/aggregates/party-donations/?limit=20`);
+  if (res.ok) {
+    const data = await res.json();
+    parties = data.results || [];
+  }
+} catch (error) {
+  console.error('Failed to fetch party data:', error);
+}
+
+const maxValue = parties.length > 0 ? parseFloat(parties[0].total_received) : 1;
+
+// Party color map
+const partyColors: Record<string, string> = {
+  'Conservative and Unionist Party': '#4A7BA7',
+  'The Labour Party': '#B85450',
+  'Liberal Democrats': '#C9A227',
+  'Scottish National Party (SNP)': '#C9B84A',
+  'Green Party': '#5B7355',
+  'Co-operative Party': '#B85450',
+  'UK Independence Party (UKIP)': '#4A8B9E',
+  'Reform UK': '#4A8B9E',
+};
+
+const cleanPartyName = (name: string) => {
+  return name
+    .replace('The Labour Party', 'Labour')
+    .replace('Conservative and Unionist Party', 'Conservative')
+    .replace('Scottish National Party (SNP)', 'SNP')
+    .replace('UK Independence Party (UKIP)', 'UKIP')
+    .replace('Co-operative Party', 'Co-operative')
+    .replace('Green Party', 'Green')
+    .replace(' Party', '');
+};
+---
+
+<BaseLayout title="Party Funding" currentPage="/parties">
+  <main class="min-h-screen">
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Party Funding</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-4">
+            Follow the money by party
+          </h1>
+          <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
+            How much has each political party received in donations since 2010?
+            The data reveals significant disparities in political funding across the UK's major parties.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="max-w-[1400px] mx-auto px-6"><div class="rule-thick"></div></div>
+
+    <!-- Party Bar Chart -->
+    <section class="max-w-[1400px] mx-auto px-6 py-12">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h2 class="text-2xl font-bold font-display mb-8">Total Donations by Party</h2>
+          <div class="space-y-6">
+            {parties.map((party) => {
+              const percentage = (parseFloat(party.total_received) / maxValue) * 100;
+              const color = partyColors[party.party.name] || '#6b6b6b';
+              const name = cleanPartyName(party.party.name);
+              return (
+                <div>
+                  <div class="flex justify-between items-baseline mb-2">
+                    <span class="font-display font-bold text-lg">{name}</span>
+                    <span class="font-display font-bold text-xl tabular">{formatCurrency(party.total_received)}</span>
+                  </div>
+                  <div class="h-2 bg-ink/5">
+                    <div class="h-full" style={`width: ${percentage}%; background-color: ${color};`}></div>
+                  </div>
+                  <div class="flex gap-6 text-[10px] text-ink-muted mt-1">
+                    <span>{party.donation_count.toLocaleString()} donations</span>
+                    <span>{party.donor_count.toLocaleString()} donors</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div class="lg:col-span-4">
+          <h3 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">About This Data</h3>
+          <p class="text-sm text-ink-muted leading-relaxed">
+            Donation data is sourced from the MPs' Register of Interests and the
+            Electoral Commission's database of political donations. Values represent
+            total declared donations since 2010.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>
