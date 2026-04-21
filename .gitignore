@@ -12,3 +12,13 @@ __pycache__/
 .DS_Store
 .coverage
 CLAUDE.md
+
+# Editor
+.vscode/
+
+# Playwright MCP cache / transient snapshots
+.playwright-mcp/
+lazy-snapshot.yml
+
+# Design audit screenshots (local only, not committed)
+docs/design/snapshots/
