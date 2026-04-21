@@ -10,7 +10,7 @@ UnderTheInfluence is a web application that tracks lobbying influence in UK poli
 | Python | 3.12 |
 | Wagtail CMS | 7.2.x |
 | PostgreSQL | 15 |
-| Frontend | React 18 + Vite 5 (Islands Architecture) |
+| Frontend | Astro 5 + Svelte 5 + D3.js + Tailwind CSS |
 
 **Database**:
 - 155,065 actors (90,728 persons + 64,337 organizations)
@@ -40,7 +40,7 @@ cd undertheinfluence
 # Copy environment template
 cp .env.example .env
 
-# Start all services
+# Start all services (Django API + PostgreSQL + Redis + Astro frontend)
 docker compose up -d
 
 # Run migrations
@@ -50,7 +50,9 @@ docker compose exec api python manage.py migrate
 docker compose exec api python manage.py createsuperuser
 
 # Access the application
-open http://localhost:8000
+# Django API:    http://localhost:8000
+# Astro frontend: http://localhost:4321
+open http://localhost:4321
 ```
 
 ## Import Data
@@ -93,7 +95,8 @@ docker compose exec api python manage.py populate_canonical --fast --batch-size 
 
 ```bash
 # View logs
-docker compose logs -f api
+docker compose logs -f api    # Django API logs
+docker compose logs -f web    # Astro frontend logs
 
 # Run Django shell
 docker compose exec api python manage.py shell
@@ -102,7 +105,12 @@ docker compose exec api python manage.py shell
 docker compose exec api python manage.py <command>
 
 # Restart after code changes
-docker compose restart api
+docker compose restart api    # Backend changes
+docker compose restart web    # Frontend changes
+
+# Run frontend locally (alternative to Docker)
+cd frontend && npm install && npm run dev
+# Astro dev server: http://localhost:4321
 ```
 
 ## Deployment

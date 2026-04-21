@@ -1,6 +1,6 @@
 # UnderTheInfluence: Current State Summary
 
-**Last Updated**: April 13, 2026
+**Last Updated**: April 16, 2026
 **Branch**: `feature/ux`
 **Status**: Working application with full Astro 5 + Svelte 5 frontend, 10 pages, actor-type-adaptive profiles, editorial design system, and 5-phase UX workflow
 
@@ -24,7 +24,7 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 - ✅ **Actor profile timeline** (ActorTimeline.svelte) — unified chronological view of donations, meetings, roles, consultancies
 - ✅ **Interconnected entity links** — meeting attendees, donors, ministers, lobbying agencies all link to their actor profiles
 - ✅ **D3.js minister network visualization** (force-directed, donations + meetings, physics controls)
-- ✅ API v2 aggregate endpoints with filtering
+- ✅ API v2 aggregate endpoints with filtering and Redis caching (1hr TTL on all 6 homepage endpoints)
 - ✅ Data import from ParlParse, Ministers, MPs' Register, and Ministerial Meetings
 - ✅ **Ministerial Meetings Import** - 41,362 meetings from 23 departments
 - ✅ **Companies House Enrichment** - 51,157 organizations matched (24.5% auto-approved)
@@ -33,11 +33,11 @@ UnderTheInfluence is a **working Django 6.0 web application** that tracks politi
 - ✅ **UX workflow skills** — `/ux-audit`, `/ux-design`, `/ux-mockup`, `/ux-refine`, `/ux-constraints`
 - ✅ CORS support for Astro frontend
 
-**What's Next**: Trade union profile design, data import fixes (concatenated names), department aggregate pages, timeline pagination. See `docs/UX_IMPLEMENTATION_PLAN.md` for full roadmap.
+**What's Next**: Trade union profile design, data import fixes (concatenated names), department aggregate pages, timeline pagination, search functionality. See `docs/UX_IMPLEMENTATION_PLAN.md` for full roadmap.
 
 ---
 
-## Technology Stack (January 2026)
+## Technology Stack (April 2026)
 
 ### Backend
 | Component | Version | Status |

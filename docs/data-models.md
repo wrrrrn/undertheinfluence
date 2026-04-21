@@ -1,6 +1,6 @@
 # Data Models Reference
 
-**Last Updated**: January 19, 2026
+**Last Updated**: April 16, 2026
 **Status**: Living Document
 
 ---
@@ -565,19 +565,22 @@ Membership.objects.future(moment="2024-01-01")
 
 ---
 
-## Database Statistics (January 2026)
+## Database Statistics (April 2026)
 
 **Current Data Volume**:
-- **Actors**: ~26,000 (persons + organizations)
-- **Memberships**: ~150,000
-- **Donations**: ~91,000 (Electoral Commission)
-- **Consultancies**: TBD
+- **Actors**: 155,077 (90,727 persons + 64,349 organizations)
+- **Memberships**: 136,588
+- **Donations**: 91,513 (MPs' Register of Interests + Electoral Commission)
+- **Consultancies**: 62,916
+- **Ministerial Meetings**: 41,362 (from 23 departments)
+- **Meeting Attendees**: 119,793
 - **Time Range**: 1996-2026 (30 years)
 
 **Data Quality**:
-- See `docs/DATA_QUALITY_REPORT.md` for detailed analysis
-- 167,967 total issues identified
-- 28,969 automatically fixable (17.2%)
+- See `docs/DATA_PIPELINE.md` for detailed analysis
+- Entity resolution via `canonical_entry` fields on Actor, Donation, Consultancy
+- Companies House enrichment: 51,157 organizations matched
+- 127,600+ data quality issues resolved
 
 ---
 
@@ -654,8 +657,7 @@ Membership.objects.future(moment="2024-01-01")
 **Related Documentation**:
 - `docs/systems-architecture.md` - Overall system architecture
 - `docs/CURRENT_STATE.md` - Feature inventory
-- `docs/DATA_QUALITY_REPORT.md` - Data quality analysis
-- `docs/importing-data.md` - Data import guide
+- `docs/DATA_PIPELINE.md` - Data import, quality & remediation
 
 ---
 

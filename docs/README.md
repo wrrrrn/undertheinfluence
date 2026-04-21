@@ -1,6 +1,6 @@
 # UnderTheInfluence Documentation
 
-**Last Updated**: January 26, 2026
+**Last Updated**: April 16, 2026
 
 This directory contains all project documentation for UnderTheInfluence, a Django-based web application tracking political influence in UK politics.
 
@@ -20,12 +20,12 @@ This directory contains all project documentation for UnderTheInfluence, a Djang
 
 ### Architecture & Design
 
-**`systems-architecture.md`** (v4.0 - Islands Architecture Edition)
+**`systems-architecture.md`** (v5.0 - Astro Frontend + API Caching)
 - Complete system architecture reference
-- Technology stack (Django 6.0, React 18, Vite 5, PostgreSQL 15)
-- Architecture diagrams (high-level, request/response flow, Docker Compose)
-- Frontend architecture (Islands, Zustand, TanStack Query)
-- API architecture (aggregate endpoints, filtering)
+- Technology stack (Django 6.0, Astro 5, Svelte 5, PostgreSQL 15, Redis)
+- Architecture diagrams (high-level, Docker Compose)
+- Frontend architecture (Astro SSR, Svelte partial hydration, D3.js)
+- API architecture (aggregate endpoints, Redis caching, filtering)
 - Key design decisions with rationale
 
 **`data-models.md`**
@@ -44,25 +44,50 @@ This directory contains all project documentation for UnderTheInfluence, a Djang
 - Known issues and next steps
 - Success metrics baseline
 
-### Frontend
+### Frontend & UX
 
-**`FRONTEND_DESIGN.md`** (v1.1 - Editorial Edition)
+**`FRONTEND_DESIGN.md`** (v2.0 - Natural History Edition)
 - Design system and visual identity
-- Typography (Playfair Display + Inter)
-- Color palette (party colors, data visualization colors)
-- Component design system (cards, badges, buttons)
-- Layout & spacing rules
+- Typography (Zodiak headlines + Satoshi body)
+- Color palette (paper/ink, accent red, node colors, party colors)
+- Component design system (stats as typography, section labels, rules, annotations)
+- Layout & spacing rules (newspaper grid, asymmetric columns)
+- Visualization patterns (network graph, timeline, radial charts)
 - Accessibility checklist
-- Page patterns (homepage, profiles, directory)
 
-**`FRONTEND_IMPLEMENTATION.md`**
-- Detailed implementation plan
-- Component specifications
-- API integration patterns
-- State management strategy
-- Performance considerations
+**`UX_IMPLEMENTATION_PLAN.md`** ⭐ UX roadmap
+- 5-phase UX process (audit → constraints → design → mockup → refine)
+- Page hierarchy and build order (4 tiers)
+- Actor type analysis (9 archetypes with distinct data profiles)
+- Completed work, blocked items, and planned improvements
+- Interconnectedness principle and audit requirements
 
-### API
+**`UI-STACK.md`** *(archived — historical migration guide)*
+- Documents the React → Astro/Svelte transition (completed January 2026)
+- Kept for reference only; see `systems-architecture.md` for current architecture
+
+**`design/specs/`** - Design specifications for individual pages
+- `homepage.md` - Homepage design spec (all items complete as of April 16)
+- `actor-profile.md` - Actor profile page spec (timeline-based, no tabs)
+- `politician-profile.md` - Politician-specific profile refinements
+- `organisation-profile.md` - Organisation/company profile spec
+- `lobbying-agency-profile.md` - Lobbying agency profile spec (client list hero, political ties)
+
+### API & Backend
+
+**`BACKEND_DESIGN.md`** ⭐ Backend decision framework
+- The strategy: REST-shaped core resources + named aggregate/summary endpoints
+- Endpoint taxonomy (Family A REST / Family B named queries — five shapes)
+- The checkpoint: shape of a good endpoint (§4), data correctness rules (§7)
+- Known issues punch list (§8) and backend roadmap (§9)
+- URL migration plan (§11) and audit stance (§12)
+
+**`BACKEND_CONSTRAINTS_SNAPSHOT.md`** ⭐ Living snapshot of backend state
+- Maintained by python-architect; consumed by `/ux-audit`, `/ux-constraints`, `/ux-design`, `/d3-viz`, and the `frontend-designer` agent
+- Per-endpoint reference cards (§2), per-page fetch map (§3), inventory of available aggregate fields (§4)
+- Data-quality constants (§5), performance characteristics (§6)
+- "What is NOT available today" (§7), open architectural questions + landed verdicts (§8)
+- Read this before proposing any backend-adjacent design work — architect may have already answered the question.
 
 **`API_REFERENCE.md`**
 - REST API v2 endpoint reference
@@ -71,53 +96,17 @@ This directory contains all project documentation for UnderTheInfluence, a Djang
 - Query parameters and response formats
 - Interactive documentation links (Swagger/ReDoc)
 
-### Data Quality & Import
+### Data Pipeline & Quality
 
-**`DATA_CLEANUP_GUIDE.md`** ⭐ Start here for cleanup
-- Step-by-step cleanup workflow
-- Fix types by phase (correct execution order)
-- Command options and examples
-- Understanding output (before/after stats)
-- Troubleshooting guide
-
-**`DATA_CLEANUP_RESULTS.md`**
-- Summary of all automated cleanup operations
-- Statistics on resolved issues (duplicates, concatenations, garbage data)
-- Before/After metrics for Companies House and Lobbying data
-- Remaining issues and Phase 2 plan
-
-**`MINISTERIAL_MEETINGS_CLEANUP_DEEP_DIVE.md`**
-- Detailed analysis of Ministerial Meetings data quality
-- Investigation of concatenated attendee names (9,000+ records)
-- "Semicolon actors" and roundtable parsing issues
-- Remediation plan for complex string splitting
-
-**`ADDITIONAL_CLEANUP_COMMANDS_ANALYSIS.md`**
-- Evaluation of 5 specialized cleanup commands
-- Impact analysis for splitting concatenated orgs/attendees
-- Statistics on target records (160-1,800 affected per command)
-- Recommended execution order
-
-**`DATA_QUALITY_REPORT.md`**
-- Comprehensive data quality analysis (post-cleanup)
-- Major improvements achieved: 99.98% duplicate reduction, 83% orphaned donations fixed
-- Companies House enrichment status (51,157 matches)
-- Entity resolution status and remaining work
+**`DATA_PIPELINE.md`** ⭐ Consolidated data reference
+- Import pipeline: commands, order, coverage (23 departments, 155k actors)
+- Data quality: current issues with root causes and code references
+- Remediation strategy: prioritized fix plan (Tier 1-3) with SQL and code
+- Entity resolution: architecture, commands, resolution tiers
 - Cleanup command reference
-
-**`DATA_IMPORT_GUIDE.md`**
-- Complete guide for importing political data
-- Quick start scripts (`full_data_import.sh`)
-- Individual import commands (ParlParse, Ministers, MP/Lords interests)
-- Working vs broken import sources
-- Import order recommendations
 - Troubleshooting guide
 
-**`data-import-testing.md`**
-- Import command testing results
-- Status of each data source (✅ Working, ⚠️ Needs Update, ⛔ Broken)
-- Known issues with imports
-- Manual testing procedures
+Consolidates the former: DATA_IMPORT_GUIDE, DATA_QUALITY_REPORT, DATA_CLEANUP_GUIDE, data-import-testing, ADDITIONAL_CLEANUP_COMMANDS_ANALYSIS, CANONICAL_IMPLEMENTATION_REPORT, ENTITY_RESOLUTION_OPTIMIZATION (all archived)
 
 ---
 
@@ -163,14 +152,18 @@ These documents are preserved for reference but no longer actively maintained.
 **Use the API**
 → Read `API_REFERENCE.md` or visit `/api/v2/docs/` for interactive docs
 
-**Import data**
-→ Read `DATA_IMPORT_GUIDE.md`
+**Build or change a backend endpoint**
+→ Read `BACKEND_DESIGN.md` — especially §4 "shape of a good endpoint" and §7 "data correctness rules"
 
-**Build a new frontend component**
-→ Read `FRONTEND_DESIGN.md` (design system) + `FRONTEND_IMPLEMENTATION.md` (patterns)
+**Import data**
+→ Read `DATA_PIPELINE.md` (Section 2: Import Pipeline)
+
+**Build a new frontend page**
+→ Read `UX_IMPLEMENTATION_PLAN.md` (roadmap) + `FRONTEND_DESIGN.md` (design system) + `design/specs/` (page specs)
+→ Follow the 5-phase process: `/ux-audit` → `/ux-design` → `/ux-mockup` → `/ux-refine`
 
 **Fix data quality issues**
-→ Read `DATA_CLEANUP_GUIDE.md` (step-by-step workflow), `DATA_QUALITY_REPORT.md` (analysis), `DATA_CLEANUP_RESULTS.md` (past results)
+→ Read `DATA_PIPELINE.md` (Sections 3-4: Data Quality + Remediation Strategy)
 
 **Understand why a design decision was made**
 → Check "Key Design Decisions" in `systems-architecture.md` or `data-models.md`
@@ -227,10 +220,9 @@ All documentation is maintained by the development team. When making significant
 **Standards & Specifications**:
 - Popolo Specification: http://www.popoloproject.com/
 - Django 6.0 Documentation: https://docs.djangoproject.com/en/6.0/
-- Islands Architecture: https://jasonformat.com/islands-architecture/
-- Vite Guide: https://vitejs.dev/guide/
-- TanStack Query: https://tanstack.com/query/latest
+- Astro Documentation: https://docs.astro.build/
+- Svelte 5 Documentation: https://svelte.dev/docs/svelte
 
 ---
 
-**Last Major Update**: January 26, 2026 (data quality improvements, entity resolution, Companies House enrichment)
+**Last Major Update**: April 16, 2026 (Homepage complete, API caching, documentation refresh)
