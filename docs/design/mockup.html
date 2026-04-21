@@ -1,0 +1,340 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Search, 
+  Menu, 
+  ChevronRight, 
+  ArrowUpRight, 
+  Filter, 
+  Download, 
+  Info,
+  Maximize2,
+  Settings2
+} from 'lucide-react';
+
+// --- Design System Constants (Aligned with MinisterNetwork.svelte) ---
+const COLORS = {
+  paper: '#FAF9F6',
+  ink: '#1a1a1a',
+  inkLight: '#4a4a4a',
+  inkMuted: '#6b6b6b',
+  accent: '#C54B3C', // Terracotta Red
+  minister: '#C54B3C', 
+  donor: '#4A6741',    // Forest Green
+  director: '#5B7F95', // Slate Blue
+  psc: '#B89B5F',      // Gold
+  bridge: 'rgba(218, 165, 32, 0.8)', // Bridge node highlight
+  edgeDonation: '#6B5B4F', // Warm Brown
+  edgeRole: '#5B7F95',     // Slate Blue
+};
+
+// Generate high-density mock data to match the user's current visualization
+const generateMockData = () => {
+  const nodes = [];
+  const links = [];
+  
+  // 1. Central Cluster (Ministers)
+  for (let i = 0; i < 45; i++) {
+    nodes.push({
+      id: `m-${i}`,
+      type: 'minister',
+      name: i === 0 ? 'Rt Hon. James Sterling' : `Minister ${i}`,
+      x: 500 + (Math.random() - 0.5) * 350,
+      y: 250 + (Math.random() - 0.5) * 200,
+      value: Math.random() * 500000 + 50000,
+      role: 'Cabinet Minister'
+    });
+  }
+
+  // 2. Peripheral Cluster (Donors, Directors, PSCs)
+  for (let i = 0; i < 250; i++) {
+    const type = Math.random() > 0.7 ? (Math.random() > 0.5 ? 'director' : 'psc') : 'donor';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 180 + Math.random() * 250;
+    
+    const node = {
+      id: `e-${i}`,
+      type,
+      name: `Entity ${i}`,
+      x: 500 + Math.cos(angle) * dist,
+      y: 250 + Math.sin(angle) * dist,
+      value: Math.random() * 100000,
+      isBridge: Math.random() > 0.94
+    };
+    nodes.push(node);
+
+    // Create 1-3 connections per entity to random ministers
+    const connectionCount = Math.floor(Math.random() * 2) + 1;
+    for (let j = 0; j < connectionCount; j++) {
+      links.push({
+        source: node,
+        target: nodes[Math.floor(Math.random() * 45)],
+        type: Math.random() > 0.8 ? 'role' : 'donation'
+      });
+    }
+  }
+  return { nodes, links };
+};
+
+const App = () => {
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const { nodes, links } = useMemo(() => generateMockData(), []);
+
+  const fontDisplay = { fontFamily: '"Crimson Pro", "Playfair Display", serif' };
+  const fontBody = { fontFamily: '"Inter", "Satoshi", sans-serif' };
+
+  return (
+    <div className="min-h-screen selection:bg-[#C54B3C] selection:text-white pb-20" style={{ backgroundColor: COLORS.paper, color: COLORS.ink, ...fontBody }}>
+      
+      {/* --- Top Metadata Bar --- */}
+      <header className="max-w-[1400px] mx-auto px-6 pt-4 flex justify-between items-center border-b border-black/5 pb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b6b6b]">
+        <span className="text-[#C54B3C]">Investigation</span>
+        <span>Date updated: January 2026</span>
+      </header>
+
+      {/* --- Main Navigation --- */}
+      <nav className="max-w-[1400px] mx-auto px-6 py-6 flex justify-between items-center">
+        <div className="flex items-center gap-10">
+          <h1 className="text-2xl font-bold tracking-tighter uppercase" style={fontDisplay}>
+            Under<span style={{ color: COLORS.accent }}>The</span>Influence
+          </h1>
+          <div className="hidden lg:flex gap-8 text-[11px] font-bold uppercase tracking-[0.15em]">
+            <button className="text-[#C54B3C]">The Web</button>
+            <button className="hover:text-[#C54B3C] transition-colors">Directory</button>
+            <button className="hover:text-[#C54B3C] transition-colors">Analysis</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="relative group hidden md:block">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search actors..." 
+              className="bg-black/5 border-none rounded-none py-2 pl-10 pr-4 text-xs focus:ring-1 focus:ring-[#C54B3C] w-48 transition-all"
+            />
+          </div>
+          <button className="p-2 hover:bg-black/5"><Menu size={20} /></button>
+        </div>
+      </nav>
+
+      <main className="max-w-[1400px] mx-auto px-6 mt-8">
+        
+        {/* --- Hero Section --- */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-end mb-16">
+          <div className="lg:col-span-8">
+            <h2 className="text-6xl md:text-7xl font-bold tracking-tight leading-[0.95] mb-6" style={fontDisplay}>
+              The web of money and <br />access in Westminster
+            </h2>
+            <p className="text-xl text-[#4a4a4a] leading-relaxed max-w-2xl font-medium">
+              Who funds British politics—and what do they get in return? This investigation maps the financial relationships between donors and government ministers.
+            </p>
+          </div>
+        </section>
+
+        {/* --- 3-Figure Metrics --- */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-0 border-y border-black/10 mb-20 py-10">
+          {[
+            { label: 'Donations Tracked', val: '91,513' },
+            { label: 'Total Value Declared', val: '£1.6bn' },
+            { label: 'Dual-Influence Relationships', val: '312' },
+          ].map((stat, i) => (
+            <div key={i} className={`flex flex-col items-center text-center px-8 ${i !== 2 ? 'md:border-r border-black/10' : ''}`}>
+              <span className="text-6xl font-bold tracking-tighter mb-2" style={fontDisplay}>{stat.val}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b6b6b]">{stat.label}</span>
+            </div>
+          ))}
+        </section>
+
+        {/* --- Network Visualization Area --- */}
+        <section className="relative">
+          <div className="flex flex-col md:flex-row justify-between items-baseline mb-6 gap-4">
+            <div>
+              <h3 className="text-2xl font-bold" style={fontDisplay}>The minister network</h3>
+              <p className="text-xs text-[#6b6b6b] mt-1 italic">Financial connections between donors and government ministers. Node size reflects total donation value.</p>
+            </div>
+            <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest text-[#6b6b6b]">
+              <span>Source: MPs' Register of Interests, Electoral Commission</span>
+              <div className="flex gap-2">
+                <button className="flex items-center gap-1 hover:text-black border border-black/10 px-2 py-1"><Settings2 size={12} /> Tweak Physics</button>
+                <button className="flex items-center gap-1 hover:text-black border border-black/10 px-2 py-1"><Maximize2 size={12} /></button>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative w-full aspect-[21/9] bg-[#FAF9F6] border border-black/5 overflow-hidden">
+            <svg className="w-full h-full opacity-90" viewBox="0 0 1000 500">
+              {/* Dense Edges */}
+              <g opacity="0.1">
+                {links.map((link, i) => (
+                  <line 
+                    key={i} 
+                    x1={link.source.x} y1={link.source.y} 
+                    x2={link.target.x} y2={link.target.y} 
+                    stroke={link.type === 'role' ? COLORS.edgeRole : COLORS.edgeDonation}
+                    strokeWidth={0.5}
+                    strokeDasharray={link.type === 'role' ? '2,2' : 'none'}
+                  />
+                ))}
+              </g>
+
+              {/* High-Density Nodes */}
+              {nodes.map((node) => {
+                const baseRadius = node.type === 'minister' ? 12 : 4;
+                const r = node.value ? Math.sqrt(node.value / 1000) * 1.2 + baseRadius : baseRadius;
+                
+                return (
+                  <g 
+                    key={node.id} 
+                    onMouseEnter={() => setHoveredNode(node)}
+                    className="cursor-crosshair group"
+                  >
+                    {node.isBridge && (
+                      <circle cx={node.x} cy={node.y} r={r + 6} fill="none" stroke={COLORS.bridge} strokeWidth={2} strokeDasharray="3 2" />
+                    )}
+                    <circle 
+                      cx={node.x} cy={node.y} r={r} 
+                      fill={COLORS[node.type]} 
+                      className="transition-all duration-300 group-hover:opacity-100 group-hover:scale-125 opacity-80"
+                      stroke={node.type === 'minister' ? 'rgba(0,0,0,0.2)' : 'none'}
+                    />
+                    {node.type === 'minister' && (
+                      <text 
+                        x={node.x} y={node.y + r + 12} 
+                        textAnchor="middle" 
+                        className="text-[8px] font-bold uppercase tracking-tight pointer-events-none fill-[#1a1a1a]"
+                        style={{ paintOrder: 'stroke', stroke: '#FAF9F6', strokeWidth: 3 }}
+                      >
+                        {node.name}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* LEGEND (Svelte Style) */}
+            <div className="absolute bottom-6 left-6 p-5 bg-[#FAF9F6]/95 border border-black/10 backdrop-blur-sm shadow-sm">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: COLORS.minister}} /> 
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#4a4a4a]">Ministers</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: COLORS.donor}} /> 
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#4a4a4a]">Donors</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: COLORS.director}} /> 
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#4a4a4a]">Directors</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: COLORS.psc}} /> 
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#4a4a4a]">PSC / Significant Control</span>
+                </div>
+                <div className="flex items-center gap-3 pt-2 mt-2 border-t border-black/5">
+                  <div className="w-4 h-4 rounded-full border-2 border-dashed" style={{borderColor: COLORS.bridge}} /> 
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#4a4a4a]">Key Connectors (2+ Min)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* RESEARCHER NOTE (Dynamic Tooltip) */}
+            <div className="absolute top-8 right-8 w-64 p-6 border-l-2 border-[#C54B3C] bg-[#FAF9F6]/60 backdrop-blur-md">
+              <p className="text-[#C54B3C] font-bold text-[10px] uppercase tracking-[0.2em] mb-3">Researcher Note</p>
+              {hoveredNode ? (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <p className="text-[10px] font-bold uppercase text-[#6b6b6b] mb-1">{hoveredNode.type}</p>
+                  <h4 className="text-xl font-bold leading-tight mb-2" style={fontDisplay}>{hoveredNode.name}</h4>
+                  <p className="text-xs text-[#4a4a4a] leading-relaxed italic mb-4">
+                    {hoveredNode.role || 'External contributor'} captured within the ecosystem. Total identified value: £{(hoveredNode.value || 0).toLocaleString()}.
+                  </p>
+                  <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-[#6b6b6b] pt-3 border-t border-black/5">
+                    <span>Association degree</span>
+                    <span className="text-[#C54B3C]">High</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs italic text-[#6b6b6b] leading-relaxed">
+                  Hover over a specimen in the web to reveal taxonomic data and funding relationships.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* --- Recent Disclosures Section (Preferred by User) --- */}
+        <section className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="space-y-6">
+            <p className="text-[#C54B3C] font-bold text-xs uppercase tracking-[0.2em] border-b border-[#C54B3C] pb-2">Recent Disclosures</p>
+            {[1,2,3].map(i => (
+              <div key={i} className="group cursor-pointer">
+                <p className="text-[10px] font-bold uppercase text-[#6b6b6b] mb-1">Jan 24, 2026</p>
+                <h4 className="text-xl font-bold group-hover:text-[#C54B3C] transition-colors" style={fontDisplay}>Disclosure {i}: Interest Mapping</h4>
+                <p className="text-sm text-[#4a4a4a] line-clamp-2 mt-2 leading-relaxed">New filings suggest an increase in cross-sectoral funding from entities registered outside the UK...</p>
+                <div className="h-[1px] bg-black/5 w-full mt-4" />
+              </div>
+            ))}
+          </div>
+          <div className="md:col-span-2 space-y-6">
+            <p className="text-[#C54B3C] font-bold text-xs uppercase tracking-[0.2em] border-b border-[#C54B3C] pb-2">Deep Dive: Resource Allocation</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <h4 className="text-2xl font-bold" style={fontDisplay}>Concentration of Structural Wealth</h4>
+                <p className="text-sm text-[#4a4a4a] leading-relaxed italic">
+                  "The top 5 ministers have collectively received over £7 million in declared donations — more than the bottom 100 combined."
+                </p>
+                <button className="text-[10px] font-bold uppercase tracking-widest text-[#C54B3C] flex items-center gap-1 group">
+                  View full analysis <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+              <div className="bg-[#B85450]/5 p-6 border border-[#B85450]/10">
+                <h5 className="text-[10px] font-bold uppercase tracking-widest mb-4">Funding Origin</h5>
+                <div className="space-y-3">
+                  {[
+                    { l: 'Private Equity', p: 72 },
+                    { l: 'Individual Wealth', p: 18 },
+                    { l: 'Trade Unions', p: 10 },
+                  ].map((reg, i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-[10px] font-bold uppercase mb-1">
+                        <span>{reg.l}</span>
+                        <span>{reg.p}%</span>
+                      </div>
+                      <div className="h-1 bg-black/5"><div className="h-full bg-[#C54B3C]" style={{width: `${reg.p}%`}}></div></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* --- Methodology Footer --- */}
+        <section className="mt-32 pt-12 border-t-2 border-black grid grid-cols-1 md:grid-cols-4 gap-12">
+           <div>
+              <h5 className="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Methodology</h5>
+           </div>
+           <div className="md:col-span-3">
+              <p className="text-sm text-[#6b6b6b] leading-relaxed mb-6">
+                This visualization shows donations to individuals who have held ministerial office in UK government. Donation data is sourced from the MPs' Register of Interests and the Electoral Commission's database of political donations. Node positions are calculated using a force-directed layout algorithm mimicking the specimen plates of Victorian naturalists.
+              </p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#6b6b6b]">
+                Under the Influence is an ongoing investigation into political funding in the UK.
+              </p>
+           </div>
+        </section>
+
+      </main>
+
+      <footer className="max-w-[1400px] mx-auto px-6 mt-20 flex justify-between items-center text-[9px] font-bold uppercase tracking-[0.3em] text-[#6b6b6b]">
+        <span>© 2026 UnderTheInfluence</span>
+        <div className="flex gap-8">
+          <button className="hover:text-black">Privacy Policy</button>
+          <button className="hover:text-black">Terms of Use</button>
+          <button className="hover:text-black">Data Access</button>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;

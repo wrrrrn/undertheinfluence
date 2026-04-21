@@ -1,8 +1,20 @@
 # UX Implementation Plan
 
-**Date**: 2026-04-12
+**Date**: 2026-04-18
 **Status**: Living document
 **Core principle**: Interconnectedness — every entity name is a doorway into that entity's web of connections
+
+---
+
+## Ship-Ready Queue (next frontend pass)
+
+Specced last session, ready to land together. Keeping them in one pass because they all touch the politician Career Shape section and reviewing them as a unit is cheaper than three separate regression sweeps.
+
+1. **Career Shape waffle** — donation-type waffle (100 tiles + direct-label key + one leader line) replaces the stacked bar. Spec: `docs/design/specs/politician-profile.md` §Career Shape Companion. **Backend unblock**: `ActorActivityByYearView.category_breakdown` extension (~10 LOC, canonical-correct, shares `activity_by_year:{pk}` cache). Rationale and verdict in `docs/BACKEND_CONSTRAINTS_SNAPSHOT.md` §8 and `docs/BACKEND_DESIGN.md` §9 #1.
+2. **Coxcomb audit fixes** — CF1 (SVG a11y: `<title>` + `<desc>`, remove `aria-hidden`), CF2 (peak-year leader line to 2024), CF3 (meeting-line `stroke-opacity` 0.55 → 0.42 + `mix-blend-mode: multiply`). Spec: `docs/design/specs/politician-profile.md` §Career Shape Coxcomb — Audit Fixes. All one-file changes in `ActivityCoxcomb.svelte`.
+3. **Meetings-summary silent-200 fix** — `/api/v2/actors/{id}/meetings-summary/` returns 200 with zeros for non-department actors. Tracked at `docs/BACKEND_DESIGN.md` §8 #25. Cheap honest fix (Option A): rename URL to `/api/v2/departments/{id}/meetings-summary/` and 404 on non-department actors. Unblocks department page when that tier is picked up.
+
+**Agent behaviour change**: `frontend-designer` now reads `BACKEND_CONSTRAINTS_SNAPSHOT.md` first and proposes the spec diff before writing — activates on next session reload. Reason: last session's waffle spec assumed `funding-summary` was on the wire for every profile; the snapshot's §3 fetch map is the authoritative answer.
 
 ---
 
@@ -16,12 +28,46 @@ Every page goes through a 5-phase design workflow before it's considered done. N
 | 2. Feasibility | `/ux-constraints` | Technical analysis of what's possible in Astro+Svelte+D3+Tailwind | Approach chosen, blockers identified |
 | 3. Design | `/ux-design` | Written spec in `docs/design/specs/` — layout, components, data communication, copy | Spec approved by Warren |
 | 4. Build | `/ux-mockup` | Implemented page + Playwright screenshots validated against spec | All spec sections pass |
-| 5. Polish | `/ux-refine` | Design system compliance fixes, interconnectedness audit, responsive check | No Fail items in audit |
+| 5. Polish | `/ux-refine` | Design system compliance fixes, interconnectedness audit, **aesthetic audit**, responsive check | No Fail items in audit |
 
-**Key rules:**
-- Design is written before code. `/ux-design` produces the spec. `/ux-mockup` builds to that spec.
-- Every audit includes an **Interconnectedness check** — any entity name without a link to a useful page is a failure.
-- Don't link to empty pages. If a destination page doesn't exist yet, keep the name as plain text and note it in this plan.
+---
+
+## The Aesthetic Mandate: Natural History Specimen Design
+
+We are applying the Victorian natural history aesthetic consistently across every page. "Clean Newspaper" is the fallback when data density is low; "Specimen Plate" is the target whenever the page has enough structure to support it. Pages that already shipped under a cleaner-newspaper treatment need an explicit aesthetic pass — this section tracks it.
+
+### The Four Criteria
+
+Every page must pass the **Aesthetic Audit** during Phase 5:
+
+1. **Diagrammatic Density** — Leader lines, annotations, and callouts explain data inline. Minard/Nightingale-style annotation is the reference. One visible leader line per major viz minimum; more where warranted.
+2. **Specimen Taxonomy** — Entities are treated as scientific specimens: ranked numbers (plate numerals), classification tags beneath the name, plate dividers between sections, serif small-caps for category labels. Not list items; catalogued specimens.
+3. **Lithographic Texture** — Charts use stippled, hatched, or textured fills instead of flat digital colours. Borders get a 1px ink rule, not a Tailwind grey. Backgrounds go paper, not white.
+4. **Annotated Margins** — Whitespace is used for marginalia, footnotes, source attributions, date anchors, or specimen notes — mimicking a scientific journal page rather than a dashboard.
+
+### Cross-Page Aesthetic Pass (tracked)
+
+Each page needs its aesthetic audit logged against the four criteria. A page is "Pass" only when all four are satisfied; "Partial" means some criteria are met but the page still reads as modern-dashboard in places; "Not started" means the page has never been audited through the aesthetic lens.
+
+| Page | Route | Current aesthetic status | Notes |
+|------|-------|--------------------------|-------|
+| **Homepage** | `/` | Partial | Editorial typography + network aesthetic landed 2026-04-16. Needs stippled/hatched pass on the party bars + lobbying strip, marginalia on methodology footnotes. |
+| **Politician profile** | `/person/[id]` (politician) | Partial | Coxcomb + waffle + leader-line land in the ship-ready queue above. After that, audit Timeline rows against Specimen Taxonomy (plate numerals? classification tags?). |
+| **Organisation profile** | `/person/[id]` (org/company) | Partial | Phase 2a functional. Meeting rows need Specimen Taxonomy pass; stats strip needs marginalia treatment. |
+| **Lobbying Agency profile** | `/person/[id]` (agency) | Partial | Client list works as a specimen catalogue conceptually but renders as a list. Needs plate numerals, lithographic dividers. |
+| **Political Party profile** | `/person/[id]` (party) | Partial | Funding-by-year bars are the closest we have to a specimen plate; push further — hatched fills for public funds / union money, leader lines to government-annotation years. |
+| **Trade Union profile** | `/person/[id]` (union) | Not started | Greenfield — design spec should bake in the aesthetic from the start (donation-outward as specimen inventory). |
+| **Network graph** | `/network` | Partial | Annotations and halos landed in recent commits. Needs a legend plate + source-attribution marginalia. |
+| **Directory** | `/directory` | Not started | Currently pure list + search. Audit will likely call for plate numerals, classification tags per row, specimen divider rules. |
+| **Parties** | `/parties` | Not started | Audit + aesthetic pass together — ordered bars are already close to a specimen chart. |
+| **Meetings** | `/meetings` | Not started | Audit + aesthetic pass together. |
+| **Lobbying** | `/lobbying` | Not started | Audit + aesthetic pass together. |
+| **Analysis** | `/analysis` | Not started | Hub page — aesthetic treatment here sets the tone for linked deep-dives. |
+| **Department profile** | `/department/[id]` | N/A (unbuilt) | When built, spec must satisfy all four criteria from day one. |
+| **Search results** | `/search` | N/A (unbuilt) | Same — bake aesthetic in from the spec. |
+| Static pages | `/privacy`, `/terms`, `/data` | Partial | Typography is in the voice; no data density to push further. No action planned unless copy changes. |
+
+**Rule**: when any page is touched for other UX work, the aesthetic audit runs in the same pass. We don't re-open a page a week later just to add marginalia. Pages still marked "Not started" should move to their own audit-only pass once the ship-ready queue clears — starting with the most-visited (Directory → Parties → Meetings → Lobbying → Analysis).
 
 ---
 
@@ -225,61 +271,37 @@ Party names now show on all MP pages (e.g. Starmer → "Labour", Badenoch → "C
 
 **Problem**: Department actor pages show "No recorded activity" because meetings belong to ministers, not departments.
 
-**Fix needed:**
-1. New page or API endpoint aggregating meetings by `department.id`
-2. Show: all meetings, which ministers, top organisations
-3. Re-enable department links in `ActorTimeline.svelte` and `ActorProfile.svelte`
+**Backend status**: `DepartmentMeetingsSummaryView` shipped 2026-04-17 — returns `{total_meetings, unique_attendees, unique_ministers, by_year, top_attendees, top_ministers}`, canonical-resolved, cached 1h. See `BACKEND_CONSTRAINTS_SNAPSHOT.md` §2 for the endpoint card.
+
+**Outstanding**:
+1. **URL/scope bug** — endpoint is mounted at `/api/v2/actors/{id}/meetings-summary/` and returns 200 with zeros for non-department actors (verified on Kemi). Tracked at `BACKEND_DESIGN.md` §8 #25. Fix before building the department page: rename to `/api/v2/departments/{id}/meetings-summary/` and 404 on non-department actors (Option A, cheap honest fix).
+2. New frontend page or `/person/[id]` variant consuming `meetings-summary`.
+3. Re-enable department links in `ActorTimeline.svelte` and `ActorProfile.svelte` once the page is non-empty.
 
 ---
 
-## Next Steps (from 2026-04-13 homepage audit)
+## Homepage Work — Completed (2026-04-16)
 
-### 1. Homepage Interconnectedness Fix (Critical, Easy)
+All items from the 2026-04-13 homepage audit have been addressed. See `docs/design/specs/homepage.md` for the full spec with all items marked complete.
 
-The API already returns actor IDs for meeting attendees, lobbying clients, and departments — but `index.astro` discards them and renders plain `<span>`. ~25 unlinked entity names on the homepage that have IDs available.
+### Completed Items
+1. ✅ **Homepage interconnectedness** — All entity names linked: meeting attendees, lobbying clients, lobbying agencies ({id,name} objects from API), party bar chart names, recipient party names
+2. ✅ **Cache all homepage endpoints** — Redis 1hr TTL on stats, top-recipients, party-donations, top-lobbying-clients, department-meetings, minister-network (`cache_utils.py`)
+3. ✅ **Fix heading hierarchy** — h1 → h2 (network, methodology) → h3 (deep dive) → h4 (data panels)
+4. ✅ **Network graph loading skeleton** — Stipple dot-cloud pattern with "Cataloguing connections..." text
+5. ✅ **Network graph mobile treatment** — Hidden below `sm`, replaced with summary + link to /network
+6. ✅ **Homepage design spec** — Written at `docs/design/specs/homepage.md`
+7. ✅ **Backend: Party filter in SQL** — `effective_recipient_id__in=party_ids` instead of Python post-filter
+8. ✅ **Backend: Lobbying N+1 fix** — Single batch query replaces per-client loop
+9. ✅ **Stats label clarity** — "Donors who also lobby" with title tooltip
+10. ✅ **Mobile stats reflow** — 3-col at all sizes with responsive text sizing
+11. ✅ **Recipient party linking** — Row restructured for separate name + party links
+12. ✅ **Hardcoded API URL** — Centralized `PUBLIC_API_URL` in utils.ts
+13. ✅ **Network detail text wrapping** — Long names and roles wrap across two lines
 
-**Changes needed in `frontend/src/pages/index.astro`:**
-- **Department meeting attendees** (line ~310): Change `<span>{attendee.name}</span>` → `<a href="/person/{attendee.actor.id}">{attendee.name}</a>`. Data already available: `attendee.actor.id`.
-- **Lobbying client names** (line ~349): Change `<span>{client.name}</span>` → `<a href="/person/{client.actor.id}">{client.name}</a>`. Requires passing `actor.id` through in the data transform (line ~90).
-- **Lobbying agency names** (line ~353): Currently just `client.agencies.join('·')` — no IDs available. API returns agency names as strings, not objects. **Needs API change** to return `{id, name}` objects from `/aggregates/top-lobbying-clients/`.
-- **Department names** (line ~305): Have `department.id` but department pages are empty. Keep as plain text until Department Profile page exists (existing blocker).
-- **Party bar chart** (line ~266): Could link to `/person/{party.id}`. Requires passing party ID through data transform.
-
-### 2. Cache Homepage Stats Endpoint
-
-`/aggregates/stats/` takes 1.4s — materialises 21k donor rows for concentration calc, no caching. Add Redis cache (5-min TTL) matching the `funding-summary` pattern in `api/v2/cache_utils.py`.
-
-### 3. Fix Heading Hierarchy
-
-Homepage has h1 → h3 → h4 → h5, skipping h2. Network section → h2, Deep Dive headings → h3, Methodology → h4.
-
-### 4. Network Graph Loading State
-
-5+ second "LOADING NETWORK DATA..." with no skeleton/placeholder. Add a skeleton that suggests the shape of the graph.
-
-### 5. Network Graph Mobile Treatment
-
-Force-directed graph with 100+ nodes is unusable at 375px. Options: hide on mobile with a "View on desktop" note, or provide an alternative (top connections list).
-
-### 6. Write Homepage Design Spec
-
-No `docs/design/specs/homepage.md` exists. The homepage is the most-visited page and has no spec. Create one following the `/ux-design` process.
-
-### 7. Backend: Push Party Filter into SQL
-
-`/aggregates/party-donations/` aggregates ALL recipients then filters to parties in Python. Push the `classification = 'Political Party'` filter into the SQL query.
-
-### 8. Backend: Fix Lobbying N+1
-
-`/aggregates/top-lobbying-clients/` runs a separate query per client to fetch agencies (10 extra queries at limit=10). Use a single query with window functions or prefetch.
-
-### 9. Data Quality: Concatenated Entity Names [upstream]
-
-"Crick Institute Eton College" is the #1 lobbying client on the homepage (18 agencies). It's two separate entities concatenated during GOV.UK meeting import. Also affects: "CEO (Vistry Group)", "Clarion Events College of Policing", "TJX Europe UK Chamber of Shipping". Fix belongs in `import_ministerial_meetings` — split multi-entity attendee strings.
-
-### 10. Data Quality: Case-Variant Duplicates [upstream]
-
-"AstraZeneca" (id:26122) and "Astrazeneca" (id:25949) both appear in lobbying clients. Entity resolution should catch case-variant duplicates. Add case-insensitive matching to `resolve_org_duplicates`.
+### Remaining Data Quality Issues [upstream]
+- **Concatenated entity names**: "Crick Institute Eton College" is two entities. Fix belongs in `import_ministerial_meetings`.
+- **Case-variant duplicates**: "AstraZeneca" vs "Astrazeneca". Fix belongs in `resolve_org_duplicates`.
 
 ---
 

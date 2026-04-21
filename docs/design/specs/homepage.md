@@ -164,18 +164,16 @@ All comparisons use right-aligned tabular numbers for scannable value comparison
 
 ### Interconnectedness Plan
 
-| Entity | Current | Target | Blocked? |
-|--------|---------|--------|----------|
-| Top recipient names | ✅ Linked to `/person/{id}` | No change | — |
-| Top recipient party names | Plain text in parentheses | Link to `/party/{party.id}` | No — API returns `party.id` |
-| Party bar chart names | Plain text | Link to `/party/{party.id}` | Yes — wrapped in card `<a>`. Restructure needed |
-| Meeting attendee names | ❌ Plain `<span>` | Link to `/organisation/{id}` or `/person/{id}` | No — API returns `actor.id` + `actor_type` |
-| Department names | Plain text | Keep plain text | Yes — department pages empty |
-| Lobbying client names | ❌ Plain `<span>` | Link to `/organisation/{id}` | No — API returns `actor.id` |
-| Lobbying agency names | ❌ Plain text (joined string) | Link to `/organisation/{id}` | **Yes** — API returns names only, no IDs. Needs API change |
-| Network graph nodes | ✅ Clickable, detail panel with "View full profile →" | No change | — |
-
-**API change required**: `/aggregates/top-lobbying-clients/` must return agencies as `[{id, name}]` objects instead of `string[]`.
+| Entity | Status | Route |
+|--------|--------|-------|
+| Top recipient names | ✅ Linked | `/person/{id}` via `getActorUrl()` |
+| Top recipient party names | ✅ Linked | `/party/{party.id}` — row restructured to support two links |
+| Party bar chart names | ✅ Linked | `/party/{party.id}` in SVG `<a>` tags |
+| Meeting attendee names | ✅ Linked | `/person/{id}` or `/organisation/{id}` via `getActorUrl()` |
+| Department names | Plain text | Blocked — department pages empty |
+| Lobbying client names | ✅ Linked | `/organisation/{id}` via `getActorUrl()` |
+| Lobbying agency names | ✅ Linked | `/organisation/{id}` — API returns `[{id, name}]` objects |
+| Network graph nodes | ✅ Clickable | Detail panel with "View full profile →" link |
 
 ### Empty & Edge Cases
 
@@ -256,31 +254,45 @@ The network graph is the strongest natural-history element. Opportunities to str
 - **Party-coloured bars**: The design system says "One Accent Color" — but party colours are explicitly in the palette for this purpose. The bar chart communicates better with party identity colours than uniform red.
 - **Deep dive card restructuring**: Currently each deep dive card is a single `<a>`. To support inner entity links, the left-column editorial content becomes the link, and the right-column data panel becomes standalone. This is a structural change but maintains the same visual pattern.
 
-## Backend Changes Required
+## Backend Changes — All Complete (2026-04-16)
 
-| Priority | Endpoint | Change |
-|----------|----------|--------|
-| **P0** | `/aggregates/top-lobbying-clients/` | Return agencies as `[{id, name}]` instead of `string[]` |
-| **P0** | `/aggregates/stats/` | Add Redis cache (1hr TTL) |
-| **P1** | `/aggregates/top-lobbying-clients/` | Fix N+1: batch agency query instead of per-client |
-| **P1** | `/aggregates/party-donations/` | Push party filter into SQL instead of Python |
-| **P1** | `/aggregates/party-donations/` | Add Redis cache (1hr TTL) |
-| **P1** | `/aggregates/top-lobbying-clients/` | Add Redis cache (1hr TTL) |
-| **P1** | `/aggregates/department-meetings/` | Add Redis cache (1hr TTL) |
-| **P2** | `/aggregates/top-recipients/` | Add `select_related('polymorphic_ctype')` (fixes ~100 extra queries) |
+| Priority | Endpoint | Change | Status |
+|----------|----------|--------|--------|
+| **P0** | `/aggregates/top-lobbying-clients/` | Return agencies as `[{id, name}]` instead of `string[]` | ✅ Done |
+| **P0** | `/aggregates/stats/` | Add Redis cache (1hr TTL) | ✅ Done |
+| **P1** | `/aggregates/top-lobbying-clients/` | Fix N+1: batch agency query instead of per-client | ✅ Done |
+| **P1** | `/aggregates/party-donations/` | Push party filter into SQL instead of Python | ✅ Done |
+| **P1** | `/aggregates/party-donations/` | Add Redis cache (1hr TTL) | ✅ Done |
+| **P1** | `/aggregates/top-lobbying-clients/` | Add Redis cache (1hr TTL) | ✅ Done |
+| **P1** | `/aggregates/department-meetings/` | Add Redis cache (1hr TTL) | ✅ Done |
+| **P2** | `/aggregates/top-recipients/` | Add `select_related('polymorphic_ctype')` + Redis cache (1hr TTL) | ✅ Done |
 
-## Implementation Order
+Cache utilities in `api/v2/cache_utils.py`: `make_aggregate_cache_key()`, `invalidate_aggregate_caches()`, `AGGREGATE_CACHE_TTL`.
 
-1. **Routing infrastructure**: Create `getActorUrl()` helper, add `/organisation/[id].astro` and `/party/[id].astro` route files
-2. **Heading hierarchy fix**: h3→h2, h4→h3, h5→h4 in index.astro
-3. **Homepage interconnectedness**: Link meeting attendees, lobbying clients, party names using `getActorUrl()`
-4. **Deep dive card restructure**: Split card `<a>` into editorial link + data panel with inner entity links
-5. **Party-coloured bars**: Apply muted party colours to bar chart
-6. **Backend: API changes**: Lobbying agency IDs, caching, SQL optimisations
-7. **Mobile network alternative**: Hide graph < 640px, show bridge-node summary + link to /network
-8. **Network loading skeleton**: Replace text spinner with dot-cloud skeleton
-9. **Stats label clarity**: Improve "Dual-influence relationships" label
+## Implementation Order — All Complete (2026-04-16)
+
+1. ✅ **Routing infrastructure**: `getActorUrl()` in `frontend/src/lib/utils.ts`, `/organisation/[id].astro` and `/party/[id].astro` route files
+2. ✅ **Heading hierarchy fix**: h1 → h2 (network) → h3 (deep dive) → h4 (data panels). Methodology is h2.
+3. ✅ **Homepage interconnectedness**: Meeting attendees, lobbying clients, lobbying agencies (now `{id, name}` objects), party bar names, recipient party names — all linked via `getActorUrl()`
+4. ✅ **Deep dive card restructure**: Editorial left column is `<a>` to section page, data right column has independent entity links
+5. ✅ **Party-coloured bars**: SVG hatched/stippled pattern fills per party from design system palette
+6. ✅ **Backend: API changes**: All 8 items above
+7. ✅ **Mobile network alternative**: Hidden below `sm` breakpoint, replaced with summary + "View interactive network →" link
+8. ✅ **Network loading skeleton**: Stipple dot-cloud pattern with "Cataloguing connections..." text
+9. ✅ **Stats label clarity**: "Donors who also lobby" with `title` tooltip
+10. ✅ **Mobile stats reflow**: 3-col at all sizes, smaller text/labels on mobile (`text-[2rem]` / `text-[9px]`)
+11. ✅ **Recipient party linking**: Row restructured from single `<a>` to `<div>` with separate name and party links
+12. ✅ **Hardcoded API URL**: Replaced `localhost:8000` with `PUBLIC_API_URL` from `utils.ts` in index.astro, network.astro, ActorTimeline.svelte
+13. ✅ **Network detail panel**: Long names and roles wrap across two lines instead of truncating
+
+## Known Remaining Issues
+
+- **Search input**: Exists in nav but not wired to any functionality. Either implement or mark as coming soon.
+- **Data quality [upstream]**: "Crick Institute Eton College" is two concatenated entities (#1 lobbying client). "NATIONAL GRID PLC" is all-caps. Fix belongs in import pipeline.
+- **Mobile hero headline**: "Westminster" clips at 375px due to `text-6xl` being too large. Could reduce to `text-5xl` on smallest screens.
+- **Network graph keyboard navigation**: No keyboard support — all interactions mouse-only.
 
 ## Revision History
 
+- 2026-04-16: All implementation complete. Backend cached, interconnectedness comprehensive, mobile fixed.
 - 2026-04-15: Initial draft based on audit findings
