@@ -719,6 +719,23 @@
               .trim()
           : null}
         {@const profileUrl = activeNode.type === 'organization' ? `/organisation/${activeNode.id}` : `/person/${activeNode.id}`}
+        {@const nameWords = activeNode.name.split(' ')}
+        {@const nameLine1 = nameWords.length > 3 && activeNode.name.length > 22
+          ? nameWords.slice(0, Math.ceil(nameWords.length / 2)).join(' ')
+          : activeNode.name}
+        {@const nameLine2 = nameWords.length > 3 && activeNode.name.length > 22
+          ? nameWords.slice(Math.ceil(nameWords.length / 2)).join(' ')
+          : ''}
+        {@const nameHeight = nameLine2 ? 56 : 30}
+        {@const roleWords = position ? position.split(' ') : []}
+        {@const roleLine1 = roleWords.length > 4 && position && position.length > 34
+          ? roleWords.slice(0, Math.ceil(roleWords.length / 2)).join(' ')
+          : position || ''}
+        {@const roleLine2 = roleWords.length > 4 && position && position.length > 34
+          ? roleWords.slice(Math.ceil(roleWords.length / 2)).join(' ')
+          : ''}
+        {@const roleHeight = position ? (roleLine2 ? 32 : 16) : 0}
+        {@const statsY = nameHeight + roleHeight + (activeNode.department ? 18 : 0) + 12}
         <g class="node-detail-annotation">
           <!-- Leader line from node to annotation corner -->
           <line x1={activeNode.x} y1={activeNode.y}
@@ -732,20 +749,32 @@
                 fill="#C54B3C" style="text-transform:uppercase;letter-spacing:0.1em">
             {activeNode.type}
           </text>
-          <!-- Name -->
+          <!-- Name — wrap long names across two lines -->
           <text x={detailX} y={6} text-anchor={anchor}
                 font-family="Zodiak, serif" font-size="26" font-weight="600" fill="#1a1a1a">
-            {activeNode.name.length > 24 ? activeNode.name.slice(0, 22) + '…' : activeNode.name}
+            {nameLine1}
           </text>
-          <!-- Role -->
-          {#if position}
-            <text x={detailX} y={26} text-anchor={anchor}
-                  font-family="Satoshi, sans-serif" font-size="14" fill="#4a4a4a">
-              {position.length > 34 ? position.slice(0, 32) + '…' : position}
+          {#if nameLine2}
+            <text x={detailX} y={34} text-anchor={anchor}
+                  font-family="Zodiak, serif" font-size="26" font-weight="600" fill="#1a1a1a">
+              {nameLine2}
             </text>
           {/if}
+          <!-- Role — wrap long titles across two lines -->
+          {#if position}
+            <text x={detailX} y={nameHeight - 4} text-anchor={anchor}
+                  font-family="Satoshi, sans-serif" font-size="14" fill="#4a4a4a">
+              {roleLine1}
+            </text>
+            {#if roleLine2}
+              <text x={detailX} y={nameHeight + 14} text-anchor={anchor}
+                    font-family="Satoshi, sans-serif" font-size="14" fill="#4a4a4a">
+                {roleLine2}
+              </text>
+            {/if}
+          {/if}
           {#if activeNode.department}
-            <text x={detailX} y={position ? 44 : 26} text-anchor={anchor}
+            <text x={detailX} y={nameHeight + roleHeight - 2} text-anchor={anchor}
                   font-family="Satoshi, sans-serif" font-size="11" fill="#6b6b6b"
                   style="text-transform:uppercase;letter-spacing:0.05em">
               {activeNode.department.name}
@@ -753,7 +782,6 @@
           {/if}
 
           <!-- Stats -->
-          {@const statsY = (position ? 44 : 26) + (activeNode.department ? 18 : 0) + 12}
           <line x1={detailX - 220} y1={statsY}
                 x2={detailX} y2={statsY}
                 stroke="#1a1a1a" stroke-width="0.5" opacity="0.1"/>

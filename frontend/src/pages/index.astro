@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import MinisterNetwork from '../components/MinisterNetwork.svelte';
-import { API_URL, formatCurrency, getActorUrl } from '../lib/utils';
+import { API_URL, PUBLIC_API_URL, formatCurrency, getActorUrl } from '../lib/utils';
 
 
 let stats = {
@@ -185,18 +185,18 @@ const barLabelHeight = 14;
 
     <!-- Stats as editorial typography -->
     <section class="max-w-[1400px] mx-auto px-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-0 border-y border-ink/10 py-10">
-        <div class="flex flex-col items-center text-center px-8 md:border-r border-ink/10">
-          <span class="stat-figure tabular">{stats.total_donations.toLocaleString()}</span>
-          <span class="stat-label">Donations tracked</span>
+      <div class="grid grid-cols-3 gap-0 border-y border-ink/10 py-6 md:py-10">
+        <div class="flex flex-col items-center text-center px-2 md:px-8 md:border-r border-ink/10">
+          <span class="stat-figure tabular text-[2rem] md:text-[4rem]">{stats.total_donations.toLocaleString()}</span>
+          <span class="stat-label text-[9px] md:text-sm">Donations tracked</span>
         </div>
-        <div class="flex flex-col items-center text-center px-8 md:border-r border-ink/10">
-          <span class="stat-figure">{formatCurrency(stats.total_value)}</span>
-          <span class="stat-label">Total value declared</span>
+        <div class="flex flex-col items-center text-center px-2 md:px-8 md:border-r border-ink/10">
+          <span class="stat-figure text-[2rem] md:text-[4rem]">{formatCurrency(stats.total_value)}</span>
+          <span class="stat-label text-[9px] md:text-sm">Total value declared</span>
         </div>
-        <div class="flex flex-col items-center text-center px-8">
-          <span class="stat-figure tabular">{stats.dual_influence_count}</span>
-          <span class="stat-label" title="Entities that both donate to politicians and hire lobbying agencies">Donors who also lobby</span>
+        <div class="flex flex-col items-center text-center px-2 md:px-8">
+          <span class="stat-figure tabular text-[2rem] md:text-[4rem]">{stats.dual_influence_count}</span>
+          <span class="stat-label text-[9px] md:text-sm" title="Entities that both donate to politicians and hire lobbying agencies">Donors who also lobby</span>
         </div>
       </div>
     </section>
@@ -221,7 +221,7 @@ const barLabelHeight = 14;
       <div class="w-full bg-paper overflow-visible -mx-8 px-8 hidden sm:block" style="margin-top: -2rem; margin-bottom: -4rem;">
         <MinisterNetwork
           client:visible
-          apiUrl="http://localhost:8000/api/v2/aggregates/minister-network/"
+          apiUrl={`${PUBLIC_API_URL}/aggregates/minister-network/`}
           width={1400}
           height={800}
           currentOnly={true}
@@ -261,7 +261,7 @@ const barLabelHeight = 14;
                 const dotColour = PARTY_DOT_COLOURS[partyName] || null;
                 return (
                   <li class="group border-b border-ink/5">
-                    <a href={getActorUrl(recipient.actor)} class="flex items-baseline gap-2 py-2.5 hover:bg-ink/[0.02] transition-colors">
+                    <div class="flex items-baseline gap-2 py-2.5 hover:bg-ink/[0.02] transition-colors">
                       <span class="font-display font-bold text-xs text-ink-muted w-7 text-right tabular shrink-0">{String(index + 1).padStart(2, '0')}.</span>
                       {dotColour ? (
                         <span class="w-1.5 h-1.5 rounded-full shrink-0 relative top-[-1px]" style={`background:${dotColour}`}></span>
@@ -271,13 +271,13 @@ const barLabelHeight = 14;
                       <div class="flex-1 min-w-0">
                         <div class="flex justify-between items-baseline gap-2">
                           <div class="truncate">
-                            <span class="font-display font-semibold group-hover:text-accent transition-colors">
+                            <a href={getActorUrl(recipient.actor)} class="font-display font-semibold hover:text-accent transition-colors">
                               {recipient.actor.name}
-                            </span>
+                            </a>
                             {recipient.current_party && (
-                              <span class="text-[10px] text-ink-muted ml-1">
+                              <a href={`/party/${recipient.current_party.id}`} class="text-[10px] text-ink-muted ml-1 hover:text-accent transition-colors">
                                 {recipient.current_party.name}
-                              </span>
+                              </a>
                             )}
                           </div>
                           <span class="font-display font-bold text-lg tabular shrink-0">
@@ -288,7 +288,7 @@ const barLabelHeight = 14;
                           {recipient.donation_count} donations
                         </p>
                       </div>
-                    </a>
+                    </div>
                   </li>
                 );
               })}
@@ -483,7 +483,7 @@ const barLabelHeight = 14;
     <section class="max-w-[1400px] mx-auto px-6 mt-32 pt-12 border-t-2 border-ink">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
         <div>
-          <h3 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Methodology</h3>
+          <h2 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Methodology</h2>
         </div>
         <div class="md:col-span-3">
           <p class="text-sm text-ink-muted leading-relaxed mb-6">
