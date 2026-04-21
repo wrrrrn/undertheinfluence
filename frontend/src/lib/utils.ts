@@ -1,4 +1,8 @@
+// Server-side API URL (Docker internal network, used by Astro SSR fetches)
 export const API_URL = import.meta.env.DATA_API_URL || 'http://api:8000/api/v2';
+
+// Client-side API URL (browser-accessible, used by Svelte components with client:visible)
+export const PUBLIC_API_URL = import.meta.env.PUBLIC_DATA_API_URL || 'http://localhost:8000/api/v2';
 
 export function formatCurrency(value: string | number): string {
   const num = typeof value === 'string' ? parseFloat(value) : value;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatCurrency, formatDate, formatDateRange } from '../lib/utils';
+  import { formatCurrency, formatDate, formatDateRange, PUBLIC_API_URL } from '../lib/utils';
 
   interface Props {
     actor: any;
@@ -26,7 +26,7 @@
   const COLLAPSE_THRESHOLD = 5;
   const isOrg = actor.actor_type === 'organization';
   const isLazyMode = yearlyTotals && yearlyTotals.length > 0 && donations.results.length === 0;
-  const CLIENT_API_URL = 'http://localhost:8000/api/v2';
+  const CLIENT_API_URL = PUBLIC_API_URL;
 
   type TimelineEvent = {
     type: 'role' | 'donation_received' | 'donation_made' | 'meeting' | 'consultancy';
@@ -280,6 +280,11 @@
   const yearGroups = buildYearGroups();
   const totalEvents = donations.count + donationsMade.count + meetings.count + consultancies.count;
 
+  // GN9: per-type max across years, used to scale the hatched proportional bar on collapsed summaries
+  const maxDonationTotal = Math.max(1, ...yearGroups.map(g => g.donationTotal));
+  const maxMeetingCount = Math.max(1, ...yearGroups.map(g => g.meetings.length));
+  const maxConsultancyCount = Math.max(1, ...yearGroups.map(g => g.consultancies.length));
+
   // Track which year sections are expanded
   let expandedDonations = $state<Set<string>>(new Set());
   let expandedMeetings = $state<Set<string>>(new Set());
@@ -298,7 +303,7 @@
 
     try {
       const res = await fetch(
-        `${CLIENT_API_URL}/actors/${actorId}/donations-received/?received_after=${year}-01-01&received_before=${year}-12-31&limit=500`
+        `${CLIENT_API_URL}/actors/${actorId}/donations/?role=recipient&received_after=${year}-01-01&received_before=${year}-12-31&limit=500`
       );
       if (res.ok) {
         const data = await res.json();
@@ -347,11 +352,37 @@
 {#if yearGroups.length === 0}
   <p class="text-ink-muted italic">No recorded activity for this actor.</p>
 {:else}
+  <!-- GN9: shared hatched pattern defs, document-scoped so every year-bar SVG can reference them -->
+  <svg width="0" height="0" class="absolute" aria-hidden="true" style="position:absolute">
+    <defs>
+      <pattern id="hatch-donation-year" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#5B7355" stroke-width="1.2" opacity="0.65"/>
+      </pattern>
+      <pattern id="hatch-meeting-year" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#4A7BA7" stroke-width="1.2" opacity="0.6"/>
+      </pattern>
+      <pattern id="hatch-consultancy-year" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#DAA520" stroke-width="1.2" opacity="0.7"/>
+      </pattern>
+    </defs>
+  </svg>
   <div class="timeline">
     {#each yearGroups as group}
+      {@const hasDonations = group.donations.length > 0 || group.topDonors.length > 0}
+      {@const hasDonationsMade = group.donationsMade.length > 0}
+      {@const hasMeetings = group.meetings.length > 0}
+      {@const hasRoles = group.roles.length > 0}
+      {@const hasConsultancies = group.consultancies.length > 0}
       <!-- Year marker -->
       <h2 class="year-marker">
+        <span class="year-glyphs" aria-hidden="true">
+          {#if hasDonations || hasDonationsMade}<span class="glyph" style="color:#5B7355">●</span>{/if}
+          {#if hasMeetings}<span class="glyph" style="color:#7B9E87">▲</span>{/if}
+          {#if hasRoles}<span class="glyph" style="color:#4A7BA7">◆</span>{/if}
+          {#if hasConsultancies}<span class="glyph" style="color:#DAA520">◉</span>{/if}
+        </span>
         <span class="year-label">{group.year}</span>
+        <span class="plate-rule" aria-hidden="true"></span>
       </h2>
 
       <!-- Roles always shown individually -->
@@ -391,7 +422,11 @@
                 </div>
                 <span class="expand-label">{lazyLoadingYears.has(group.year) ? 'Loading...' : `Show all ${yearDonationCount} ▸`}</span>
               </div>
-              <div class="space-y-1">
+              <svg class="year-bar" aria-hidden="true">
+                <rect x="0" y="0" width="100%" height="100%" fill="#1a1a1a" fill-opacity="0.03"/>
+                <rect x="0" y="0" width="{(group.donationTotal / maxDonationTotal) * 100}%" height="100%" fill="url(#hatch-donation-year)"/>
+              </svg>
+              <div class="space-y-1 mt-2">
                 {#each group.topDonors.slice(0, 5) as donor}
                   <div class="flex items-baseline justify-between gap-2">
                     <a href="/person/{donor.id}" class="text-[11px] font-display font-semibold truncate hover:text-accent transition-colors" title={donor.name}>
@@ -471,7 +506,11 @@
               </div>
               <span class="expand-label">Show all {group.donations.length} ▸</span>
             </div>
-            <div class="space-y-1">
+            <svg class="year-bar" aria-hidden="true">
+              <rect x="0" y="0" width="100%" height="100%" fill="#1a1a1a" fill-opacity="0.03"/>
+              <rect x="0" y="0" width="{(group.donationTotal / maxDonationTotal) * 100}%" height="100%" fill="url(#hatch-donation-year)"/>
+            </svg>
+            <div class="space-y-1 mt-2">
               {#each group.topDonors.slice(0, 5) as donor}
                 <div class="flex items-baseline justify-between gap-2">
                   <a href="/person/{donor.id}" class="text-[11px] font-display font-semibold truncate hover:text-accent transition-colors" title={donor.name}>
@@ -588,8 +627,12 @@
               </div>
               <span class="expand-label">Show all {group.meetings.length} ▸</span>
             </div>
+            <svg class="year-bar" aria-hidden="true">
+              <rect x="0" y="0" width="100%" height="100%" fill="#1a1a1a" fill-opacity="0.03"/>
+              <rect x="0" y="0" width="{(group.meetings.length / maxMeetingCount) * 100}%" height="100%" fill="url(#hatch-meeting-year)"/>
+            </svg>
             <!-- Top meeting contacts -->
-            <div class="space-y-1">
+            <div class="space-y-1 mt-2">
               {#each group.topMeetingOrgs.slice(0, 5) as org}
                 <div class="flex items-baseline justify-between gap-2 min-w-0">
                   {#if org.id}
@@ -697,7 +740,11 @@
               </div>
               <span class="expand-label">Show all {group.consultancies.length} ▸</span>
             </div>
-            <div class="space-y-1">
+            <svg class="year-bar" aria-hidden="true">
+              <rect x="0" y="0" width="100%" height="100%" fill="#1a1a1a" fill-opacity="0.03"/>
+              <rect x="0" y="0" width="{(group.consultancies.length / maxConsultancyCount) * 100}%" height="100%" fill="url(#hatch-consultancy-year)"/>
+            </svg>
+            <div class="space-y-1 mt-2">
               {#each group.topClients.slice(0, 5) as client}
                 <div class="flex items-baseline justify-between gap-2 min-w-0">
                   {#if client.id}
@@ -791,6 +838,9 @@
   .year-marker {
     position: relative;
     padding: 1.5rem 0 0.5rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
   }
 
   .year-label {
@@ -799,6 +849,37 @@
     font-weight: 700;
     color: #1a1a1a;
     padding-left: 176px;
+    flex-shrink: 0;
+  }
+
+  /* GN2: plate rule extending from year text to right edge */
+  .plate-rule {
+    flex: 1;
+    height: 1px;
+    background-color: rgba(26, 26, 26, 0.12);
+    align-self: center;
+    margin-top: 0.3em;
+  }
+
+  /* GN3: margin activity glyphs in left date gutter */
+  .year-glyphs {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 160px;
+    text-align: right;
+    padding-right: 1.25rem;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .year-glyphs .glyph {
+    display: inline-block;
+    margin-left: 0.15em;
   }
 
   .timeline-row {
@@ -836,25 +917,49 @@
   .timeline-content {
     padding-left: 1.25rem;
     border-left: 3px solid transparent;
+    position: relative;
   }
 
-  /* Type borders */
+  /* GN1: specimen dot sits on the spine (≈160px) for each event, halo lifts it off the spine line */
+  .timeline-content::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 0.9em;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--dot-color, transparent);
+    box-shadow: 0 0 0 2px #FAF9F6;
+    pointer-events: none;
+  }
+
+  /* Type borders + specimen dot colors */
   .role-content {
     border-left-color: #C54B3C;
     background: rgba(197, 75, 60, 0.03);
     padding: 0.5rem 0.75rem 0.5rem 1.25rem;
+    --dot-color: #C54B3C;
   }
 
-  .donation-border { border-left-color: #5B7355; }
-  .donated-border { border-left-color: #B87333; }
-  .meeting-border { border-left-color: #4A7BA7; }
-  .consultancy-border { border-left-color: #DAA520; }
+  .donation-border { border-left-color: #5B7355; --dot-color: #5B7355; }
+  .donated-border { border-left-color: #B87333; --dot-color: #B87333; }
+  .meeting-border { border-left-color: #4A7BA7; --dot-color: #4A7BA7; }
+  .consultancy-border { border-left-color: #DAA520; --dot-color: #DAA520; }
 
   /* Summary rows */
   .summary-content {
     background: rgba(26, 26, 26, 0.015);
     padding: 0.75rem 1rem 0.75rem 1.25rem;
     overflow: hidden;
+  }
+
+  /* GN9: hatched proportional year-bar under collapsed summaries */
+  .year-bar {
+    display: block;
+    width: 100%;
+    height: 6px;
+    margin-top: 0.25rem;
   }
 
   .clickable-row {
@@ -935,6 +1040,25 @@
 
     .summary-content {
       padding-right: 0.75rem;
+    }
+
+    /* GN1 specimen dots: hide on mobile — date gutter collapses, dot has nowhere sensible to sit */
+    .timeline-content::before {
+      display: none;
+    }
+
+    /* GN3 glyphs: inline alongside the year label on mobile (date gutter is gone) */
+    .year-glyphs {
+      position: static;
+      width: auto;
+      text-align: left;
+      padding: 0 0 0 0.25rem;
+      transform: none;
+      order: 2;
+    }
+
+    .year-marker {
+      align-items: center;
     }
   }
 </style>
