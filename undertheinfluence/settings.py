@@ -150,6 +150,40 @@ else:
         }
     }
 
+# Cache configuration
+# Uses Redis when REDIS_URL is set (Docker/production), falls back to local memory cache
+REDIS_URL = config('REDIS_URL', default='')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+                # Connection pool settings
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 20,
+                },
+                # Socket timeout (avoid blocking on Redis failure)
+                'SOCKET_CONNECT_TIMEOUT': 2,
+                'SOCKET_TIMEOUT': 2,
+            },
+            'KEY_PREFIX': 'uti',
+            'TIMEOUT': 3600,  # Default TTL: 1 hour
+        }
+    }
+    # Use Redis for Django sessions too (optional, good practice)
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'undertheinfluence',
+        }
+    }
+
 # Internationalization
 # https://docs.djangoproject.com/en/1.8/topics/i18n/
 

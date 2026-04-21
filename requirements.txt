@@ -13,6 +13,7 @@ openpyxl==3.1.2  # For parsing XLSX files (ministerial meetings)
 
 # Database
 psycopg2-binary==2.9.9
+django-redis>=5.4.0  # Redis cache backend for Django
 
 # Configuration
 python-decouple==3.8

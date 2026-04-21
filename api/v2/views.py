@@ -4,13 +4,18 @@ API v2 Views
 Provides aggregate endpoints and actor detail endpoints with filtering and caching.
 """
 
+import logging
 import time
-from django.db.models import Sum, Count, Q, Min, Max, Case, When, F, IntegerField, Prefetch
+from decimal import Decimal
+from django.core.cache import cache
+from django.db.models import Sum, Count, Q, Min, Max, Case, When, F, IntegerField, DecimalField, Prefetch, Subquery, OuterRef, Value
 from django.db.models.functions import Coalesce
 from rest_framework import generics, viewsets, views, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 from datafetch import models
 from api.v2 import serializers, filters, pagination
@@ -217,10 +222,17 @@ class TopRecipientsView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         """
-        Override list to handle aggregation and pagination efficiently.
+        Override list to handle aggregation and pagination efficiently. Cached 1hr.
 
         Key optimization: Only fetch Actor objects for the paginated subset.
         """
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('top_recipients', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         # Get aggregated queryset (still a QuerySet, not materialized)
         aggregated_qs = self.get_queryset()
 
@@ -233,10 +245,12 @@ class TopRecipientsView(generics.ListAPIView):
             # Extract recipient_ids from the paginated subset only
             recipient_ids = [item['effective_recipient_id'] for item in page]
 
-            # Fetch only the actors we need
+            # Fetch only the actors we need (with polymorphic_ctype to avoid N+1)
             actors_dict = {
                 actor.id: actor
-                for actor in models.Actor.objects.filter(id__in=recipient_ids)
+                for actor in models.Actor.objects.filter(
+                    id__in=recipient_ids
+                ).select_related('polymorphic_ctype')
             }
 
             # Identify person IDs and fetch their party memberships
@@ -259,13 +273,17 @@ class TopRecipientsView(generics.ListAPIView):
                     })
 
             serializer = self.get_serializer(results, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            response_data = paginator.get_paginated_response(serializer.data).data
+            cache.set(cache_key, response_data, AGGREGATE_CACHE_TTL)
+            return Response(response_data)
 
         # Fallback for no pagination
         recipient_ids = [item['effective_recipient_id'] for item in aggregated_qs]
         actors_dict = {
             actor.id: actor
-            for actor in models.Actor.objects.filter(id__in=recipient_ids)
+            for actor in models.Actor.objects.filter(
+                id__in=recipient_ids
+            ).select_related('polymorphic_ctype')
         }
         person_ids = [
             actor_id for actor_id, actor in actors_dict.items()
@@ -284,6 +302,7 @@ class TopRecipientsView(generics.ListAPIView):
             if item['effective_recipient_id'] in actors_dict
         ]
         serializer = self.get_serializer(results, many=True)
+        cache.set(cache_key, serializer.data, AGGREGATE_CACHE_TTL)
         return Response(serializer.data)
 
 
@@ -388,40 +407,41 @@ class PartyDonationsView(generics.ListAPIView):
         )
         queryset = filterset.qs
 
-        # Annotate with effective recipient ID (canonical if available, else original)
-        queryset = queryset.annotate(
-            effective_recipient_id=Coalesce('canonical_recipient_id', 'recipient_id')
-        )
-
-        # Get IDs of all Political Party organizations
-        party_ids = set(
+        # Get IDs of all Political Party organizations — used as SQL filter
+        party_ids = list(
             models.Organization.objects.filter(
                 classification='Political Party'
             ).values_list('id', flat=True)
         )
 
-        # Filter to only include donations where effective recipient is a party
-        # We need to do this in Python since we can't easily filter on the annotated field
-        # against a related table classification
+        # Annotate with effective recipient ID and filter to parties in SQL
+        queryset = queryset.annotate(
+            effective_recipient_id=Coalesce('canonical_recipient_id', 'recipient_id')
+        ).filter(
+            effective_recipient_id__in=party_ids
+        )
+
+        # Aggregate by party — already filtered, no Python post-filter needed
         aggregated = queryset.values('effective_recipient_id').annotate(
             total_received=Sum('value'),
             donation_count=Count('id'),
             donor_count=Count('donor_id', distinct=True)
         ).order_by('-total_received')
 
-        # Filter to political parties only
-        aggregated = [
-            item for item in aggregated
-            if item['effective_recipient_id'] in party_ids
-        ]
-
         return aggregated
 
     def list(self, request, *args, **kwargs):
-        """Handle pagination and actor fetching efficiently."""
-        aggregated_qs = self.get_queryset()  # This is now a list
+        """Handle pagination and actor fetching. Cached 1hr."""
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('party_donations', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        aggregated_qs = self.get_queryset()
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(aggregated_qs, request, view=self)
+        page = paginator.paginate_queryset(list(aggregated_qs), request, view=self)
 
         if page is not None:
             # Fetch party actors for paginated results only
@@ -443,7 +463,9 @@ class PartyDonationsView(generics.ListAPIView):
                     })
 
             serializer = self.get_serializer(results, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            response_data = paginator.get_paginated_response(serializer.data).data
+            cache.set(cache_key, response_data, AGGREGATE_CACHE_TTL)
+            return Response(response_data)
 
         # Fallback without pagination
         party_ids = [item['effective_recipient_id'] for item in aggregated_qs]
@@ -462,6 +484,7 @@ class PartyDonationsView(generics.ListAPIView):
             if item['effective_recipient_id'] in parties_dict
         ]
         serializer = self.get_serializer(results, many=True)
+        cache.set(cache_key, serializer.data, AGGREGATE_CACHE_TTL)
         return Response(serializer.data)
 
 
@@ -663,7 +686,14 @@ class TopLobbyingClientsView(generics.ListAPIView):
         return aggregated_qs
 
     def list(self, request, *args, **kwargs):
-        """Handle pagination and actor fetching."""
+        """Handle pagination and actor fetching. Cached 1hr."""
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('top_lobbying_clients', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         aggregated_qs = self.get_queryset()
 
         # Manual pagination
@@ -677,15 +707,28 @@ class TopLobbyingClientsView(generics.ListAPIView):
                 for actor in models.Actor.objects.filter(id__in=client_ids)
             }
 
-            # Fetch agencies for each client
+            # Batch-fetch agencies for all clients in one query
+            agency_rows = models.Consultancy.objects.filter(
+                Q(client_id__in=client_ids) | Q(canonical_client_id__in=client_ids)
+            ).exclude(agency__isnull=True).annotate(
+                effective_client_id=Coalesce('canonical_client_id', 'client_id')
+            ).values(
+                'effective_client_id', 'agency_id', 'agency__name'
+            ).annotate(
+                count=Count('id')
+            ).order_by('effective_client_id', '-count')
+
+            # Group by client, keeping top 10 agencies per client as {id, name} objects
             client_agencies = {}
-            for client_id in client_ids:
-                agencies = models.Consultancy.objects.filter(
-                    Q(client_id=client_id) | Q(canonical_client_id=client_id)
-                ).values('agency__name').annotate(
-                    count=Count('id')
-                ).order_by('-count')[:10]  # Top 10 agencies per client
-                client_agencies[client_id] = [a['agency__name'] for a in agencies if a['agency__name']]
+            for row in agency_rows:
+                cid = row['effective_client_id']
+                if cid not in client_agencies:
+                    client_agencies[cid] = []
+                if len(client_agencies[cid]) < 10 and row['agency__name']:
+                    client_agencies[cid].append({
+                        'id': row['agency_id'],
+                        'name': row['agency__name'],
+                    })
 
             results = []
             for item in page:
@@ -698,7 +741,9 @@ class TopLobbyingClientsView(generics.ListAPIView):
                     })
 
             serializer = self.get_serializer(results, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            response_data = paginator.get_paginated_response(serializer.data).data
+            cache.set(cache_key, response_data, AGGREGATE_CACHE_TTL)
+            return Response(response_data)
 
         # Fallback without pagination
         client_ids = [item['effective_client_id'] for item in aggregated_qs]
@@ -716,6 +761,7 @@ class TopLobbyingClientsView(generics.ListAPIView):
             if item['effective_client_id'] in actors_dict
         ]
         serializer = self.get_serializer(results, many=True)
+        cache.set(cache_key, serializer.data, AGGREGATE_CACHE_TTL)
         return Response(serializer.data)
 
 
@@ -765,7 +811,14 @@ class DepartmentMeetingsView(generics.ListAPIView):
         return aggregated
 
     def list(self, request, *args, **kwargs):
-        """Handle pagination, department fetching, and top attendees."""
+        """Handle pagination, department fetching, and top attendees. Cached 1hr."""
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('department_meetings', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         aggregated_qs = self.get_queryset()
 
         # Get parameters
@@ -847,7 +900,9 @@ class DepartmentMeetingsView(generics.ListAPIView):
                     })
 
             serializer = self.get_serializer(results, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            response_data = paginator.get_paginated_response(serializer.data).data
+            cache.set(cache_key, response_data, AGGREGATE_CACHE_TTL)
+            return Response(response_data)
 
         # Fallback without pagination
         dept_ids = [item['department_id'] for item in aggregated_qs]
@@ -864,6 +919,7 @@ class DepartmentMeetingsView(generics.ListAPIView):
             if item['department_id'] in departments_dict
         ]
         serializer = self.get_serializer(results, many=True)
+        cache.set(cache_key, serializer.data, AGGREGATE_CACHE_TTL)
         return Response(serializer.data)
 
 
@@ -878,79 +934,811 @@ class ActorDetailView(generics.RetrieveAPIView):
     Returns detailed information about a specific actor (person or organization).
 
     Includes aggregated relationship counts and totals.
+
+    Cached in Redis for 1 hour per actor ID. Pass ?bust_cache=1 to force refresh.
     """
     queryset = models.Actor.objects.all()
     serializer_class = serializers.ActorDetailSerializer
     permission_classes = [permissions.AllowAny]
 
+    CACHE_TTL = 3600  # 1 hour
+
+    def retrieve(self, request, *args, **kwargs):
+        """Override retrieve to add Redis caching."""
+        pk = self.kwargs['pk']
+        cache_key = f'actor_detail:{pk}'
+        bust = request.query_params.get('bust_cache', '').strip()
+
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                logger.debug('Cache HIT for %s', cache_key)
+                return Response(cached)
+
+        logger.debug('Cache MISS for %s — running annotated query', cache_key)
+        response = super().retrieve(request, *args, **kwargs)
+
+        # Cache the serialized data (not the Response object)
+        cache.set(cache_key, response.data, self.CACHE_TTL)
+        return response
+
     def get_queryset(self):
         """Annotate with relationship aggregates."""
+        from datafetch.models.influence_mapping import MeetingAttendee
+
+        # Subqueries to avoid cartesian joins with the main annotations
+        unique_donors_sq = models.Donation.objects.filter(
+            recipient_id=OuterRef('pk')
+        ).values('recipient_id').annotate(
+            cnt=Count('donor', distinct=True)
+        ).values('cnt')
+
+        # For ministers: unique orgs that attended their meetings
+        unique_meeting_orgs_sq = MeetingAttendee.objects.filter(
+            meeting__minister_id=OuterRef('pk')
+        ).values('meeting__minister_id').annotate(
+            cnt=Count('actor', distinct=True)
+        ).values('cnt')
+
+        # For orgs: count of meetings attended as an attendee
+        meeting_attendance_count_sq = MeetingAttendee.objects.filter(
+            actor_id=OuterRef('pk')
+        ).order_by().values('actor_id').annotate(
+            cnt=Count('meeting', distinct=True)
+        ).values('cnt')
+
+        # For orgs: unique ministers met (via meetings attended)
+        unique_ministers_met_sq = MeetingAttendee.objects.filter(
+            actor_id=OuterRef('pk')
+        ).order_by().values('actor_id').annotate(
+            cnt=Count('meeting__minister', distinct=True)
+        ).values('cnt')
+
+        # All annotations use Subqueries to avoid cartesian joins between
+        # donated_to and received_donations_from (27k × 288 = 8M rows for Conservative Party)
+        donations_made_sq = models.Donation.objects.filter(
+            donor_id=OuterRef('pk')
+        ).order_by().values('donor_id').annotate(
+            cnt=Count('id')
+        ).values('cnt')
+
+        donations_received_sq = models.Donation.objects.filter(
+            recipient_id=OuterRef('pk')
+        ).order_by().values('recipient_id').annotate(
+            cnt=Count('id')
+        ).values('cnt')
+
+        total_donated_sq = models.Donation.objects.filter(
+            donor_id=OuterRef('pk')
+        ).order_by().values('donor_id').annotate(
+            total=Sum('value')
+        ).values('total')
+
+        total_received_sq = models.Donation.objects.filter(
+            recipient_id=OuterRef('pk')
+        ).order_by().values('recipient_id').annotate(
+            total=Sum('value')
+        ).values('total')
+
+        from datafetch.models.influence_mapping import Consultancy
+        consultancies_as_client_sq = Consultancy.objects.filter(
+            client_id=OuterRef('pk')
+        ).order_by().values('client_id').annotate(
+            cnt=Count('agency', distinct=True)
+        ).values('cnt')
+
+        consultancies_as_agency_sq = Consultancy.objects.filter(
+            agency_id=OuterRef('pk')
+        ).order_by().values('agency_id').annotate(
+            cnt=Count('client', distinct=True)
+        ).values('cnt')
+
         return models.Actor.objects.annotate(
-            donations_made_count=Count('donated_to', distinct=True),
-            donations_received_count=Count('received_donations_from', distinct=True),
-            total_donated=Sum('donated_to__value'),
-            total_received=Sum('received_donations_from__value'),
-            consultancies_as_client=Count('consulting_agencies', distinct=True),
-            consultancies_as_agency=Count('consulting_clients', distinct=True),
+            donations_made_count=Coalesce(Subquery(donations_made_sq, output_field=IntegerField()), 0),
+            donations_received_count=Coalesce(Subquery(donations_received_sq, output_field=IntegerField()), 0),
+            total_donated=Coalesce(Subquery(total_donated_sq, output_field=DecimalField()), Decimal('0')),
+            total_received=Coalesce(Subquery(total_received_sq, output_field=DecimalField()), Decimal('0')),
+            consultancies_as_client=Coalesce(Subquery(consultancies_as_client_sq, output_field=IntegerField()), 0),
+            consultancies_as_agency=Coalesce(Subquery(consultancies_as_agency_sq, output_field=IntegerField()), 0),
+            unique_donors_count=Coalesce(Subquery(unique_donors_sq, output_field=IntegerField()), 0),
+            unique_meeting_orgs_count=Coalesce(Subquery(unique_meeting_orgs_sq, output_field=IntegerField()), 0),
+            meeting_attendance_count=Coalesce(Subquery(meeting_attendance_count_sq, output_field=IntegerField()), 0),
+            unique_ministers_met_count=Coalesce(Subquery(unique_ministers_met_sq, output_field=IntegerField()), 0),
         )
 
 
-class ActorDonationsMadeView(generics.ListAPIView):
+class FundingSummaryView(views.APIView):
     """
-    GET /api/v2/actors/{id}/donations-made/
+    GET /api/v2/actors/{id}/funding-summary/
 
-    Returns all donations made by this actor.
+    Pre-aggregated funding overview for actors that receive donations (parties, politicians).
+    Designed for the party profile page hero section.
 
-    Query Parameters:
-    - received_after, received_before: Date filtering
-    - limit, offset: Pagination
+    Returns:
+    - total_received: Total donation value
+    - donation_count: Total number of donations
+    - unique_donors: Count of distinct donors
+    - yearly_totals: [{year, total, count, avg_donation}] — most recent first
+    - top_donors: [{id, name, total, count, actor_type}] — top 20 by value
+    - category_breakdown: [{category, total, count}] — by donation type
+    - largest_donation: {value, donor_name, donor_id, date}
+
+    Cached in Redis for 1 hour. Pass ?bust_cache=1 to force refresh.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    CACHE_TTL = 3600  # 1 hour — data only changes on import
+
+    def get(self, request, pk):
+        cache_key = f'funding_summary:{pk}'
+        bust = request.query_params.get('bust_cache', '').strip()
+
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                logger.debug('Cache HIT for %s', cache_key)
+                return Response(cached)
+
+        logger.debug('Cache MISS for %s — computing funding summary', cache_key)
+        t0 = time.monotonic()
+
+        # Verify actor exists
+        if not models.Actor.objects.filter(pk=pk).exists():
+            return Response({'error': 'Actor not found'}, status=404)
+
+        # Base queryset: all donations received by this actor
+        base_qs = models.Donation.objects.filter(recipient_id=pk)
+
+        # --- Totals (single query with aggregation) ---
+        totals = base_qs.aggregate(
+            total_received=Coalesce(Sum('value'), Decimal('0')),
+            donation_count=Count('id'),
+            unique_donors=Count('donor', distinct=True),
+        )
+
+        # --- Yearly totals (single query) ---
+        from django.db.models.functions import ExtractYear, Cast
+        from django.db.models import CharField
+        yearly_qs = base_qs.annotate(
+            effective_date=Coalesce('accepted_date', 'reported_date', 'received_date'),
+        ).exclude(effective_date__isnull=True).annotate(
+            year=Cast(ExtractYear('effective_date'), output_field=CharField()),
+        ).values('year').annotate(
+            total=Sum('value'),
+            count=Count('id'),
+            unique_donors=Count('donor', distinct=True),
+        ).order_by('-year')
+
+        yearly_totals = []
+        for row in yearly_qs:
+            year_data = {
+                'year': row['year'],
+                'total': str(row['total'] or 0),
+                'count': row['count'],
+                'unique_donors': row['unique_donors'],
+                'avg_donation': str(round(row['total'] / row['count'], 2)) if row['count'] else '0',
+            }
+            yearly_totals.append(year_data)
+
+        # Per-year top donors (top 5 per year, single query)
+        from django.db.models.functions import Coalesce as CoalesceFunc
+        yearly_donors_qs = base_qs.annotate(
+            effective_date=Coalesce('accepted_date', 'reported_date', 'received_date'),
+        ).exclude(effective_date__isnull=True).annotate(
+            year=Cast(ExtractYear('effective_date'), output_field=CharField()),
+        ).values('year', 'donor_id', 'donor__name').annotate(
+            total=Sum('value'),
+            count=Count('id'),
+        ).order_by('year', '-total')
+
+        # Group by year, take top 5 per year
+        yearly_top_donors: dict = {}
+        for row in yearly_donors_qs:
+            yr = row['year']
+            if yr not in yearly_top_donors:
+                yearly_top_donors[yr] = []
+            if len(yearly_top_donors[yr]) < 5:
+                yearly_top_donors[yr].append({
+                    'id': row['donor_id'],
+                    'name': row['donor__name'] or 'Unknown',
+                    'total': str(row['total'] or 0),
+                    'count': row['count'],
+                })
+
+        # Attach to yearly_totals
+        for yt in yearly_totals:
+            yt['top_donors'] = yearly_top_donors.get(yt['year'], [])
+
+        # --- Top private donors (exclude public funds and union funding) ---
+        from datafetch.models.models import Organization as OrgModel
+        union_ids = set(OrgModel.objects.filter(classification='Trade Union').values_list('actor_ptr_id', flat=True))
+        private_qs = base_qs.exclude(donation_type='Public Funds').exclude(donor_id__in=union_ids)
+        top_donors_qs = private_qs.exclude(
+            donor__isnull=True
+        ).annotate(
+            effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+        ).values('effective_donor_id').annotate(
+            total=Sum('value'),
+            count=Count('id'),
+        ).order_by('-total')[:20]
+
+        # Fetch actor details for the top 20 only
+        donor_ids = [row['effective_donor_id'] for row in top_donors_qs]
+        donor_actors = {
+            a.id: a
+            for a in models.Actor.objects.filter(id__in=donor_ids).select_related('polymorphic_ctype')
+        }
+
+        # Check if these donors also fund individual MPs/members of this party
+        # Find people who are members of this party (on_behalf_of)
+        party_mp_ids = set(
+            models.Membership.objects.filter(on_behalf_of_id=pk)
+            .values_list('person_id', flat=True)
+        )
+        mp_funding = {}
+        if party_mp_ids and donor_ids:
+            mp_donations = models.Donation.objects.filter(
+                donor_id__in=donor_ids,
+                recipient_id__in=party_mp_ids,
+            ).values('donor_id').annotate(
+                to_mps_total=Sum('value'),
+                mps_funded=Count('recipient_id', distinct=True),
+            )
+            mp_funding = {
+                r['donor_id']: {'total': float(r['to_mps_total'] or 0), 'count': r['mps_funded']}
+                for r in mp_donations
+            }
+
+        top_donors = []
+        for row in top_donors_qs:
+            did = row['effective_donor_id']
+            actor = donor_actors.get(did)
+            if actor:
+                entry = {
+                    'id': actor.id,
+                    'name': actor.name,
+                    'total': str(row['total'] or 0),
+                    'count': row['count'],
+                    'actor_type': actor.polymorphic_ctype.model,
+                }
+                mp_data = mp_funding.get(did)
+                if mp_data and mp_data['total'] > 0:
+                    entry['to_party_mps'] = str(mp_data['total'])
+                    entry['mps_funded'] = mp_data['count']
+                top_donors.append(entry)
+
+        # --- Public funds summary ---
+        public_qs = base_qs.filter(donation_type='Public Funds')
+        public_funds_totals = public_qs.aggregate(
+            total=Coalesce(Sum('value'), Decimal('0')),
+            count=Count('id'),
+            sources=Count('donor', distinct=True),
+        )
+        public_funds_top = list(
+            public_qs.exclude(donor__isnull=True).annotate(
+                effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+            ).values('effective_donor_id').annotate(
+                total=Sum('value'), count=Count('id'),
+            ).order_by('-total')[:5]
+        )
+        # Resolve names for public fund sources
+        pf_donor_ids = [r['effective_donor_id'] for r in public_funds_top]
+        pf_actors = {a.id: a for a in models.Actor.objects.filter(id__in=pf_donor_ids)}
+        public_funds = {
+            'total': str(public_funds_totals['total']),
+            'count': public_funds_totals['count'],
+            'sources': public_funds_totals['sources'],
+            'top_sources': [
+                {'id': r['effective_donor_id'], 'name': pf_actors[r['effective_donor_id']].name,
+                 'total': str(r['total']), 'count': r['count']}
+                for r in public_funds_top if r['effective_donor_id'] in pf_actors
+            ],
+        }
+
+        # --- Trade union funding summary ---
+        union_donor_ids = list(
+            OrgModel.objects.filter(classification='Trade Union').values_list('actor_ptr_id', flat=True)
+        )
+        union_qs = base_qs.filter(donor_id__in=union_donor_ids)
+        union_totals = union_qs.aggregate(
+            total=Coalesce(Sum('value'), Decimal('0')),
+            count=Count('id'),
+            sources=Count('donor', distinct=True),
+        )
+        union_top = list(
+            union_qs.exclude(donor__isnull=True).annotate(
+                effective_donor_id=Coalesce('canonical_donor_id', 'donor_id')
+            ).values('effective_donor_id').annotate(
+                total=Sum('value'), count=Count('id'),
+            ).order_by('-total')[:10]
+        )
+        uf_donor_ids = [r['effective_donor_id'] for r in union_top]
+        uf_actors = {a.id: a for a in models.Actor.objects.filter(id__in=uf_donor_ids)}
+        union_funding = {
+            'total': str(union_totals['total']),
+            'count': union_totals['count'],
+            'sources': union_totals['sources'],
+            'top_sources': [
+                {'id': r['effective_donor_id'], 'name': uf_actors[r['effective_donor_id']].name,
+                 'total': str(r['total']), 'count': r['count']}
+                for r in union_top if r['effective_donor_id'] in uf_actors
+            ],
+        }
+
+        # --- Category breakdown (single query) ---
+        category_qs = base_qs.values('donation_type').annotate(
+            total=Sum('value'),
+            count=Count('id'),
+        ).order_by('-total')
+
+        category_breakdown = [
+            {
+                'category': row['donation_type'] or 'Unknown',
+                'total': str(row['total'] or 0),
+                'count': row['count'],
+            }
+            for row in category_qs
+        ]
+
+        # --- Largest single donation (single query) ---
+        largest = base_qs.select_related(
+            'donor', 'donor__polymorphic_ctype'
+        ).order_by('-value').values(
+            'value', 'donor__name', 'donor_id',
+            'accepted_date', 'reported_date', 'received_date'
+        ).first()
+
+        largest_donation = None
+        if largest:
+            date = largest['accepted_date'] or largest['reported_date'] or largest['received_date']
+            largest_donation = {
+                'value': str(largest['value'] or 0),
+                'donor_name': largest['donor__name'] or 'Unknown',
+                'donor_id': largest['donor_id'],
+                'date': str(date) if date else None,
+            }
+
+        elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
+
+        result = {
+            'actor_id': pk,
+            'total_received': str(totals['total_received']),
+            'donation_count': totals['donation_count'],
+            'unique_donors': totals['unique_donors'],
+            'yearly_totals': yearly_totals,
+            'top_donors': top_donors,
+            'public_funds': public_funds,
+            'union_funding': union_funding,
+            'category_breakdown': category_breakdown,
+            'largest_donation': largest_donation,
+            'computed_in_ms': elapsed_ms,
+        }
+
+        # Cache the result
+        cache.set(cache_key, result, self.CACHE_TTL)
+        logger.info(
+            'Funding summary for actor %s computed in %sms, cached as %s',
+            pk, elapsed_ms, cache_key,
+        )
+
+        return Response(result)
+
+
+class ActorActivityByYearView(views.APIView):
+    """
+    GET /api/v2/actors/{id}/activity-by-year/
+
+    Pre-aggregated per-year activity counts for any actor. Designed to feed
+    the Career Shape coxcomb and similar shape-of-activity visualisations
+    without moving the underlying rows to the browser.
+
+    Returns four series, sorted most-recent-first. Each series is `[]` when
+    the actor has no activity of that kind:
+
+    - donations_received: [{year, count, total}]
+    - donations_made:     [{year, count, total}]
+    - meetings:           [{year, count}] — minister, attendee, or canonical attendee
+    - consultancies:      [{year, count}] — client/agency or their canonical equivalents
+
+    Plus a compositional slice of donations_received:
+
+    - category_breakdown: [{category, count, total}] — by Donation.donation_type,
+      sorted descending by total. NULL/empty donation_type maps to 'Unknown'.
+
+    Entity resolution: every actor match includes the canonical_* field.
+
+    Date sources:
+    - Donations use Coalesce(accepted_date, reported_date, received_date).
+    - Meetings use meeting_date (DateField).
+    - Consultancies use Dateframeable start_date (CharField YYYY[-MM[-DD]]).
+
+    Cached in Redis for 1 hour, invalidated via cache_utils.invalidate_actor().
+    Pass ?bust_cache=1 to force refresh.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    CACHE_TTL = 3600  # 1 hour — changes only on import
+
+    def get(self, request, pk):
+        from django.db.models.functions import ExtractYear, Cast, Substr
+        from django.db.models import CharField
+
+        cache_key = f'activity_by_year:{pk}'
+        bust = request.query_params.get('bust_cache', '').strip()
+
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
+        t0 = time.monotonic()
+
+        if not models.Actor.objects.filter(pk=pk).exists():
+            return Response({'error': 'Actor not found'}, status=404)
+
+        def _donation_series(base_qs):
+            rows = base_qs.annotate(
+                effective_date=Coalesce('accepted_date', 'reported_date', 'received_date'),
+            ).exclude(effective_date__isnull=True).annotate(
+                year=Cast(ExtractYear('effective_date'), output_field=CharField()),
+            ).values('year').annotate(
+                count=Count('id'),
+                total=Sum('value'),
+            ).order_by('-year')
+            return [
+                {'year': r['year'], 'count': r['count'], 'total': str(r['total'] or 0)}
+                for r in rows
+            ]
+
+        received_qs = models.Donation.objects.filter(
+            Q(recipient_id=pk) | Q(canonical_recipient_id=pk)
+        )
+        donations_received = _donation_series(received_qs)
+        donations_made = _donation_series(
+            models.Donation.objects.filter(
+                Q(donor_id=pk) | Q(canonical_donor_id=pk)
+            )
+        )
+
+        category_rows = received_qs.values('donation_type').annotate(
+            count=Count('id'),
+            total=Sum('value'),
+        ).order_by('-total')
+        category_breakdown = [
+            {
+                'category': r['donation_type'] or 'Unknown',
+                'count': r['count'],
+                'total': str(r['total'] or 0),
+            }
+            for r in category_rows
+        ]
+
+        # Meetings: Count('id', distinct=True) because a meeting with multiple
+        # matching attendees would otherwise be counted more than once.
+        meeting_rows = models.MinisterialMeeting.objects.filter(
+            Q(minister_id=pk) |
+            Q(attendees__actor_id=pk) |
+            Q(attendees__canonical_actor_id=pk)
+        ).exclude(meeting_date__isnull=True).annotate(
+            year=Cast(ExtractYear('meeting_date'), output_field=CharField()),
+        ).values('year').annotate(
+            count=Count('id', distinct=True),
+        ).order_by('-year')
+        meetings = [{'year': r['year'], 'count': r['count']} for r in meeting_rows]
+
+        consultancy_rows = models.Consultancy.objects.filter(
+            Q(client_id=pk) | Q(canonical_client_id=pk) |
+            Q(agency_id=pk) | Q(canonical_agency_id=pk)
+        ).exclude(start_date__isnull=True).exclude(start_date='').annotate(
+            year=Substr('start_date', 1, 4),
+        ).values('year').annotate(
+            count=Count('id', distinct=True),
+        ).order_by('-year')
+        consultancies = [{'year': r['year'], 'count': r['count']} for r in consultancy_rows]
+
+        elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
+
+        result = {
+            'actor_id': pk,
+            'donations_received': donations_received,
+            'donations_made': donations_made,
+            'meetings': meetings,
+            'consultancies': consultancies,
+            'category_breakdown': category_breakdown,
+            'computed_in_ms': elapsed_ms,
+        }
+
+        cache.set(cache_key, result, self.CACHE_TTL)
+        logger.info(
+            'activity-by-year for actor %s computed in %sms, cached as %s',
+            pk, elapsed_ms, cache_key,
+        )
+        return Response(result)
+
+
+class DepartmentMeetingsSummaryView(views.APIView):
+    """
+    GET /api/v2/departments/{id}/meetings-summary/
+
+    Per-department summary of ministerial meeting activity. The detail analog
+    of the aggregate /aggregates/department-meetings/ endpoint: instead of
+    ranking all departments, this answers "what did this one department do?".
+
+    Designed for the department profile page, which today has nothing but an
+    actor detail row to render. See BACKEND_DESIGN §8 (department pages).
+
+    Scope is department-only. The `id` must be an Organization with
+    classification in {'Government Department', 'Legislature'}; non-department
+    actors 404. (Previously mounted at /actors/{id}/meetings-summary/ where
+    non-department actors silently returned 200 with zeros — see
+    BACKEND_DESIGN.md §8 #25.)
+
+    Returns:
+    - total_meetings: int
+    - unique_attendees: distinct effective_actor_id count across all attendees
+    - unique_ministers: distinct minister_id count on this department's meetings
+    - by_year: [{year, count}] — most recent first
+    - top_attendees: [{id, name, actor_type, classification, meeting_count}] — top 20
+    - top_ministers: [{id, name, meeting_count}] — top 20
+
+    Entity resolution: attendees are rolled up via Coalesce(canonical_actor_id,
+    actor_id) so an organisation and its merged alias count as one.
+
+    Cached 1 hour, keyed by `meetings_summary:{pk}`. Invalidated alongside
+    other per-actor caches in cache_utils.invalidate_actor().
+    Pass ?bust_cache=1 to force refresh.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    CACHE_TTL = 3600
+
+    DEPARTMENT_CLASSIFICATIONS = ('Government Department', 'Legislature')
+
+    def get(self, request, pk):
+        from django.db.models.functions import ExtractYear, Cast
+        from django.db.models import CharField
+
+        cache_key = f'meetings_summary:{pk}'
+        bust = request.query_params.get('bust_cache', '').strip()
+
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
+        t0 = time.monotonic()
+
+        if not models.Organization.objects.filter(
+            pk=pk, classification__in=self.DEPARTMENT_CLASSIFICATIONS
+        ).exists():
+            return Response({'error': 'Department not found'}, status=404)
+
+        meetings_qs = models.MinisterialMeeting.objects.filter(department_id=pk)
+
+        # Top-level counters
+        totals = meetings_qs.aggregate(
+            total_meetings=Count('id'),
+            unique_ministers=Count('minister_id', distinct=True),
+        )
+
+        # Unique attendees — rolled up via canonical where present
+        effective_attendee = Coalesce('canonical_actor_id', 'actor_id')
+        attendees_qs = models.MeetingAttendee.objects.filter(
+            meeting__department_id=pk,
+        ).exclude(actor__isnull=True, canonical_actor__isnull=True)
+        unique_attendees = attendees_qs.annotate(
+            effective_actor_id=effective_attendee,
+        ).aggregate(
+            unique=Count('effective_actor_id', distinct=True),
+        )['unique'] or 0
+
+        # By-year count of meetings
+        by_year_rows = meetings_qs.exclude(meeting_date__isnull=True).annotate(
+            year=Cast(ExtractYear('meeting_date'), output_field=CharField()),
+        ).values('year').annotate(
+            count=Count('id'),
+        ).order_by('-year')
+        by_year = [{'year': r['year'], 'count': r['count']} for r in by_year_rows]
+
+        # Top attendees — canonical-resolved, ranked by distinct meetings attended
+        top_attendee_rows = list(
+            attendees_qs.annotate(
+                effective_actor_id=effective_attendee,
+            ).values('effective_actor_id').annotate(
+                meeting_count=Count('meeting_id', distinct=True),
+            ).order_by('-meeting_count')[:20]
+        )
+        top_attendee_ids = [r['effective_actor_id'] for r in top_attendee_rows]
+        attendee_actors = {
+            a.id: a
+            for a in models.Actor.objects.filter(id__in=top_attendee_ids).select_related('polymorphic_ctype')
+        }
+        top_attendees = []
+        for r in top_attendee_rows:
+            a = attendee_actors.get(r['effective_actor_id'])
+            if a:
+                top_attendees.append({
+                    'id': a.id,
+                    'name': a.name,
+                    'actor_type': a.polymorphic_ctype.model,
+                    'classification': getattr(a, 'classification', None),
+                    'meeting_count': r['meeting_count'],
+                })
+
+        # Top ministers — ranked by meetings hosted in this department
+        top_minister_rows = list(
+            meetings_qs.exclude(minister__isnull=True).values('minister_id').annotate(
+                meeting_count=Count('id'),
+            ).order_by('-meeting_count')[:20]
+        )
+        top_minister_ids = [r['minister_id'] for r in top_minister_rows]
+        minister_actors = {
+            a.id: a
+            for a in models.Actor.objects.filter(id__in=top_minister_ids).select_related('polymorphic_ctype')
+        }
+        top_ministers = []
+        for r in top_minister_rows:
+            a = minister_actors.get(r['minister_id'])
+            if a:
+                top_ministers.append({
+                    'id': a.id,
+                    'name': a.name,
+                    'meeting_count': r['meeting_count'],
+                })
+
+        elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
+
+        result = {
+            'actor_id': pk,
+            'total_meetings': totals['total_meetings'] or 0,
+            'unique_attendees': unique_attendees,
+            'unique_ministers': totals['unique_ministers'] or 0,
+            'by_year': by_year,
+            'top_attendees': top_attendees,
+            'top_ministers': top_ministers,
+            'computed_in_ms': elapsed_ms,
+        }
+
+        cache.set(cache_key, result, self.CACHE_TTL)
+        logger.info(
+            'meetings-summary for actor %s computed in %sms, cached as %s',
+            pk, elapsed_ms, cache_key,
+        )
+        return Response(result)
+
+
+def _build_actor_context(actor_ids):
+    """
+    Batch-lookup party and role memberships for a set of actors.
+    Returns {actor_id: {party: {id, name}, memberships: [{start, end, role, is_senior}, ...]}}.
+    """
+    if not actor_ids:
+        return {}
+
+    memberships = models.Membership.objects.filter(
+        person_id__in=actor_ids
+    ).select_related('on_behalf_of').order_by('person_id', 'start_date')
+
+    context = {}
+    for m in memberships:
+        pid = m.person_id
+        if pid not in context:
+            context[pid] = {'party': None, 'memberships': []}
+
+        # Extract party from on_behalf_of (only on parliamentary memberships)
+        if m.on_behalf_of_id and not context[pid]['party']:
+            context[pid]['party'] = {'id': m.on_behalf_of.id, 'name': m.on_behalf_of.name}
+
+        if m.role:
+            is_senior = ('Secretary of State' in m.role or 'Minister' in m.role
+                         or 'Mayor' in m.role) and not m.role.startswith('Member of Parliament')
+            context[pid]['memberships'].append({
+                'start': m.start_date or '',
+                'end': m.end_date or '',
+                'role': m.role,
+                'is_senior': is_senior,
+            })
+
+    return context
+
+
+class _DonationContextMixin:
+    """Mixin that enriches paginated donation results with recipient party/role and donor key people."""
+
+    def list(self, request, *args, **kwargs):
+        from django.db.models import Q
+
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        donations = page if page is not None else queryset
+
+        # Build actor context for recipient party/role (from paginated results only)
+        recipient_ids = list({d.recipient_id for d in donations if d.recipient_id})
+        actor_context = _build_actor_context(recipient_ids)
+
+        # Batch-fetch donor key people (eliminates N+1 from get_donor_key_people)
+        donor_ids = list({d.donor_id for d in donations if d.donor_id})
+        key_people_qs = models.Membership.objects.filter(
+            organization_id__in=donor_ids
+        ).filter(
+            Q(role__iexact='Director') |
+            Q(role__icontains='Beneficial Owner') |
+            Q(role__icontains='Secretary')
+        ).select_related('person').order_by('organization_id', 'role')
+
+        key_people_map = {}
+        for m in key_people_qs:
+            org_id = m.organization_id
+            if org_id not in key_people_map:
+                key_people_map[org_id] = []
+            if len(key_people_map[org_id]) < 4:
+                key_people_map[org_id].append({
+                    'id': m.person.id,
+                    'name': m.person.name,
+                    'role': m.role,
+                })
+
+        serializer = self.get_serializer(donations, many=True, context={
+            **self.get_serializer_context(),
+            'actor_context': actor_context,
+            'key_people_map': key_people_map,
+        })
+
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+
+class ActorDonationsView(_DonationContextMixin, generics.ListAPIView):
+    """
+    GET /api/v2/actors/{id}/donations/?role=<donor|recipient>
+
+    Returns donations where this actor is on the specified side of the
+    relation, enriched with recipient party/role at donation date.
+
+    `role` is required. `donor` returns donations made by this actor;
+    `recipient` returns donations received. Missing or invalid role → 400.
+
+    Canonical-aware: each side matches both the raw id and the matching
+    canonical_* id, so merged actors see their full history on either side.
     """
     serializer_class = serializers.DonationDetailSerializer
     pagination_class = pagination.DetailPagination
     permission_classes = [permissions.AllowAny]
 
-    def get_queryset(self):
-        """Get donations made by this actor."""
-        actor_id = self.kwargs['pk']
-        queryset = models.Donation.objects.filter(donor_id=actor_id).select_related(
-            'donor', 'recipient'
-        ).order_by('-received_date')
+    VALID_ROLES = ('donor', 'recipient')
 
-        # Apply filters
+    def get_queryset(self):
+        actor_id = self.kwargs['pk']
+        role = self.request.query_params.get('role', '').lower()
+        if role == 'recipient':
+            q = Q(recipient_id=actor_id) | Q(canonical_recipient_id=actor_id)
+        elif role == 'donor':
+            q = Q(donor_id=actor_id) | Q(canonical_donor_id=actor_id)
+        else:
+            return models.Donation.objects.none()
+
+        queryset = models.Donation.objects.filter(q).select_related(
+            'donor', 'donor__polymorphic_ctype',
+            'recipient', 'recipient__polymorphic_ctype',
+            'canonical_donor', 'canonical_donor__polymorphic_ctype',
+            'canonical_recipient', 'canonical_recipient__polymorphic_ctype',
+        ).order_by('-received_date').distinct()
+
         filterset = filters.DonationFilterSet(
             self.request.query_params,
             queryset=queryset
         )
         return filterset.qs
 
-
-class ActorDonationsReceivedView(generics.ListAPIView):
-    """
-    GET /api/v2/actors/{id}/donations-received/
-
-    Returns all donations received by this actor.
-
-    Query Parameters:
-    - received_after, received_before: Date filtering
-    - limit, offset: Pagination
-    """
-    serializer_class = serializers.DonationDetailSerializer
-    pagination_class = pagination.DetailPagination
-    permission_classes = [permissions.AllowAny]
-
-    def get_queryset(self):
-        """Get donations received by this actor."""
-        actor_id = self.kwargs['pk']
-        queryset = models.Donation.objects.filter(recipient_id=actor_id).select_related(
-            'donor', 'recipient'
-        ).order_by('-received_date')
-
-        # Apply filters
-        filterset = filters.DonationFilterSet(
-            self.request.query_params,
-            queryset=queryset
-        )
-        return filterset.qs
+    def get(self, request, *args, **kwargs):
+        role = request.query_params.get('role', '').lower()
+        if role not in self.VALID_ROLES:
+            return Response(
+                {'error': f'`role` query parameter is required. Must be one of: {", ".join(self.VALID_ROLES)}.'},
+                status=400,
+            )
+        return super().get(request, *args, **kwargs)
 
 
 class ActorConsultanciesView(generics.ListAPIView):
@@ -985,6 +1773,292 @@ class ActorConsultanciesView(generics.ListAPIView):
         return queryset.select_related('client', 'agency').order_by('-start_date')
 
 
+class AgencyClientsView(views.APIView):
+    """
+    GET /api/v2/actors/{id}/agency-clients/
+
+    Returns aggregated client list for a lobbying agency, with each client's
+    political activity stats (meetings, donations, other agencies hired).
+
+    Sorted by total political activity (most active clients first).
+    Uses pre-aggregated JOINs instead of correlated subqueries for performance.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        try:
+            limit = min(int(request.query_params.get('limit', 20)), 100)
+        except (ValueError, TypeError):
+            limit = 20
+
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                WITH agency_clients AS (
+                    SELECT DISTINCT client_id
+                    FROM datafetch_consultancy
+                    WHERE agency_id = %s
+                ),
+                meeting_counts AS (
+                    SELECT actor_id, COUNT(DISTINCT meeting_id) as cnt
+                    FROM datafetch_meetingattendee
+                    WHERE actor_id IN (SELECT client_id FROM agency_clients)
+                    GROUP BY actor_id
+                ),
+                donation_counts AS (
+                    SELECT actor_id, COUNT(*) as cnt FROM (
+                        SELECT donor_id as actor_id FROM datafetch_donation WHERE donor_id IN (SELECT client_id FROM agency_clients)
+                        UNION ALL
+                        SELECT recipient_id FROM datafetch_donation WHERE recipient_id IN (SELECT client_id FROM agency_clients)
+                    ) d GROUP BY actor_id
+                ),
+                other_agency_counts AS (
+                    SELECT client_id, COUNT(DISTINCT agency_id) - 1 as cnt
+                    FROM datafetch_consultancy
+                    WHERE client_id IN (SELECT client_id FROM agency_clients)
+                    GROUP BY client_id
+                ),
+                engagement_counts AS (
+                    SELECT client_id, COUNT(*) as cnt
+                    FROM datafetch_consultancy
+                    WHERE agency_id = %s AND client_id IN (SELECT client_id FROM agency_clients)
+                    GROUP BY client_id
+                )
+                SELECT
+                    a.id,
+                    a.name,
+                    COALESCE(mc.cnt, 0) as meeting_count,
+                    COALESCE(dc.cnt, 0) as donation_count,
+                    COALESCE(oa.cnt, 0) as other_agencies_count,
+                    COALESCE(ec.cnt, 0) as engagement_count
+                FROM agency_clients ac
+                JOIN datafetch_actor a ON a.id = ac.client_id
+                LEFT JOIN meeting_counts mc ON mc.actor_id = ac.client_id
+                LEFT JOIN donation_counts dc ON dc.actor_id = ac.client_id
+                LEFT JOIN other_agency_counts oa ON oa.client_id = ac.client_id
+                LEFT JOIN engagement_counts ec ON ec.client_id = ac.client_id
+                ORDER BY COALESCE(mc.cnt, 0) * 10 + COALESCE(dc.cnt, 0) * 20 + COALESCE(oa.cnt, 0) * 5 DESC
+                LIMIT %s
+            """, [pk, pk, limit])
+
+            columns = ['id', 'name', 'meeting_count', 'donation_count', 'other_agencies_count', 'engagement_count']
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        # Get total unique client count
+        total = models.Consultancy.objects.filter(agency_id=pk).values('client_id').distinct().count()
+
+        return Response({
+            'count': total,
+            'results': results,
+        })
+
+
+class ActorCrossConnectionsView(views.APIView):
+    """
+    GET /api/v2/actors/{id}/cross-connections/
+
+    Bidirectional cross-connections endpoint.
+
+    For organisations: returns members (directors/lobbyists) who have political
+    connections (donations, meeting attendances, or parliamentary roles).
+    Data quality filter excludes single-word names and role-title names.
+
+    For persons: returns organisations they direct/control that have political
+    activity (lobbying, meetings, donations). Uses canonical_entry for dedup.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    CACHE_TTL = 3600  # 1 hour
+
+    def get(self, request, pk):
+        from datafetch.models import Actor
+        from django.db import connection
+
+        cache_key = f'cross_connections:{pk}'
+        bust = request.query_params.get('bust_cache', '').strip()
+
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
+        try:
+            actor = Actor.objects.get(pk=pk)
+        except Actor.DoesNotExist:
+            return Response({'error': 'Actor not found'}, status=404)
+
+        is_person = actor.polymorphic_ctype.model == 'person'
+
+        if is_person:
+            response = self._person_to_orgs(connection, pk)
+        else:
+            response = self._org_to_persons(connection, pk)
+
+        # Cache the successful response
+        cache.set(cache_key, response.data, self.CACHE_TTL)
+        return response
+
+    def _person_to_orgs(self, connection, pk):
+        """Person → Orgs they direct that have political activity."""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                WITH person_orgs AS (
+                    SELECT DISTINCT ON (COALESCE(a.canonical_entry_id, a.id))
+                           COALESCE(a.canonical_entry_id, a.id) AS org_id,
+                           COALESCE(canon.name, a.name) AS org_name,
+                           m.role,
+                           org.classification
+                    FROM datafetch_membership m
+                    JOIN datafetch_actor a ON m.organization_id = a.id
+                    LEFT JOIN datafetch_actor canon ON a.canonical_entry_id = canon.id
+                    LEFT JOIN datafetch_organization org
+                        ON COALESCE(a.canonical_entry_id, a.id) = org.actor_ptr_id
+                    WHERE m.person_id = %s
+                      AND m.role IN ('Director', 'Person with Significant Control', 'Secretary')
+                    ORDER BY COALESCE(a.canonical_entry_id, a.id), m.organization_id DESC
+                )
+                SELECT
+                    po.org_id AS id,
+                    po.org_name AS name,
+                    po.role,
+                    COALESCE(po.classification, '') AS classification,
+                    COALESCE(c.consultancy_count, 0) AS consultancy_count,
+                    COALESCE(ma.meeting_count, 0) AS meeting_count,
+                    COALESCE(d_made.donation_count, 0) AS donations_made_count,
+                    COALESCE(d_made.total_donated, 0) AS total_donated,
+                    COALESCE(d_recv.donation_count, 0) AS donations_received_count,
+                    COALESCE(d_recv.total_received, 0) AS total_received
+                FROM person_orgs po
+                LEFT JOIN (
+                    SELECT client_id AS org_id, COUNT(DISTINCT agency_id) AS consultancy_count
+                    FROM datafetch_consultancy
+                    GROUP BY client_id
+                ) c ON c.org_id = po.org_id
+                LEFT JOIN (
+                    SELECT COALESCE(canonical_actor_id, actor_id) AS org_id,
+                           COUNT(DISTINCT meeting_id) AS meeting_count
+                    FROM datafetch_meetingattendee
+                    GROUP BY COALESCE(canonical_actor_id, actor_id)
+                ) ma ON ma.org_id = po.org_id
+                LEFT JOIN (
+                    SELECT COALESCE(canonical_donor_id, donor_id) AS org_id,
+                           COUNT(*) AS donation_count, SUM(value) AS total_donated
+                    FROM datafetch_donation
+                    GROUP BY COALESCE(canonical_donor_id, donor_id)
+                ) d_made ON d_made.org_id = po.org_id
+                LEFT JOIN (
+                    SELECT COALESCE(canonical_recipient_id, recipient_id) AS org_id,
+                           COUNT(*) AS donation_count, SUM(value) AS total_received
+                    FROM datafetch_donation
+                    GROUP BY COALESCE(canonical_recipient_id, recipient_id)
+                ) d_recv ON d_recv.org_id = po.org_id
+                WHERE c.consultancy_count > 0
+                   OR ma.meeting_count > 0
+                   OR d_made.donation_count > 0
+                   OR d_recv.donation_count > 0
+                ORDER BY
+                    COALESCE(c.consultancy_count, 0) DESC,
+                    COALESCE(ma.meeting_count, 0) DESC,
+                    COALESCE(d_made.total_donated, 0) + COALESCE(d_recv.total_received, 0) DESC
+            """, [pk])
+
+            columns = ['id', 'name', 'role', 'classification', 'consultancy_count',
+                       'meeting_count', 'donations_made_count', 'total_donated',
+                       'donations_received_count', 'total_received']
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        for r in results:
+            r['total_donated'] = float(r['total_donated'] or 0)
+            r['total_received'] = float(r['total_received'] or 0)
+
+        return Response({
+            'direction': 'person_to_orgs',
+            'count': len(results),
+            'results': results,
+        })
+
+    def _org_to_persons(self, connection, pk):
+        """Org → Members who have political activity. With data quality filter."""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                WITH org_members AS (
+                    SELECT DISTINCT ON (m.person_id) m.person_id, a.name, m.role
+                    FROM datafetch_membership m
+                    JOIN datafetch_actor a ON m.person_id = a.id
+                    WHERE m.organization_id = %s
+                      AND a.name ~ '.+ .+'
+                      AND a.name !~* '^(Director|Secretary|Lobbyist|Member|Trustee|Chair|Partner|Consultant|Councillor|Minister|Person with Significant Control)$'
+                      AND length(a.name) > 3
+                    ORDER BY m.person_id, m.role DESC NULLS LAST
+                )
+                SELECT
+                    om.person_id as id,
+                    om.name,
+                    om.role,
+                    COALESCE(d.donation_count, 0) as donation_count,
+                    COALESCE(d.total_donated, 0) as total_donated,
+                    COALESCE(ma.meeting_count, 0) as meeting_count,
+                    COALESCE(mp.mp_roles, '') as parliamentary_roles,
+                    COALESCE(dir.other_orgs, 0) as other_directorships,
+                    COALESCE(party.party_name, '') as party
+                FROM org_members om
+                LEFT JOIN (
+                    SELECT COALESCE(canonical_donor_id, donor_id) as person_id,
+                           COUNT(*) as donation_count, SUM(value) as total_donated
+                    FROM datafetch_donation
+                    GROUP BY COALESCE(canonical_donor_id, donor_id)
+                ) d ON d.person_id = om.person_id
+                LEFT JOIN (
+                    SELECT COALESCE(canonical_actor_id, actor_id) as actor_id,
+                           COUNT(DISTINCT meeting_id) as meeting_count
+                    FROM datafetch_meetingattendee
+                    GROUP BY COALESCE(canonical_actor_id, actor_id)
+                ) ma ON ma.actor_id = om.person_id
+                LEFT JOIN (
+                    SELECT person_id, string_agg(DISTINCT role, ', ') as mp_roles
+                    FROM datafetch_membership
+                    WHERE role LIKE 'Member of Parliament%%'
+                       OR role LIKE '%%Secretary of State%%'
+                       OR role LIKE '%%Minister%%'
+                    GROUP BY person_id
+                ) mp ON mp.person_id = om.person_id
+                LEFT JOIN (
+                    SELECT person_id, COUNT(DISTINCT organization_id) - 1 as other_orgs
+                    FROM datafetch_membership
+                    WHERE role IN ('Director', 'Lobbyist')
+                    GROUP BY person_id
+                ) dir ON dir.person_id = om.person_id
+                LEFT JOIN (
+                    SELECT DISTINCT ON (m.person_id) m.person_id, a.name as party_name
+                    FROM datafetch_membership m
+                    JOIN datafetch_actor a ON m.on_behalf_of_id = a.id
+                    JOIN datafetch_organization o ON m.on_behalf_of_id = o.actor_ptr_id
+                    WHERE o.classification = 'Political Party'
+                    ORDER BY m.person_id, m.start_date DESC NULLS LAST
+                ) party ON party.person_id = om.person_id
+                WHERE d.donation_count > 0
+                   OR ma.meeting_count > 0
+                   OR mp.mp_roles IS NOT NULL
+                ORDER BY
+                    CASE WHEN mp.mp_roles IS NOT NULL THEN 1 ELSE 0 END DESC,
+                    COALESCE(d.total_donated, 0) DESC,
+                    COALESCE(ma.meeting_count, 0) DESC
+            """, [pk])
+
+            columns = ['id', 'name', 'role', 'donation_count', 'total_donated',
+                       'meeting_count', 'parliamentary_roles', 'other_directorships', 'party']
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        for r in results:
+            r['total_donated'] = float(r['total_donated'] or 0)
+
+        return Response({
+            'direction': 'org_to_persons',
+            'count': len(results),
+            'results': results,
+        })
+
+
 class ActorMembershipsView(generics.ListAPIView):
     """
     GET /api/v2/actors/{id}/memberships/
@@ -1009,13 +2083,27 @@ class ActorMembershipsView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        """Get memberships for this actor with temporal filtering."""
+        """Get memberships for this actor with temporal filtering.
+
+        Auto-detects direction: if the actor is a Person, returns their memberships.
+        If the actor is an Organization, returns people who are members of it
+        (directors, PSCs, etc.).
+        """
         actor_id = self.kwargs['pk']
 
-        # Base queryset - find memberships for this person
-        queryset = models.Membership.objects.filter(
-            person_id=actor_id
-        ).select_related('person', 'organization', 'post')
+        # Detect actor type to determine query direction
+        is_org = models.Organization.objects.filter(actor_ptr_id=actor_id).exists()
+
+        if is_org:
+            # Org direction: people who are members of this organization
+            queryset = models.Membership.objects.filter(
+                organization_id=actor_id
+            ).select_related('person', 'organization', 'post', 'on_behalf_of')
+        else:
+            # Person direction: organizations this person belongs to
+            queryset = models.Membership.objects.filter(
+                person_id=actor_id
+            ).select_related('person', 'organization', 'post', 'on_behalf_of')
 
         # Apply temporal and other filters
         filterset = filters.MembershipFilterSet(
@@ -1044,17 +2132,32 @@ class ActorMeetingsView(generics.ListAPIView):
 
     def get_queryset(self):
         actor_id = self.kwargs['pk']
-        
+
         # Check if actor is involved as minister or external actor
-        # Also check canonical_actor in attendees for robust matching
+        # Also check canonical_actor in attendees for robust matching.
+        #
+        # Prefetch strategy: MinisterialMeetingSerializer uses ActorSummarySerializer
+        # for minister/department/attendees.actor, which calls polymorphic_ctype.model
+        # per actor. Without select_related on polymorphic_ctype this produces hundreds
+        # of lazy ContentType fetches per page load — the cause of the 2026-04-16
+        # hydration freeze when meeting limits were bumped. attendees.actor is
+        # sourced from effective_actor (canonical_actor or actor), so canonical_actor
+        # must be prefetched too.
         queryset = models.MinisterialMeeting.objects.filter(
             Q(minister_id=actor_id) |
             Q(attendees__actor_id=actor_id) |
             Q(attendees__canonical_actor_id=actor_id)
         ).select_related(
-            'minister', 'department'
+            'minister', 'minister__polymorphic_ctype',
+            'department', 'department__polymorphic_ctype',
         ).prefetch_related(
-            'attendees', 'attendees__actor'
+            Prefetch(
+                'attendees',
+                queryset=models.MeetingAttendee.objects.select_related(
+                    'actor', 'actor__polymorphic_ctype',
+                    'canonical_actor', 'canonical_actor__polymorphic_ctype',
+                ),
+            ),
         ).distinct().order_by('-meeting_date')
 
         # Apply filters
@@ -1204,6 +2307,7 @@ class HomepageStatsView(views.APIView):
     GET /api/v2/aggregates/stats/
 
     Returns key statistics for the homepage metrics strip.
+    Cached for 1 hour via Redis.
 
     **Query Parameters:**
     - received_after: Filter donations received on/after date (YYYY-MM-DD)
@@ -1219,17 +2323,20 @@ class HomepageStatsView(views.APIView):
     - dual_influence_count: Count of organizations that both donate and lobby
     - timestamp: ISO timestamp for "Data as of" display
 
-    **Note:** These are expensive calculations. In production, this endpoint
-    should read from materialized views refreshed nightly.
-
     Example:
         GET /api/v2/aggregates/stats/?received_after=2020-01-01
     """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Calculate homepage statistics with optional filtering."""
-        
+        """Calculate homepage statistics with optional filtering. Cached 1hr."""
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('homepage_stats', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         # Start with base queryset
         donations_qs = models.Donation.objects.all()
 
@@ -1302,6 +2409,7 @@ class HomepageStatsView(views.APIView):
         }
 
         serializer = serializers.HomepageStatsSerializer(data)
+        cache.set(cache_key, serializer.data, AGGREGATE_CACHE_TTL)
         return Response(serializer.data)
 
 
@@ -1337,7 +2445,14 @@ class MinisterNetworkView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Build and return the minister network graph."""
+        """Build and return the minister network graph. Cached 1hr."""
+        from api.v2.cache_utils import make_aggregate_cache_key, AGGREGATE_CACHE_TTL
+
+        cache_key = make_aggregate_cache_key('minister_network', dict(request.query_params))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         # Get query parameters
         limit = int(request.query_params.get('limit', 50))
         min_value = float(request.query_params.get('min_value', 1000))
@@ -1870,11 +2985,13 @@ class MinisterNetworkView(views.APIView):
             'total_value': sum(l['value'] for l in donation_links),
         }
 
-        return Response({
+        response_data = {
             'nodes': nodes,
             'links': links,
             'stats': stats
-        })
+        }
+        cache.set(cache_key, response_data, AGGREGATE_CACHE_TTL)
+        return Response(response_data)
 
 
 class PoliticianViewSet(viewsets.ReadOnlyModelViewSet):
