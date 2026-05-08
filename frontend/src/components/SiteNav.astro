@@ -1,0 +1,98 @@
+---
+interface Props {
+  currentPage?: string;
+}
+
+const { currentPage = '/' } = Astro.props;
+
+const navLinks = [
+  { href: '/', label: 'The Web' },
+  { href: '/directory', label: 'Directory' },
+  { href: '/analysis', label: 'Analysis' },
+];
+---
+
+<!-- Top Metadata Bar -->
+<header class="max-w-[1400px] mx-auto px-6 pt-4 flex justify-between items-center border-b border-ink/5 pb-2">
+  <span class="section-label">Investigation</span>
+  <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted">Date updated: January 2026</span>
+</header>
+
+<!-- Main Navigation -->
+<nav class="max-w-[1400px] mx-auto px-6 py-6 flex justify-between items-center">
+  <div class="flex items-center gap-10">
+    <a href="/" class="text-2xl font-bold tracking-tighter uppercase font-display">
+      Under<span class="text-accent">The</span>Influence
+    </a>
+    <div class="hidden lg:flex gap-8 text-[11px] font-bold uppercase tracking-[0.15em]">
+      {navLinks.map(link => (
+        <a
+          href={link.href}
+          class:list={[
+            'transition-colors',
+            currentPage === link.href ? 'text-accent' : 'hover:text-accent',
+          ]}
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+  </div>
+  <div class="flex items-center gap-4">
+    <form action="/directory" method="get" class="relative hidden md:block">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+      <input
+        type="text"
+        name="q"
+        placeholder="Search actors..."
+        class="bg-ink/5 border-none rounded-none py-2 pl-10 pr-4 text-xs focus:ring-1 focus:ring-accent focus:outline-none w-48 transition-all"
+      />
+    </form>
+    <button
+      class="p-2 hover:bg-ink/5 lg:hidden"
+      aria-label="Menu"
+      data-mobile-menu-toggle
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Menu (hidden by default) -->
+<div id="mobile-menu" class="hidden lg:hidden max-w-[1400px] mx-auto px-6 pb-6 border-b border-ink/10">
+  <div class="flex flex-col gap-4">
+    {navLinks.map(link => (
+      <a
+        href={link.href}
+        class:list={[
+          'text-sm font-bold uppercase tracking-widest py-2',
+          currentPage === link.href ? 'text-accent' : 'hover:text-accent',
+        ]}
+      >
+        {link.label}
+      </a>
+    ))}
+    <form action="/directory" method="get" class="mt-2 md:hidden">
+      <input
+        type="text"
+        name="q"
+        placeholder="Search actors..."
+        class="w-full bg-ink/5 border-none rounded-none py-2 px-4 text-xs focus:ring-1 focus:ring-accent focus:outline-none"
+      />
+    </form>
+  </div>
+</div>
+
+<script>
+  const toggle = document.querySelector('[data-mobile-menu-toggle]');
+  const menu = document.getElementById('mobile-menu');
+  if (toggle && menu) {
+    toggle.addEventListener('click', () => {
+      menu.classList.toggle('hidden');
+    });
+  }
+</script>

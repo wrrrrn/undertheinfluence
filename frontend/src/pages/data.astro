@@ -1,0 +1,48 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Data Access">
+  <main class="min-h-screen max-w-[1400px] mx-auto px-6 py-12">
+    <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Data</p>
+    <h1 class="text-4xl font-bold font-display mb-8">Data Access</h1>
+
+    <div class="max-w-2xl space-y-6 text-ink-light leading-relaxed">
+      <p>
+        UnderTheInfluence aggregates data from multiple public sources into a unified database.
+        Our API provides programmatic access to this data.
+      </p>
+
+      <h2 class="text-xl font-bold font-display text-ink pt-4">API</h2>
+      <p>
+        The REST API is available at <code class="bg-ink/5 px-2 py-0.5 text-sm">/api/v2/</code>.
+        Interactive documentation is available at
+        <a href="/api/v2/docs/" class="text-accent hover:underline">/api/v2/docs/</a>.
+      </p>
+
+      <h2 class="text-xl font-bold font-display text-ink pt-4">Data Sources</h2>
+      <div class="space-y-3">
+        <div class="pb-3 border-b border-ink/5">
+          <span class="font-display font-semibold text-ink">MPs' Register of Interests</span>
+          <p class="text-sm mt-1">Individual donations to MPs, parsed from parliamentary records.</p>
+        </div>
+        <div class="pb-3 border-b border-ink/5">
+          <span class="font-display font-semibold text-ink">Electoral Commission</span>
+          <p class="text-sm mt-1">Donations to political parties and regulated donees.</p>
+        </div>
+        <div class="pb-3 border-b border-ink/5">
+          <span class="font-display font-semibold text-ink">GOV.UK Transparency Returns</span>
+          <p class="text-sm mt-1">Ministerial meetings with external organisations, published quarterly.</p>
+        </div>
+        <div class="pb-3 border-b border-ink/5">
+          <span class="font-display font-semibold text-ink">ParlParse</span>
+          <p class="text-sm mt-1">Politician biographical data in Popolo format.</p>
+        </div>
+        <div class="pb-3">
+          <span class="font-display font-semibold text-ink">Companies House</span>
+          <p class="text-sm mt-1">Company registration, directors, and persons of significant control.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

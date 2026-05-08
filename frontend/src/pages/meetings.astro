@@ -1,0 +1,97 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { API_URL } from '../lib/utils';
+
+let departments: Array<{
+  department: { id: number; name: string };
+  total_meetings: number;
+  top_attendees: Array<{ actor: { id: number; name: string }; meeting_count: number }>;
+}> = [];
+
+try {
+  const res = await fetch(`${API_URL}/aggregates/department-meetings/?limit=20&top_attendees=10`);
+  if (res.ok) {
+    const data = await res.json();
+    departments = data.results || [];
+  }
+} catch (error) {
+  console.error('Failed to fetch meetings data:', error);
+}
+
+const shortenDeptName = (name: string) => {
+  return name
+    .replace('Department for ', '')
+    .replace('Department of ', '')
+    .replace('HM Treasury', 'Treasury')
+    .replace('Foreign, Commonwealth & Development Office', 'FCDO')
+    .replace('Foreign, Commonwealth and Development Office', 'FCDO')
+    .replace(' and ', ' & ');
+};
+---
+
+<BaseLayout title="Ministerial Access" currentPage="/meetings">
+  <main class="min-h-screen">
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Ministerial Access</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-4">
+            Who gets in the room?
+          </h1>
+          <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
+            Thousands of meetings between ministers and external organisations
+            are disclosed quarterly. This data shows which departments hold the most meetings
+            and which organisations attend most frequently.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="max-w-[1400px] mx-auto px-6"><div class="rule-thick"></div></div>
+
+    <!-- Departments -->
+    <section class="max-w-[1400px] mx-auto px-6 py-12">
+      <h2 class="text-2xl font-bold font-display mb-8">Meetings by Department</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+        {departments.map((dept) => (
+          <div>
+            <div class="flex justify-between items-baseline mb-3 border-b border-ink/10 pb-2">
+              <h3 class="font-display font-bold text-lg" title={dept.department.name}>
+                {shortenDeptName(dept.department.name)}
+              </h3>
+              <span class="font-display font-bold text-2xl tabular">{dept.total_meetings.toLocaleString()}</span>
+            </div>
+            <div class="space-y-1.5 pl-3 border-l-2 border-accent/20">
+              {dept.top_attendees.map((attendee) => (
+                <div class="flex justify-between items-baseline">
+                  <a href={`/person/${attendee.actor.id}`} class="text-[11px] truncate hover:text-accent transition-colors" title={attendee.actor.name}>
+                    {attendee.actor.name}
+                  </a>
+                  <span class="text-[11px] text-ink-muted ml-2 shrink-0 tabular">{attendee.meeting_count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- Methodology -->
+    <section class="max-w-[1400px] mx-auto px-6 mt-12 pt-8 border-t border-ink/10">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div>
+          <h3 class="text-[11px] font-bold uppercase tracking-[0.2em] mb-4">Source</h3>
+        </div>
+        <div class="md:col-span-3">
+          <p class="text-sm text-ink-muted leading-relaxed">
+            Meeting data is sourced from GOV.UK ministerial transparency returns,
+            which are published quarterly. Each department discloses meetings between
+            ministers and external organisations.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

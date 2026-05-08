@@ -79,18 +79,20 @@ services:
     stdin_open: true
     tty: true
 
-  # Vite Development Server (Islands Architecture frontend)
+  # Astro + Svelte 5 Frontend
   web:
     image: node:20-alpine
-    working_dir: /app
+    working_dir: /app/frontend
     volumes:
-      - .:/app
-      - node_modules:/app/node_modules  # Named volume to persist dependencies
-    command: sh -c "npm install && npm run dev"
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     ports:
-      - "5173:5173"
+      - "4321:4321"
     environment:
       - NODE_ENV=development
+      - WAGTAIL_API_URL=http://api:8000/api/v2
+      - DATA_API_URL=http://api:8000/api/v2
     depends_on:
       - api
 
@@ -101,4 +103,4 @@ volumes:
   static_volume:
   media_volume:
   data_volume:
-  node_modules:
+  frontend_node_modules:

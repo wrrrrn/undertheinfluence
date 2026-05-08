@@ -1,0 +1,36 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import MinisterNetwork from '../components/MinisterNetwork.svelte';
+import { PUBLIC_API_URL } from '../lib/utils';
+---
+
+<BaseLayout title="The Influence Network" currentPage="/network" hideFooter={true}>
+  <main>
+    <div class="max-w-[1400px] mx-auto px-6 py-6">
+      <div class="flex flex-col md:flex-row justify-between items-baseline gap-4">
+        <div>
+          <p class="section-label mb-2">Network Visualization</p>
+          <h1 class="text-3xl font-bold font-display">The Government Ministers Network</h1>
+          <p class="text-xs text-ink-muted mt-1 italic">
+            Financial connections between donors and government ministers. Node size reflects total donation value.
+          </p>
+        </div>
+        <div class="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
+          Source: MPs' Register of Interests, Electoral Commission
+        </div>
+      </div>
+    </div>
+
+    <div class="w-full bg-paper">
+      <MinisterNetwork
+        client:visible
+        apiUrl={`${PUBLIC_API_URL}/aggregates/minister-network/`}
+        width={1400}
+        height={900}
+        currentOnly={true}
+        minValue={5000}
+        minMeetings={5}
+      />
+    </div>
+  </main>
+</BaseLayout>

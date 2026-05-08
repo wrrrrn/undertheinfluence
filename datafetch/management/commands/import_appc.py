@@ -36,6 +36,17 @@ class Command(BaseCommand):
     SKIP_WORDS = {'Co', 'Company', 'Partnership', 'Group', 'Holdings', 'UK', 'USA',
                   'Europe', 'International', 'Global', 'Worldwide', 'Inc', 'plc'}
 
+    # Placeholder client names that should be skipped (not real organizations)
+    PLACEHOLDER_CLIENT_NAMES = {
+        '(i) client description available',
+        'pro-bono clients for whom consultancy and/or monitoring services have been provided this quarter',
+        'n/a',
+        'none',
+        'nil',
+        'tbc',
+        'confidential',
+    }
+
     def _split_concatenated_clients(self, name):
         """
         Split concatenated client names like "CompanyA Ltd CompanyB" into separate names.
@@ -195,6 +206,13 @@ class Command(BaseCommand):
                     client_names.extend(split_names)
                 for client_name in client_names:
                     if client_name:
+                        # Skip placeholder names that aren't real organizations
+                        if client_name.lower().strip() in self.PLACEHOLDER_CLIENT_NAMES:
+                            self.stats['placeholders_skipped'] = self.stats.get('placeholders_skipped', 0) + 1
+                            if self.verbose:
+                                self.stdout.write(f"  Skipped placeholder: '{client_name}'")
+                            continue
+
                         client_dict = {"name": client_name}
                         client_obj, created = models.Organization.objects.get_or_create(
                             name=client_dict["name"],
@@ -312,4 +330,5 @@ Import complete:
   - Clients existing: {self.stats['clients_existing']}
   - Consultancies created: {self.stats['consultancies_created']}
   - Concatenated names split: {self.stats['names_split']} (into {self.stats['split_parts_total']} parts)
+  - Placeholder clients skipped: {self.stats.get('placeholders_skipped', 0)}
 """))

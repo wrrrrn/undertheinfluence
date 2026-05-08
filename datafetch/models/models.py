@@ -21,6 +21,16 @@ class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
     name = models.CharField(_("name"), max_length=1024, help_text=_("A person or organization's preferred full name"))
     image = models.URLField(_("image"), blank=True, null=True, help_text=_("An image representing the person or organization"))
 
+    # Entity resolution: canonical entry for merged duplicates
+    canonical_entry = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='duplicate_entries',
+        help_text=_("Canonical actor for merged duplicates. If set, this actor is a duplicate.")
+    )
+
     # array of items referencing "http://popoloproject.com/schemas/other_name.json#"
     other_names = GenericRelation('OtherName', help_text="Alternate or former names")
 
@@ -56,6 +66,31 @@ class Actor(PolymorphicModel, Dateframeable, Timestampable, GenericRelatable):
             "pk": self.id,
             "slug": slugify(self.name),
         })
+
+    @property
+    def effective_self(self):
+        """
+        Returns the canonical actor for entity resolution.
+
+        If this actor is marked as a duplicate (canonical_entry is set),
+        follows the chain to return the canonical entry.
+        Otherwise returns self.
+        """
+        if self.canonical_entry_id:
+            # Follow the chain (in case of nested duplicates)
+            return self.canonical_entry.effective_self
+        return self
+
+    @property
+    def is_duplicate(self):
+        """Returns True if this actor is a duplicate (has a canonical entry)."""
+        return self.canonical_entry_id is not None
+
+    @property
+    def is_canonical(self):
+        """Returns True if this actor is canonical (no canonical entry set)."""
+        return self.canonical_entry_id is None
+
 
 class Person(Actor):
     """

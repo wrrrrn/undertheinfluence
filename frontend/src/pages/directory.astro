@@ -1,0 +1,121 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { API_URL, formatCurrency } from '../lib/utils';
+
+const url = new URL(Astro.request.url);
+const query = url.searchParams.get('q') || '';
+const page = parseInt(url.searchParams.get('page') || '1');
+const limit = 50;
+const offset = (page - 1) * limit;
+
+let politicians: any = { count: 0, results: [] };
+
+try {
+  const searchParam = query ? `&search=${encodeURIComponent(query)}` : '';
+  const res = await fetch(`${API_URL}/politicians/?limit=${limit}&offset=${offset}${searchParam}`);
+  if (res.ok) {
+    politicians = await res.json();
+  }
+} catch (error) {
+  console.error('Failed to fetch politicians:', error);
+}
+
+const totalPages = Math.ceil(politicians.count / limit);
+---
+
+<BaseLayout title="Directory" currentPage="/directory">
+  <main class="min-h-screen">
+    <section class="max-w-[1400px] mx-auto px-6 pt-8 pb-6">
+      <p class="section-label border-b border-accent pb-2 mb-6 inline-block">Directory</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-8">
+          <h1 class="text-5xl md:text-6xl font-bold tracking-tight leading-[0.95] font-display mb-4">
+            {query ? `Results for "${query}"` : 'All Politicians'}
+          </h1>
+          <p class="text-xl text-ink-light leading-relaxed max-w-2xl font-medium">
+            {politicians.count.toLocaleString()} politicians in the database.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <div class="max-w-[1400px] mx-auto px-6"><div class="rule-thick"></div></div>
+
+    <!-- Search -->
+    <section class="max-w-[1400px] mx-auto px-6 py-6">
+      <form action="/directory" method="get" class="max-w-md">
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <input
+            type="text"
+            name="q"
+            value={query}
+            placeholder="Search politicians..."
+            class="w-full bg-ink/5 border-none rounded-none py-3 pl-10 pr-4 text-sm focus:ring-1 focus:ring-accent focus:outline-none"
+          />
+        </div>
+      </form>
+    </section>
+
+    <!-- Results -->
+    <section class="max-w-[1400px] mx-auto px-6 pb-12">
+      {politicians.results.length > 0 ? (
+        <div class="space-y-0">
+          {politicians.results.map((politician: any, index: number) => (
+            <a href={`/person/${politician.id}`} class="group block">
+              <div class="flex items-baseline justify-between gap-4 py-3 border-b border-ink/5">
+                <div class="flex items-baseline gap-3 min-w-0">
+                  <span class="text-[10px] font-bold text-ink-muted w-6 shrink-0 tabular">
+                    {offset + index + 1}.
+                  </span>
+                  <div class="min-w-0">
+                    <span class="font-display font-semibold group-hover:text-accent transition-colors">
+                      {politician.name}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex items-baseline gap-4 shrink-0">
+                  {politician.total_received && parseFloat(politician.total_received) > 0 && (
+                    <span class="font-display font-bold tabular">{formatCurrency(politician.total_received)}</span>
+                  )}
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="text-ink-muted italic py-8">
+          {query ? `No politicians found matching "${query}".` : 'No politicians in the database.'}
+        </p>
+      )}
+
+      <!-- Pagination -->
+      {totalPages > 1 && (
+        <div class="flex justify-center gap-4 mt-8">
+          {page > 1 && (
+            <a
+              href={`/directory?${query ? `q=${encodeURIComponent(query)}&` : ''}page=${page - 1}`}
+              class="text-xs font-bold uppercase tracking-widest text-accent hover:text-ink transition-colors"
+            >
+              ← Previous
+            </a>
+          )}
+          <span class="text-xs text-ink-muted">Page {page} of {totalPages}</span>
+          {page < totalPages && (
+            <a
+              href={`/directory?${query ? `q=${encodeURIComponent(query)}&` : ''}page=${page + 1}`}
+              class="text-xs font-bold uppercase tracking-widest text-accent hover:text-ink transition-colors"
+            >
+              Next →
+            </a>
+          )}
+        </div>
+      )}
+    </section>
+  </main>
+</BaseLayout>

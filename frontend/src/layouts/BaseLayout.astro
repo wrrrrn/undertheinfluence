@@ -1,0 +1,37 @@
+---
+import '../styles/global.css';
+import SiteNav from '../components/SiteNav.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  currentPage?: string;
+  hideNav?: boolean;
+  hideFooter?: boolean;
+}
+
+const {
+  title,
+  description = 'Tracking lobbying influence in UK politics',
+  currentPage = '/',
+  hideNav = false,
+  hideFooter = false,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} | Under The Influence</title>
+  </head>
+  <body class="bg-paper min-h-screen">
+    {!hideNav && <SiteNav currentPage={currentPage} />}
+    <slot />
+    {!hideFooter && <SiteFooter />}
+  </body>
+</html>

@@ -340,6 +340,83 @@ class EntityResolutionService:
 
         return False
 
+    def link_actor_canonical_entry(self, actor: 'models.Actor',
+                                    min_confidence: float = None) -> bool:
+        """
+        Set canonical_entry on an actor if it's a duplicate.
+
+        This marks the actor as a duplicate by setting its canonical_entry
+        field to point to the canonical version.
+
+        Args:
+            actor: Actor to check and potentially mark as duplicate
+            min_confidence: Minimum confidence for auto-linking (default: MIN_CONFIDENCE_AUTO)
+
+        Returns:
+            True if canonical_entry was set, False otherwise
+        """
+        if min_confidence is None:
+            min_confidence = self.MIN_CONFIDENCE_AUTO
+
+        # Skip if already linked
+        if actor.canonical_entry_id is not None:
+            return False
+
+        result = self.resolve_with_confidence(actor)
+
+        if result.is_resolved and result.confidence >= min_confidence:
+            # Don't link to self
+            if result.canonical.pk != actor.pk:
+                actor.canonical_entry_id = result.canonical.pk
+                actor.save(update_fields=['canonical_entry_id'])
+                logger.debug(f"Linked actor canonical_entry: {actor.name} -> {result.canonical.name}")
+                return True
+
+        return False
+
+    def backfill_canonical_entries(self, queryset=None, batch_size: int = 1000,
+                                    min_confidence: float = None) -> Dict[str, int]:
+        """
+        Backfill canonical_entry field on Actor records.
+
+        Iterates through actors and sets canonical_entry for duplicates.
+
+        Args:
+            queryset: Optional queryset to filter actors (default: all actors)
+            batch_size: Number of actors to process per batch
+            min_confidence: Minimum confidence for auto-linking
+
+        Returns:
+            Dictionary with counts: {'processed', 'linked', 'skipped'}
+        """
+        from datafetch.models import Actor
+
+        if min_confidence is None:
+            min_confidence = self.MIN_CONFIDENCE_AUTO
+
+        if queryset is None:
+            queryset = Actor.objects.filter(canonical_entry__isnull=True)
+
+        stats = {'processed': 0, 'linked': 0, 'skipped': 0}
+
+        # Process in batches
+        total = queryset.count()
+        logger.info(f"Backfilling canonical_entry on {total} actors...")
+
+        for actor in queryset.iterator(chunk_size=batch_size):
+            stats['processed'] += 1
+
+            if self.link_actor_canonical_entry(actor, min_confidence):
+                stats['linked'] += 1
+            else:
+                stats['skipped'] += 1
+
+            if stats['processed'] % 1000 == 0:
+                logger.info(f"  Processed {stats['processed']}/{total}, linked {stats['linked']}")
+
+        logger.info(f"Backfill complete: {stats}")
+        return stats
+
     def calculate_entity_score(self, actor: 'models.Actor') -> int:
         """
         Score an actor by data richness for canonical selection.
@@ -557,11 +634,27 @@ class EntityResolutionService:
         normalized_strong = normalize_actor_name(actor_name, strength='strong')
         normalized_weak = normalize_actor_name(actor_name, strength='weak')
 
-        # Find actors with similar names
-        candidates = Actor.objects.exclude(pk=actor.pk).filter(
-            Q(name__iexact=actor_name) |
-            Q(name__icontains=normalized_strong[:20])  # Prefix match
-        )[:100]  # Limit for performance
+        candidates = []
+
+        # Optimization: Use in-memory indexes if available (O(1) lookup)
+        if hasattr(self, '_normalized_strong_index') and self._normalized_strong_index:
+            # Add strong candidates
+            if normalized_strong in self._normalized_strong_index:
+                candidates.extend(self._normalized_strong_index[normalized_strong])
+            
+            # Add weak candidates (if threshold allows)
+            if min_confidence <= 0.70 and normalized_weak in self._normalized_weak_index:
+                candidates.extend(self._normalized_weak_index[normalized_weak])
+                
+            # Deduplicate candidates (exclude self)
+            candidates = list({c.pk: c for c in candidates if c.pk != actor.pk}.values())
+            
+        else:
+            # Fallback: Find actors with similar names via DB query
+            candidates = list(Actor.objects.exclude(pk=actor.pk).filter(
+                Q(name__iexact=actor_name) |
+                Q(name__icontains=normalized_strong[:20])  # Prefix match
+            )[:100])  # Limit for performance
 
         for candidate in candidates:
             candidate_normalized_strong = normalize_actor_name(
@@ -582,7 +675,11 @@ class EntityResolutionService:
                 confidence = self.CONFIDENCE_WEAK
                 reason = 'weak_normalization'
             else:
-                continue  # Skip if no match
+                # Fuzzy pass: calculate actual similarity
+                # This is slower but catches "Peter Hearn" vs "Peter John Hearn"
+                from datafetch.utils.normalization import calculate_name_similarity
+                confidence = calculate_name_similarity(actor.name, candidate.name)
+                reason = 'fuzzy_match'
 
             if confidence >= min_confidence:
                 results.append(ResolutionResult(

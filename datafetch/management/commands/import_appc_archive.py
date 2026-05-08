@@ -12,6 +12,17 @@ from datafetch.utils.normalization import normalize_actor_name
 class Command(BaseCommand):
     help = 'Import historical PRCA professional lobbying registers from PDF files.'
 
+    # Placeholder client names that should be skipped (not real organizations)
+    PLACEHOLDER_CLIENT_NAMES = {
+        '(i) client description available',
+        'pro-bono clients for whom consultancy and/or monitoring services have been provided this quarter',
+        'n/a',
+        'none',
+        'nil',
+        'tbc',
+        'confidential',
+    }
+
     def add_arguments(self, parser):
         parser.add_argument('--refresh', action='store_true', help='Refresh downloaded files')
         parser.add_argument('--file', type=str, help='Path to a specific PDF file to process (for debugging)')
@@ -219,6 +230,10 @@ class Command(BaseCommand):
         for client_name in company_data.get('clients', []):
             client_name = client_name.strip()
             if client_name:
+                # Skip placeholder names that aren't real organizations
+                if client_name.lower() in self.PLACEHOLDER_CLIENT_NAMES:
+                    continue
+
                 # Normalize client name
                 client_name = normalize_actor_name(client_name, strength='strong')
 

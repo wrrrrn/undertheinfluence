@@ -1,7 +1,7 @@
 # UnderTheInfluence Systems Architecture
 
-**Version:** 4.1 (Data Quality & Entity Resolution)
-**Last Updated:** January 26, 2026
+**Version:** 5.0 (Astro Frontend + API Caching)
+**Last Updated:** April 16, 2026
 **Status:** Living Document
 
 ---
@@ -13,7 +13,7 @@
 3. [Architecture Diagrams](#architecture-diagrams)
 4. [Component Overview](#component-overview)
 5. [Data Flow](#data-flow)
-6. [Frontend Architecture (Islands)](#frontend-architecture-islands)
+6. [Frontend Architecture (Astro + Svelte)](#frontend-architecture-astro--svelte)
 7. [API Architecture](#api-architecture)
 8. [Data Model Architecture](#data-model-architecture)
 9. [Deployment Architecture](#deployment-architecture)
@@ -32,18 +32,19 @@ UnderTheInfluence is a Django-based web application that tracks lobbying influen
 3. **Data Presentation**: Server-rendered pages with selective interactive components
 4. **API Access**: RESTful API for programmatic data consumption
 
-### Current Status (January 2026)
+### Current Status (April 2026)
 
 **Working Features**:
-- ✅ Full Django 6.0.1 + Wagtail 7.2.x stack
-- ✅ Islands Architecture frontend with React 18 + Vite 5
-- ✅ API v2 with aggregate endpoints and filtering
-- ✅ Docker-based development environment
-- ✅ Basic UI with homepage dashboard components
-- ✅ Data import from ParlParse (MPs/Lords) and Ministers
-- ✅ Data quality cleanup (127,600+ issues resolved)
-- ✅ Companies House enrichment (51,157 organizations matched)
-- ✅ Entity resolution service (`populate_canonical` command)
+- ✅ Django 6.0.4 + Wagtail 7.2.x backend (headless API)
+- ✅ Astro 5 + Svelte 5 + Tailwind CSS frontend (decoupled, port 4321)
+- ✅ D3.js minister network visualization (force-directed, 90 ministers, 298 donors)
+- ✅ API v2 with aggregate endpoints, filtering, and Redis caching (1hr TTL)
+- ✅ 10 Astro pages: homepage, directory, network, meetings, lobbying, parties, analysis, actor profiles
+- ✅ Actor profile pages with unified timeline (donations, meetings, roles, consultancies)
+- ✅ Full interconnectedness: every entity name links to its profile page
+- ✅ Docker-based development environment (PostgreSQL, Redis, Django, Astro)
+- ✅ Data import from ParlParse, Ministers, MPs' Register, Ministerial Meetings
+- ✅ Entity resolution and Companies House enrichment
 
 **See `docs/CURRENT_STATE.md` for detailed feature inventory.**
 
@@ -59,23 +60,21 @@ UnderTheInfluence is a Django-based web application that tracks lobbying influen
 | **CMS** | Wagtail | 7.2.x | Content management, StreamFields |
 | **API** | Django REST Framework | 3.15.x | RESTful API, serialization |
 | **Database** | PostgreSQL | 15 | Primary data store (Docker) |
-| **Cache** | Redis | 7 | Session cache, future API cache (Docker) |
+| **Cache** | Redis | 7 | API aggregate caching (1hr TTL), session cache |
 | **Python** | Python | 3.12 | Runtime environment |
 | **Polymorphism** | django-polymorphic | 4.2.x | Actor model inheritance |
 | **Configuration** | python-decouple | 3.8 | Environment variables |
 
-### Frontend
+### Frontend (Decoupled)
 
 | Layer | Technology | Version | Purpose |
 |-------|------------|---------|---------|
-| **Build System** | Vite | 5.x | Modern ES module bundler, HMR |
-| **Framework** | React | 18.x | Selective hydration (islands only) |
-| **Type Safety** | TypeScript | 5.x | Static typing, IDE support |
-| **Styling** | Bootstrap 5 | 5.3.x | Layout/grid system |
-| **Scoped Styles** | CSS Modules | (Vite) | Component-scoped SCSS |
-| **State Management** | Zustand | 4.5.x | Lightweight store (URL-synchronized) |
-| **Data Fetching** | TanStack Query | 5.x | API client with caching |
-| **Django Integration** | django-vite | 3.0+ | Asset loading in templates |
+| **Orchestrator** | Astro | 5.x | SSR pages, partial hydration, routing |
+| **Components** | Svelte | 5.x | Interactive components (Runes-based reactivity) |
+| **Visualization** | D3.js | 7.x | Force simulation, scales (math only — SVG rendered by Svelte) |
+| **Styling** | Tailwind CSS | 3.x | Utility-first styling, design system tokens |
+| **Typography** | Zodiak + Satoshi | — | Display serif + geometric sans (Fontshare) |
+| **Runtime** | Node.js | 20.x | Astro SSR adapter |
 
 ### Infrastructure
 
@@ -246,20 +245,19 @@ Browser Request
 ```
 
 **Key Docker Services**:
-- **web**: Django 6.0 application (port 8000)
-  - Serves API endpoints
-  - Renders Django templates
-  - Proxies Vite assets in dev mode
-- **vite**: Node 20 development server (port 5173)
-  - Hot Module Replacement (HMR)
-  - TypeScript compilation
-  - SCSS preprocessing
+- **api**: Django 6.0.4 application (port 8000)
+  - Headless API (JSON only — no HTML templates)
+  - Wagtail CMS admin
+  - Django admin
+- **web**: Astro 5 frontend (port 4321)
+  - SSR pages with Svelte component hydration
+  - Fetches data from api service at build/request time
 - **db**: PostgreSQL 15 database (port 5432)
   - Persistent data storage
   - Full-text search (pg_trgm)
 - **redis**: Redis 7 cache (port 6379)
+  - API aggregate endpoint caching (1hr TTL via `cache_utils.py`)
   - Session storage
-  - Future API caching
 
 ---
 
@@ -302,7 +300,7 @@ datafetch/
 
 ### 2. api/v2 App (REST API Layer)
 
-**Purpose**: JSON API for frontend islands and external consumers.
+**Purpose**: JSON API for Astro frontend and external consumers.
 
 **Directory Structure**:
 ```
@@ -311,26 +309,40 @@ api/v2/
 ├── serializers.py  # DRF serializers
 ├── filters.py      # django-filter configuration
 ├── pagination.py   # Custom pagination classes
+├── cache_utils.py  # Redis cache key generation, invalidation
 └── urls.py         # API routing
 ```
 
-**Aggregate Endpoints** (Dashboard Data):
+**Aggregate Endpoints** (Dashboard Data — all cached 1hr via Redis):
 ```
-GET /api/v2/aggregates/stats/
+GET /api/v2/aggregates/stats/                    [cached]
   → Total donations, total value, concentration metrics
-  → Filters: date_range, value_min, donor_type
 
-GET /api/v2/aggregates/party-donations/
-  → Total received per party, donor count, avg donation
-  → Filters: date_range, value_min, donor_type
+GET /api/v2/aggregates/party-donations/          [cached]
+  → Total received per party, donor count
+  → Party filter pushed into SQL (not Python post-filter)
+
+GET /api/v2/aggregates/top-recipients/           [cached]
+  → Top N recipients ranked by total received
+  → select_related('polymorphic_ctype') to avoid N+1
+
+GET /api/v2/aggregates/top-lobbying-clients/     [cached]
+  → Top clients ranked by agency count
+  → Agencies returned as [{id, name}] objects (not strings)
+  → Batch agency query (single SQL, not per-client)
+
+GET /api/v2/aggregates/department-meetings/      [cached]
+  → Departments ranked by meeting count, with top attendees
+
+GET /api/v2/aggregates/minister-network/         [cached]
+  → D3-compatible network graph (nodes, links, stats)
+  → Ministers, donors, directors, PSCs, meeting attendees
 
 GET /api/v2/aggregates/top-donors/
   → Top N donors ranked by total donated
-  → Paginated (100/page), supports filtering
 
 GET /api/v2/aggregates/donor-concentration/
   → Gini coefficient, HHI, concentration category
-  → Pareto distribution metrics
 ```
 
 **Actor Endpoints** (Profile Data):
@@ -358,82 +370,17 @@ GET /api/v2/actors/{id}/consultancies/
 
 ### 3. cms App (Wagtail Integration)
 
-**Purpose**: Editorial content management with embedded data islands.
+**Purpose**: Headless CMS for editorial content. Wagtail admin is available but the frontend does not render Wagtail pages — it's a separate Astro application.
 
-**Directory Structure**:
-```
-cms/
-├── models.py               # Wagtail page models (HomePage)
-├── blocks.py               # Custom StreamField blocks
-├── templates/cms/blocks/   # Block templates with island markers
-│   ├── stats_grid.html
-│   ├── party_breakdown.html
-│   └── top_donors_leaderboard.html
-└── migrations/
-```
-
-**Custom StreamField Blocks**:
-- `StatsGridBlock`: Embeds homepage metrics island
-- `PartyBreakdownBlock`: Embeds party donation breakdown
-- `TopDonorsLeaderboardBlock`: Embeds paginated leaderboard
-- `FilterPanelBlock`: Embeds filter controls
-- `DataVisualizationBlock`: Container for all visualization blocks
-
-**How It Works**:
-1. Editor adds block in Wagtail admin
-2. Block renders server-side template with `[data-island]` marker
-3. Vite detects marker and hydrates React component
-4. Component fetches live data from API v2
+**Note**: The CMS StreamField blocks (StatsGridBlock, etc.) are legacy from the React/Islands era and are no longer used by the Astro frontend.
 
 ---
 
-### 4. frontend/ (Islands Architecture)
+### 4. frontend/ (Astro + Svelte)
 
-**Purpose**: Selective React hydration for interactive components.
+**Purpose**: Decoupled frontend application consuming Django as a headless API.
 
-**Directory Structure**:
-```
-frontend/
-├── islands/                # Top-level interactive components
-│   ├── StatsGrid.tsx       # ✅ Homepage metrics
-│   ├── PartyBreakdown.tsx  # ✅ Party donation grid
-│   ├── TopDonorsLeaderboard.tsx # ✅ Paginated leaderboard
-│   ├── FilterPanel.tsx     # ✅ Filter controls
-│   └── ConcentrationChart.tsx # ⏳ Scaffolded (not implemented)
-├── components/             # Reusable primitives
-│   ├── StatCard.tsx        # ✅ Metric display card
-│   ├── PartyCard.tsx       # ✅ Party with color accent
-│   └── ActorCard.tsx       # ✅ Person/org card
-├── hooks/                  # Custom React hooks
-│   ├── useTopDonors.ts     # ✅ TanStack Query hook
-│   └── useHomepageStats.ts # ✅ TanStack Query hook
-├── store/                  # Zustand state management
-│   └── filterStore.ts      # ✅ URL-synchronized filters
-├── types/                  # TypeScript definitions
-│   ├── actor.ts
-│   └── filters.ts
-├── styles/                 # Global SCSS + variables
-├── islands.tsx             # ✅ Island loader/registry
-├── main.tsx                # Vite entry point
-├── package.json            # NPM dependencies
-├── vite.config.ts          # Vite configuration
-└── tsconfig.json           # TypeScript configuration
-```
-
-**Island Lifecycle**:
-1. **Server Render**: Django template outputs HTML with `<div data-island="Name">`
-2. **Island Detection**: `islands.tsx` runs on `DOMContentLoaded`
-3. **Lazy Load**: Dynamic import (`() => import('./islands/Name')`)
-4. **Hydration**: `createRoot(el).render(<Component />)`
-5. **Data Fetch**: Island uses `useQuery()` to call API v2
-6. **State Sync**: `useFilterStore()` reads/writes URL parameters
-
-**Why This Works**:
-- SEO-friendly (server-rendered HTML)
-- Fast initial load (minimal JavaScript)
-- Progressive enhancement (works without JS)
-- Shareable URLs (filter state in URL)
-- No client-side routing needed
+See [Frontend Architecture (Astro + Svelte)](#frontend-architecture-astro--svelte) for full details.
 
 ---
 
@@ -566,156 +513,99 @@ User Changes Filter (FilterPanel)
 
 ---
 
-## Frontend Architecture (Islands)
+## Frontend Architecture (Astro + Svelte)
 
-### Islands Architecture Philosophy
+### Architecture Philosophy
 
-**"Progressive Enhancement with Selective Interactivity"**
+**"Decoupled SSR with Selective Hydration"**
 
-- **Server-rendered by default**: Django templates render full HTML
-- **Islands hydrate selectively**: React components load only where needed
-- **URL-driven state**: Filter state lives in URL parameters
-- **No client-side routing**: Django handles all navigation
+The frontend is a standalone Astro 5 application that consumes Django as a headless API. Django serves JSON only — no HTML templates.
 
-### Island Registry (`frontend/islands.tsx`)
+- **Astro pages** handle routing, data fetching (server-side), and static rendering
+- **Svelte components** hydrate selectively for interactivity (`client:visible`, `client:load`)
+- **D3.js** provides math (force simulation, scales) — SVG is rendered by Svelte, not D3
+- **Tailwind CSS** implements the design system (see `docs/FRONTEND_DESIGN.md`)
 
-```typescript
-const islands = {
-  'StatsGrid': () => import('./islands/StatsGrid'),
-  'PartyBreakdown': () => import('./islands/PartyBreakdown'),
-  'TopDonorsLeaderboard': () => import('./islands/TopDonorsLeaderboard'),
-  'FilterPanel': () => import('./islands/FilterPanel'),
-  'ConcentrationChart': () => import('./islands/ConcentrationChart'),
-};
+### Directory Structure
 
-// Detect and hydrate all islands
-document.addEventListener('DOMContentLoaded', async () => {
-  const islandElements = document.querySelectorAll('[data-island]');
-  for (const el of islandElements) {
-    const islandName = el.getAttribute('data-island');
-    const { default: Component } = await islands[islandName]();
-    const root = createRoot(el);
-    root.render(<Component {...el.dataset} />);
-  }
-});
+```
+frontend/
+├── src/
+│   ├── pages/                  # Astro file-based routing
+│   │   ├── index.astro         # Homepage
+│   │   ├── network.astro       # Full-page network visualization
+│   │   ├── directory.astro     # Entity directory
+│   │   ├── person/[id].astro   # Person profiles
+│   │   ├── organisation/[id].astro  # Organization profiles
+│   │   └── party/[id].astro    # Political party profiles
+│   ├── components/             # Svelte interactive components
+│   │   ├── MinisterNetwork.svelte   # D3 force-directed graph
+│   │   ├── ActorTimeline.svelte     # Unified chronological timeline
+│   │   ├── SiteNav.svelte           # Navigation bar
+│   │   └── SiteFooter.svelte        # Footer
+│   ├── layouts/
+│   │   └── BaseLayout.astro    # Shared page shell
+│   ├── lib/
+│   │   └── utils.ts            # API_URL, PUBLIC_API_URL, formatCurrency, getActorUrl
+│   └── styles/
+│       └── global.css          # Tailwind layers, font-face, design tokens
+├── astro.config.mjs            # Astro config (Node adapter, Svelte, Tailwind)
+├── tailwind.config.mjs         # Design system tokens
+└── package.json
 ```
 
-### State Management (Zustand)
+### Data Flow
 
-```typescript
-// frontend/store/filterStore.ts
-interface FilterState {
-  dateFrom?: string;    // YYYY or YYYY-MM or YYYY-MM-DD
-  dateTo?: string;
-  minValue?: number;
-  donorType?: 'person' | 'organization' | 'trade-union' | 'company';
-  page: number;
-}
-
-const useFilterStore = create((set) => ({
-  ...DEFAULT_STATE,
-
-  setFilter: (updates) => {
-    // Update URL parameters
-    const params = new URLSearchParams(window.location.search);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value) params.set(key, String(value));
-      else params.delete(key);
-    });
-    window.history.pushState({}, '', `?${params}`);
-
-    // Update store
-    set(updates);
-  },
-
-  loadFromUrl: () => {
-    const params = new URLSearchParams(window.location.search);
-    set({
-      dateFrom: params.get('date_from') || undefined,
-      dateTo: params.get('date_to') || undefined,
-      minValue: params.get('value_min') ? Number(params.get('value_min')) : undefined,
-      donorType: params.get('donor_type') as any || undefined,
-      page: Number(params.get('page')) || 1,
-    });
-  },
-}));
-
-// Initialize from URL on page load
-useFilterStore.getState().loadFromUrl();
-
-// Handle browser back/forward
-window.addEventListener('popstate', () => {
-  useFilterStore.getState().loadFromUrl();
-});
+```
+Browser → Astro Page (SSR)
+              │
+              ├── Server-side fetch() to Django API (http://api:8000)
+              │   (stats, recipients, parties, lobbying, meetings)
+              │
+              ├── Render HTML with data
+              │
+              └── Hydrate Svelte components (client:visible)
+                    │
+                    └── Client-side fetch() to Django API (http://localhost:8000)
+                        (MinisterNetwork, ActorTimeline — interactive data)
 ```
 
-### Data Fetching Pattern (TanStack Query)
+**Two API URLs**:
+- `API_URL` (`http://api:8000/api/v2`) — Docker internal, used by Astro SSR fetches
+- `PUBLIC_API_URL` (`http://localhost:8000/api/v2`) — Browser-accessible, used by Svelte `client:visible` components
 
+### Key Patterns
+
+**Astro pages fetch data at request time**:
+```astro
+const [statsRes, recipientsRes] = await Promise.all([
+  fetch(`${API_URL}/aggregates/stats/`),
+  fetch(`${API_URL}/aggregates/top-recipients/?limit=100`),
+]);
+```
+
+**Svelte components hydrate for interactivity**:
+```astro
+<MinisterNetwork client:visible apiUrl={`${PUBLIC_API_URL}/aggregates/minister-network/`} />
+```
+
+**Interconnectedness via `getActorUrl()`**:
 ```typescript
-// frontend/hooks/useTopDonors.ts
-function useTopDonors(limit = 20) {
-  const { dateFrom, dateTo, minValue, donorType, page } = useFilterStore();
-
-  const queryParams = new URLSearchParams();
-  if (dateFrom) queryParams.set('received_after', dateFrom);
-  if (dateTo) queryParams.set('received_before', dateTo);
-  if (minValue) queryParams.set('value_min', String(minValue));
-  if (donorType) queryParams.set('donor_type', donorType);
-  queryParams.set('limit', String(limit));
-  queryParams.set('offset', String((page - 1) * limit));
-
-  return useQuery({
-    queryKey: ['top-donors', queryParams.toString()],
-    queryFn: async () => {
-      const response = await fetch(`/api/v2/aggregates/top-donors/?${queryParams}`);
-      if (!response.ok) throw new Error('Failed to fetch');
-      return response.json();
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
+// Every entity name that has an ID links to its profile page
+export function getActorUrl(actor: { id: number; actor_type?: string; classification?: string }): string {
+  if (actor.classification === 'Political Party') return `/party/${actor.id}`;
+  if (actor.actor_type === 'organization') return `/organisation/${actor.id}`;
+  return `/person/${actor.id}`;
 }
 ```
 
-**Why TanStack Query?**
-- Automatic caching (5min stale time)
-- Loading/error states built-in
-- Automatic refetching when query key changes
-- Devtools for debugging
+### Styling
 
-### Styling Strategy
-
-**CSS Modules** for scoped component styles:
-```scss
-// frontend/islands/StatsGrid.module.scss
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
-}
-```
-
-**Bootstrap 5** for layout/grid:
-```typescript
-<div className="container">
-  <div className="row g-3">
-    <div className="col-md-3">
-      <FilterPanel />
-    </div>
-    <div className="col-md-9">
-      <TopDonorsLeaderboard />
-    </div>
-  </div>
-</div>
-```
-
-**Typography** (from `docs/FRONTEND_DESIGN.md`):
-- **Headings**: Playfair Display (editorial serif)
-- **Body/UI**: Inter (modern sans-serif)
-- **Currency**: Tabular nums, letter-spacing -0.01em
+**Tailwind CSS** with design system tokens from `docs/FRONTEND_DESIGN.md`:
+- **Typography**: Zodiak (display/headlines), Satoshi (body/UI)
+- **Colors**: Paper `#FAF9F6`, Ink `#1a1a1a`, Accent `#C54B3C`
+- **Patterns**: `.section-label`, `.stat-figure`, `.stat-label`, `.annotation`
+- **Aesthetic**: Victorian natural history illustration — stippled halos, hatched fills, leader lines
 
 ---
 
@@ -726,7 +616,7 @@ function useTopDonors(limit = 20) {
 1. **Read-Only**: All endpoints are GET only (no mutations)
 2. **Filter-Driven**: Consistent query parameters across endpoints
 3. **Paginated**: Large datasets use limit/offset pagination
-4. **Cached**: Future Redis caching for aggregate endpoints
+4. **Cached**: Redis caching on all aggregate endpoints (1hr TTL via `cache_utils.py`)
 5. **Versioned**: `/api/v2/` namespace (v1 deprecated)
 
 ### Aggregate Endpoints Design
@@ -1000,25 +890,24 @@ Internet
 
 ## Key Design Decisions
 
-### 1. Islands Architecture (Not SPA)
+### 1. Decoupled Astro Frontend (Not Django Templates)
 
-**Decision**: Use server-rendered Django templates with selective React hydration.
+**Decision**: Separate Astro 5 frontend consuming Django as a headless JSON API.
 
 **Rationale**:
-- **SEO**: Search engines index server-rendered HTML
-- **Performance**: Fast initial load, minimal JavaScript
-- **Accessibility**: Works without JavaScript (progressive enhancement)
-- **Maintainability**: Natural Django integration, no client-side routing
+- **SEO**: Astro SSR renders full HTML server-side
+- **Performance**: Partial hydration — only interactive components load JavaScript
+- **Design freedom**: Tailwind + custom design system without Django template constraints
+- **D3 integration**: Svelte components render SVG directly, D3 provides math only
 
 **Trade-offs**:
-- Not suitable for real-time collaboration features
-- Client-side routing would require additional complexity
-- State management more complex than pure SPA
+- Two servers in development (Django :8000, Astro :4321)
+- Two API URL constants needed (server-side vs client-side)
 
 **Alternatives Considered**:
-- ❌ **Full SPA**: Poor SEO, slow initial load, requires client-side routing
-- ❌ **HTMX**: Insufficient for complex visualizations (network graphs)
-- ❌ **Alpine.js**: Too limited for stateful components
+- ❌ **Django templates + HTMX**: Insufficient for D3 visualizations
+- ❌ **Next.js/React**: Heavier runtime than Astro + Svelte
+- ❌ **Django templates + Islands (previous architecture)**: Too coupled, difficult to iterate on design
 
 ---
 
@@ -1063,101 +952,53 @@ Internet
 
 ---
 
-### 4. URL-Driven State (Not Client-Side Only)
+### 4. Svelte 5 Runes (Not React Hooks)
 
-**Decision**: Store filter state in URL parameters, synchronized via Zustand.
+**Decision**: Use Svelte 5 with Runes-based reactivity for interactive components.
 
 **Rationale**:
-- **Shareable links**: Copy/paste URL with filters intact
-- **Browser navigation**: Back/forward buttons work
-- **Deep linking**: Direct access to filtered views
-- **Multiple islands**: Automatic synchronization
-
-**Trade-offs**:
-- URL can get long with many filters
-- Sensitive filters would need different approach
-- More complex than pure client-side state
+- **Compiled**: No virtual DOM runtime — smaller bundles
+- **Runes**: `$state()`, `$derived()` are simpler than React hooks
+- **Template syntax**: More readable than JSX for SVG-heavy components
+- **Astro integration**: First-class `client:visible` hydration
 
 **Alternatives Considered**:
-- ❌ **Client-side only**: Not shareable, breaks back button
-- ❌ **Custom events**: Race conditions, "event soup"
+- ❌ **React 18**: Heavier runtime for this use case
+- ❌ **Vue 3**: Similar capability, less Astro ecosystem support
 
 ---
 
-### 5. Zustand (Not Redux/MobX)
+### 5. Tailwind CSS (Not CSS Modules)
 
-**Decision**: Use Zustand for lightweight state management.
-
-**Rationale**:
-- **Minimal boilerplate**: 1KB gzipped
-- **No provider**: Works without React context
-- **TypeScript support**: First-class types
-- **Prevents event soup**: Centralized state updates
-
-**Trade-offs**:
-- Smaller ecosystem than Redux
-- No time-travel debugging by default
-- Less middleware options
-
-**Alternatives Considered**:
-- ❌ **Redux**: Too much boilerplate for small app
-- ❌ **Custom events**: Race conditions, no centralized state
-
----
-
-### 6. CSS Modules (Not Tailwind/Styled-Components)
-
-**Decision**: Use CSS Modules with SCSS for component styling.
+**Decision**: Use Tailwind CSS utility classes for all styling.
 
 **Rationale**:
-- **Scoped styles**: Prevents conflicts between components
-- **Familiar syntax**: Standard CSS/SCSS
-- **Bootstrap compatibility**: Works alongside global styles
-- **SCSS preprocessing**: Variables, mixins, nesting
-
-**Trade-offs**:
-- More verbose than Tailwind utility classes
-- Requires naming conventions (BEM-like)
+- **Design system tokens**: Colors, spacing, typography mapped directly
+- **No naming**: No BEM conventions or class name debates
+- **Responsive**: Built-in breakpoint prefixes
+- **Co-located**: Styles live with markup
 
 **Alternatives Considered**:
-- ❌ **Tailwind**: Cluttered markup, harder to override Bootstrap
-- ❌ **Styled-Components**: Runtime cost, JSX clutter
-
----
-
-### 7. Django Vite (Not Webpack/Parcel)
-
-**Decision**: Use Vite via django-vite for asset bundling.
-
-**Rationale**:
-- **Fast HMR**: Instant hot module replacement
-- **Modern ES modules**: No bundling in dev mode
-- **TypeScript support**: Built-in, no config
-- **Django integration**: django-vite handles asset loading
-
-**Trade-offs**:
-- Newer tool (less mature than Webpack)
-- Browser support (requires modern browsers)
-
-**Alternatives Considered**:
-- ❌ **Webpack**: Slow HMR, complex configuration
-- ❌ **Parcel**: Less ecosystem, fewer plugins
+- ❌ **CSS Modules**: More verbose, naming overhead (previous architecture used this)
+- ❌ **Bootstrap**: Too opinionated, conflicts with natural history aesthetic
 
 ---
 
 ## Future Considerations
 
-### Performance Optimization (High Priority)
-- **Materialized views**: For expensive aggregate queries
-- **Redis caching**: API endpoint caching (15min TTL)
-- **Database indexes**: Based on query profiling
-- **Connection pooling**: pgbouncer for PostgreSQL
+### Performance Optimization
+- ✅ **Redis caching**: All aggregate endpoints cached (1hr TTL) — `cache_utils.py`
+- ✅ **N+1 fixes**: Batch queries for lobbying agencies, `select_related('polymorphic_ctype')` for recipients
+- ✅ **SQL optimization**: Party filter pushed into SQL, canonical resolution via `Coalesce()`
+- **Materialized views**: For expensive aggregate queries (future — concentration calc still materializes ~21k rows)
+- **Connection pooling**: pgbouncer for PostgreSQL (future)
 
-### Feature Additions (Medium Priority)
-- **Politicians directory page**: `/politicians/` with filtering
-- **Network visualization**: D3.js force-directed graphs
-- **Enhanced profiles**: Tabbed interface, timeline, network view
-- **Data export**: CSV download for tables
+### Feature Additions
+- ✅ **Network visualization**: D3.js minister network (90 ministers, 298 donors, 431 donation links)
+- ✅ **Enhanced profiles**: Unified timeline with donations, meetings, roles, consultancies
+- ✅ **Directory page**: `/directory` with actor listing
+- ✅ **Party profiles**: Dedicated `/party/[id]` pages with funding breakdown
+- **Data export**: CSV download for tables (future)
 
 ### Testing (Low Priority - Future)
 - **Frontend tests**: Vitest + React Testing Library
@@ -1213,7 +1054,7 @@ TWFY_API_KEY=***                    # TheyWorkForYou API key (future)
 - `docs/CURRENT_STATE.md` - Feature inventory and status
 - `docs/data-models.md` - Detailed data model reference
 - `docs/FRONTEND_DESIGN.md` - UI/UX design system
-- `docs/FRONTEND_IMPLEMENTATION.md` - Detailed implementation plan
+- `docs/UX_IMPLEMENTATION_PLAN.md` - UX roadmap and implementation tracking
 - `CLAUDE.md` - Instructions for Claude Code
 
 **External Resources**:
@@ -1231,4 +1072,4 @@ TWFY_API_KEY=***                    # TheyWorkForYou API key (future)
 - Technology stack changes
 - Deployment architecture changes
 
-**Last Major Update**: January 26, 2026 (v4.1 - Data Quality & Entity Resolution)
+**Last Major Update**: April 16, 2026 (v5.0 - Astro Frontend + API Caching)

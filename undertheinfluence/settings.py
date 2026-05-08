@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'api',
 
     # 'bootstrap_admin',  # Removed - not compatible with Django 2.0+
+    'corsheaders',  # CORS support for frontend on different port
     'rest_framework',
     'django_filters',  # Django Filter for API v2
     'drf_spectacular',  # OpenAPI schema generation
@@ -72,6 +73,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # CORS must be before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -148,6 +150,40 @@ else:
         }
     }
 
+# Cache configuration
+# Uses Redis when REDIS_URL is set (Docker/production), falls back to local memory cache
+REDIS_URL = config('REDIS_URL', default='')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+                # Connection pool settings
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 20,
+                },
+                # Socket timeout (avoid blocking on Redis failure)
+                'SOCKET_CONNECT_TIMEOUT': 2,
+                'SOCKET_TIMEOUT': 2,
+            },
+            'KEY_PREFIX': 'uti',
+            'TIMEOUT': 3600,  # Default TTL: 1 hour
+        }
+    }
+    # Use Redis for Django sessions too (optional, good practice)
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'undertheinfluence',
+        }
+    }
+
 # Internationalization
 # https://docs.djangoproject.com/en/1.8/topics/i18n/
 
@@ -201,6 +237,14 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "SAMEORIGIN"  # for the wagtail toolbar
 CSRF_COOKIE_HTTPONLY = True
+
+# CORS settings (for Astro frontend on different port)
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:4321,http://127.0.0.1:4321',
+    cast=Csv()
+)
+CORS_ALLOW_CREDENTIALS = True
 
 # Django REST Framework settings
 REST_FRAMEWORK = {

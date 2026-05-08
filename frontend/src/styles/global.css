@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Zodiak - Display/Headlines (Fontshare) */
+@font-face {
+  font-family: 'Zodiak';
+  src: url('/fonts/Zodiak-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Satoshi - Body/UI (Fontshare) */
+@font-face {
+  font-family: 'Satoshi';
+  src: url('/fonts/Satoshi-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Base layer - Editorial foundation */
+@layer base {
+  html {
+    font-family: 'Satoshi', sans-serif;
+    color: #1a1a1a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #FAF9F6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Zodiak', serif;
+    color: #1a1a1a;
+  }
+
+  /* Selection highlight in Economist red */
+  ::selection {
+    background-color: #C54B3C;
+    color: white;
+  }
+}
+
+/* Component layer - Editorial patterns (no boxes!) */
+@layer components {
+  /* Large editorial headline */
+  .headline {
+    @apply font-display font-bold leading-tight;
+    color: #1a1a1a;
+  }
+
+  /* Subhead / deck */
+  .deck {
+    @apply font-body text-lg mt-4 max-w-prose leading-relaxed;
+    color: #4a4a4a;
+  }
+
+  /* Section label - uppercase, spaced */
+  .section-label {
+    @apply font-body text-xs font-semibold uppercase tracking-widest;
+    color: #C54B3C;
+  }
+
+  /* Stat as typography (not in a card) */
+  .stat-figure {
+    @apply font-display font-bold tabular-nums;
+    font-size: 4rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #1a1a1a;
+  }
+
+  .stat-label {
+    @apply font-body text-sm uppercase tracking-wider;
+    color: #6b6b6b;
+  }
+
+  /* Annotation / callout */
+  .annotation {
+    @apply font-body text-sm leading-snug max-w-[200px];
+    color: #4a4a4a;
+  }
+
+  /* Leader line endpoint (for SVG annotations) */
+  .leader-dot {
+    fill: #C54B3C;
+  }
+
+  /* Inline highlight */
+  .highlight {
+    @apply font-semibold;
+    color: #C54B3C;
+  }
+
+  /* Rule / divider - simple horizontal line */
+  .rule {
+    @apply border-t my-8;
+    border-color: rgba(26, 26, 26, 0.1);
+  }
+
+  .rule-thick {
+    @apply border-t-2 my-8;
+    border-color: #1a1a1a;
+  }
+
+  /* Pull quote */
+  .pull-quote {
+    @apply font-display text-2xl italic border-l-4 pl-6;
+    color: #4a4a4a;
+    border-color: #C54B3C;
+    line-height: 1.3;
+  }
+
+  /* Data source citation */
+  .source {
+    @apply font-body text-sm;
+    color: #6b6b6b;
+  }
+
+  /* Chart title */
+  .chart-title {
+    @apply font-display text-xl font-semibold;
+    color: #1a1a1a;
+  }
+
+  /* Chart subtitle */
+  .chart-subtitle {
+    @apply font-body text-sm mt-1;
+    color: #6b6b6b;
+  }
+}
+
+/* Utility layer - Editorial helpers */
+@layer utilities {
+  /* Economist red accent border */
+  .accent-border-left {
+    @apply border-l-4 pl-4;
+    border-color: #C54B3C;
+  }
+
+  /* Paper background */
+  .bg-paper {
+    background-color: #FAF9F6;
+  }
+
+  /* Ink text colors */
+  .text-ink {
+    color: #1a1a1a;
+  }
+
+  .text-ink-light {
+    color: #4a4a4a;
+  }
+
+  .text-ink-muted {
+    color: #6b6b6b;
+  }
+
+  /* Accent color (Economist red) */
+  .text-accent {
+    color: #C54B3C;
+  }
+
+  .bg-accent {
+    background-color: #C54B3C;
+  }
+
+  .border-accent {
+    border-color: #C54B3C;
+  }
+
+  /* Minister node color (for backgrounds) */
+  .bg-minister {
+    background-color: #B85450;
+  }
+
+  .border-minister {
+    border-color: #B85450;
+  }
+
+  /* Tabular numbers for data */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

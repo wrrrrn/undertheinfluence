@@ -122,10 +122,19 @@ class Command(BaseCommand):
         'wales', 'cymru', 'scotland', 'england', 'ireland', 'ni',
     }
 
+    # Placeholder client names from APPC import that should be cleaned
+    # These are boilerplate text entries, not real organizations
+    PLACEHOLDER_CLIENT_NAMES = [
+        '(i) Client description available',
+        'Pro-Bono Clients for whom consultancy and/or monitoring services have been provided this quarter',
+        'N/A',
+    ]
+
     # All available fix types (listed in execution order for --fix=all)
     FIX_TYPES = [
         # Phase 0: General data quality
         'orphaned_donations', 'duplicate_donations', 'invalid_dates', 'zero_value',
+        'placeholder_clients',
         # Phase 1: Split concatenated entries
         'semicolon_actors', 'split_concatenated_attendees', 'split_concatenated_orgs',
         'split_consultancy_clients', 'parse_event_descriptions',
@@ -299,6 +308,9 @@ class Command(BaseCommand):
 
         if fix_type in ('all', 'invalid_dates'):
             total_fixed += self.fix_invalid_membership_dates(dry_run)
+
+        if fix_type in ('all', 'placeholder_clients'):
+            total_fixed += self.fix_placeholder_clients(dry_run)
 
         # NOTE: zero_value NOT in 'all' - run explicitly if needed
         if fix_type == 'zero_value':
@@ -531,6 +543,56 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'Would delete {count} zero-value donations'))
 
         return count
+
+    def fix_placeholder_clients(self, dry_run):
+        """Remove placeholder client records from APPC lobbying data.
+
+        These are boilerplate text entries like "(i) Client description available"
+        that got imported as actual Organization records. The fix:
+        1. Sets client_id = NULL on affected Consultancy records
+        2. Deletes the placeholder Actor records (they have no other relationships)
+        """
+        self.stdout.write(self.style.HTTP_INFO('\n## Fixing Placeholder Clients'))
+        self.stdout.write(self.style.HTTP_INFO('-' * 80))
+
+        # Find placeholder actors
+        placeholder_actors = []
+        for name in self.PLACEHOLDER_CLIENT_NAMES:
+            actors = Actor.objects.filter(name=name)
+            for actor in actors:
+                consultancy_count = Consultancy.objects.filter(client=actor).count()
+                if consultancy_count > 0:
+                    placeholder_actors.append((actor, consultancy_count))
+
+        if not placeholder_actors:
+            self.stdout.write(self.style.SUCCESS('✓ No placeholder clients to fix'))
+            return 0
+
+        total_consultancies = sum(count for _, count in placeholder_actors)
+        self.stdout.write(f'Found {len(placeholder_actors)} placeholder actors affecting {total_consultancies} consultancies')
+
+        for actor, count in placeholder_actors:
+            prefix = "Would clean" if dry_run else "Cleaning"
+            self.stdout.write(f'  {prefix}: "{actor.name[:60]}" ({count} consultancies)')
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING(
+                f'Would update {total_consultancies} consultancies (set client=NULL) '
+                f'and delete {len(placeholder_actors)} placeholder actors'
+            ))
+        else:
+            with transaction.atomic():
+                for actor, _ in placeholder_actors:
+                    # Set client to NULL on consultancies
+                    Consultancy.objects.filter(client=actor).update(client=None)
+                    # Delete the placeholder actor
+                    actor.delete()
+
+            self.stdout.write(self.style.SUCCESS(
+                f'✓ Updated {total_consultancies} consultancies and deleted {len(placeholder_actors)} placeholder actors'
+            ))
+
+        return total_consultancies
 
     def fix_semicolon_actors(self, dry_run):
         """Split actors with semicolons in their name into separate actors."""
